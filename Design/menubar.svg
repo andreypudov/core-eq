@@ -1,0 +1,9 @@
+<svg width="510" height="620" viewBox="270 200 510 620" xmlns="http://www.w3.org/2000/svg">
+  <!-- Monochrome menu bar template: the EQ bars from logo.svg, black on
+       transparent. macOS uses only the alpha channel (template image). -->
+  <rect x="270" y="360" width="70" height="300" rx="16" fill="#000000" />
+  <rect x="380" y="280" width="70" height="450" rx="16" fill="#000000" />
+  <rect x="490" y="200" width="70" height="620" rx="16" fill="#000000" />
+  <rect x="600" y="280" width="70" height="450" rx="16" fill="#000000" />
+  <rect x="710" y="360" width="70" height="300" rx="16" fill="#000000" />
+</svg>

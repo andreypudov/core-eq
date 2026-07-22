@@ -19,8 +19,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         super.init()
 
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "slider.vertical.3", accessibilityDescription: "CoreEQ")
+            let image = NSImage(named: "MenuBarIconTemplate")
+                ?? NSImage(systemSymbolName: "slider.vertical.3", accessibilityDescription: "CoreEQ")
             image?.isTemplate = true
+            image?.accessibilityDescription = "CoreEQ"
             button.image = image
             button.toolTip = "CoreEQ"
         }

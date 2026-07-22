@@ -142,6 +142,9 @@ enabling the sandbox and revisiting the audio entitlements; direct
 #+begin_example
 CoreEQ.xcodeproj          Xcode project (folder-synchronized sources)
 Config/Info.plist         LSUIElement, NSAudioCaptureUsageDescription, versions
+Design/
+  logo.svg                Colored app icon source (not shipped)
+  menubar.svg             Monochrome menu bar template source (not shipped)
 CoreEQ/
   CoreEQApp.swift         SwiftUI entry point + AppDelegate (wiring, main window)
   AudioEngine.swift       Tap + aggregate device + IO proc, device-change handling
@@ -151,10 +154,29 @@ CoreEQ/
   SettingsStore.swift     UserDefaults wrapper
   MenuBarController.swift NSStatusItem menu (profiles, bypass, open, quit)
   MainWindowView.swift    SwiftUI EQ window (picker, sliders, status)
+  AppIcon.icns            Generated app icon (make icons)
+  MenuBarIconTemplate.png (+@2x) Generated menu bar template (make icons)
 #+end_example
 
 The =CoreEQ/= folder is a synchronized group: dropping a new =.swift= file
-into it adds it to the target automatically, no project-file edits needed.
+into it adds it to the target automatically (and any other file type becomes
+a bundle resource), no project-file edits needed.
+
+** Icons
+
+The shipped icon files are generated from the SVG sources in =Design/= by
+=make icons= (requires ImageMagick: =brew install imagemagick=). After
+editing an SVG, rerun the target and rebuild:
+
+- =Design/logo.svg= → =CoreEQ/AppIcon.icns= — rasterized at the ten
+  standard sizes (16–1024 px) and packed with =iconutil=; referenced from
+  =Config/Info.plist= via =CFBundleIconFile=.
+- =Design/menubar.svg= → =CoreEQ/MenuBarIconTemplate.png= (18 pt) and
+  =@2x= (36 pt) — a black-on-transparent copy of the logo's EQ bars.
+  macOS renders it as a /template image/: only the alpha channel is used,
+  recolored automatically for Light/Dark mode. Keep this SVG a solid
+  single-color silhouette; =MenuBarController= falls back to an SF Symbol
+  if the resource is missing.
 
 * Architecture
 
