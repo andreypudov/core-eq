@@ -1,0 +1,11 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- EQ bars foreground layer; the green background comes from the
+       icon.json fill so the system can style layers independently -->
+  <g fill="#ffffff" transform="translate(512 512) scale(1.143) translate(-512 -512)">
+    <rect x="270" y="360" width="70" height="300" rx="16" />
+    <rect x="380" y="280" width="70" height="450" rx="16" />
+    <rect x="490" y="200" width="70" height="620" rx="16" />
+    <rect x="600" y="280" width="70" height="450" rx="16" />
+    <rect x="710" y="360" width="70" height="300" rx="16" />
+  </g>
+</svg>

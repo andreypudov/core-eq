@@ -170,7 +170,18 @@ editing an SVG, rerun the target and rebuild:
 
 - =Design/logo.svg= → =CoreEQ/AppIcon.icns= — rasterized at the ten
   standard sizes (16–1024 px) and packed with =iconutil=; referenced from
-  =Config/Info.plist= via =CFBundleIconFile=.
+  =Config/Info.plist= via =CFBundleIconFile=. This is the *fallback* icon
+  for macOS 14/15.
+- =CoreEQ/AppIcon.icon= — an Icon Composer document (background fill +
+  =Assets/bars.svg= layer) compiled by =actool= into =Assets.car= during
+  the build (=ASSETCATALOG_COMPILER_APPICON_NAME=, =CFBundleIconName=).
+  This is the *primary* icon on macOS 26+: without it the system shows the
+  =.icns= scaled down on a dark backing plate (the legacy-icon treatment),
+  and with it the system also derives the dark/tinted icon-style variants
+  automatically. The bar geometry is duplicated from =Design/logo.svg=;
+  keep them in sync when the design changes. Icon caches are aggressive —
+  after replacing the app, =lsregister -f /Applications/CoreEQ.app= plus
+  =killall iconservicesagent Dock Finder= forces a refresh.
 - =Design/menubar.svg= → =CoreEQ/MenuBarIconTemplate.png= (18 pt) and
   =@2x= (36 pt) — a black-on-transparent copy of the logo's EQ bars.
   macOS renders it as a /template image/: only the alpha channel is used,

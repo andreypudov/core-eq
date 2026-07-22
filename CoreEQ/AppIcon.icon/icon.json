@@ -1,0 +1,21 @@
+{
+  "fill" : {
+    "solid" : "srgb:0.161,0.675,0.286,1.000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "bars.svg",
+          "name" : "bars"
+        }
+      ]
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

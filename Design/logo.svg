@@ -12,18 +12,19 @@
     </filter>
   </defs>
 
-  <!-- Rounded square background -->
+  <!-- Rounded square background, full bleed: macOS masks the icon into the
+       system shape itself, so the artwork must cover the whole canvas -->
   <rect
-    x="64"
-    y="64"
-    width="896"
-    height="896"
-    rx="220"
+    x="0"
+    y="0"
+    width="1024"
+    height="1024"
+    rx="229"
     class="bg"
   />
 
-  <!-- EQ bars with subtle shadow -->
-  <g filter="url(#barShadow)">
+  <!-- EQ bars with subtle shadow, scaled up to match the full-bleed field -->
+  <g filter="url(#barShadow)" transform="translate(512 512) scale(1.143) translate(-512 -512)">
     <!-- Left smallest bar (shorter & wider) -->
     <rect
       x="270"
