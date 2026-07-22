@@ -1,0 +1,88 @@
+#+TITLE: CoreEQ
+#+SUBTITLE: System-wide equalizer for macOS
+
+CoreEQ is a system-wide equalizer for macOS. It lives in your menu bar and
+applies a multi-band EQ to *everything you hear* — music, videos, calls,
+games — regardless of which app is playing. No virtual audio driver, no kernel
+extension: CoreEQ uses Apple's native Core Audio system-tap technology.
+
+* Features
+
+- *System-wide processing* — equalizes all system audio, not per-app.
+- *Six built-in profiles* — switch instantly, without clicks or dropouts:
+  | Profile             | Character                                    |
+  |---------------------+----------------------------------------------|
+  | Flat                | No change; reference                         |
+  | Bass Boost          | Fuller low end                               |
+  | Treble Boost        | More air and sparkle                         |
+  | V-Shaped            | Emphasized bass and treble                   |
+  | Voice / Podcast     | Mid-range clarity for speech                 |
+  | Classical / Neutral | Gentle, wide-band shaping                    |
+- *Seven bands* — 60, 150, 400 Hz, 1, 2.5, 6, 12 kHz, each adjustable ±12 dB.
+- *Menu bar first* — change profiles or bypass the EQ in two clicks, without
+  opening a window.
+- *Instant bypass* — one toggle compares equalized and original sound with no
+  glitch.
+- *Remembers your settings* — the active profile, your slider tweaks, and the
+  on/off state are restored on every launch.
+- *Survives real life* — keeps working when you switch output devices, change
+  sample rates, or your Mac wakes from sleep.
+
+* Requirements
+
+- macOS *14.2 or later*.
+- Permission to record system audio (granted on first launch — see below).
+
+* First launch
+
+1. Launch *CoreEQ*. A sliders icon appears in the menu bar (there is no Dock
+   icon).
+2. macOS asks for permission to *record system audio*. CoreEQ needs it to
+   process the sound you hear; nothing is saved or sent anywhere. If you
+   dismissed the dialog, grant it manually under System Settings → Privacy &
+   Security → Screen & System Audio Recording.
+3. Pick a profile from the menu bar icon — the sound changes immediately.
+
+* Using CoreEQ
+
+** From the menu bar
+
+Click the sliders icon:
+
+- Choose a *profile* — the active one is checked.
+- *Enable Equalizer* — toggle the EQ on and off (bypass).
+- *Open CoreEQ…* — open the main window.
+- *Quit CoreEQ* — audio returns to normal, unprocessed playback.
+
+** From the main window
+
+- Pick a profile from the dropdown.
+- Drag the vertical sliders to adjust individual bands; the profile name keeps
+  its selection and a *Reset* button appears to return to the profile's
+  original values. Your tweaks are kept across restarts until you select
+  another profile.
+- The switch in the top-right corner enables or bypasses the EQ.
+- The status line at the bottom shows which output device is being processed,
+  or an error if something is wrong.
+
+* Troubleshooting
+
+- *The sound doesn't change* — check the status line in the main window. If it
+  reports a permission problem, grant System Audio Recording access (see
+  “First launch”) ; CoreEQ retries automatically.
+- *No audio at all* — quit CoreEQ; system audio always returns to the normal,
+  unprocessed path when the app is not running (or has crashed).
+- *New output device* — CoreEQ follows the system default output device
+  automatically; a switch takes effect within about a second.
+
+* Limitations
+
+- Stereo processing: on multi-channel devices, channels beyond the first two
+  pass through unequalized.
+- Profiles are built-in; custom named profiles cannot be created yet (tweaks
+  to the active profile are preserved, though).
+
+* For developers
+
+Build, test, and packaging instructions, plus a tour of the architecture, are
+in [[file:DEVELOPMENT.org][DEVELOPMENT.org]].

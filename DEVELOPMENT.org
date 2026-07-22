@@ -1,0 +1,199 @@
+#+TITLE: CoreEQ — Developer Guide
+
+Everything needed to build, run, test, and package CoreEQ, plus a tour of the
+project structure and architecture. End-user documentation is in
+[[file:README.org][README.org]].
+
+* Toolchain
+
+- Xcode *16 or later* (the project uses the folder-synchronized project
+  format, =objectVersion 77=).
+- macOS *14.2 or later* to run (the process-tap API does not exist earlier).
+- No external dependencies — system frameworks only (SwiftUI, AppKit,
+  CoreAudio, AudioToolbox, Combine, os).
+
+If your active developer directory points at the Command Line Tools instead of
+Xcode (=xcode-select -p= prints =/Library/Developer/CommandLineTools=), either
+switch it once:
+
+#+begin_src sh
+sudo xcode-select -s /Applications/Xcode.app
+#+end_src
+
+or prefix every =xcodebuild= call with
+=DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer=.
+
+* Building
+
+Open =CoreEQ.xcodeproj= in Xcode and build (⌘B), or from the command line:
+
+#+begin_src sh
+xcodebuild -project CoreEQ.xcodeproj -target CoreEQ -configuration Debug build
+#+end_src
+
+The app lands in =build/Debug/CoreEQ.app=. The build is ad-hoc signed
+(=CODE_SIGN_IDENTITY=-=) with the hardened runtime disabled — fine for local
+development, revisit for distribution (see “Packaging”).
+
+* Running
+
+#+begin_src sh
+open build/Debug/CoreEQ.app
+#+end_src
+
+- CoreEQ is a menu bar app (=LSUIElement=): no Dock icon, look for the sliders
+  icon in the menu bar.
+- First launch triggers the macOS *System Audio Recording* permission dialog
+  (the usage string comes from =NSAudioCaptureUsageDescription= in
+  =Config/Info.plist=). Without the permission the tap cannot be created and
+  the engine reports a failure in the UI, retrying up to three times.
+- Note that TCC ties the permission to the code signature; rebuilding with a
+  different signature may re-prompt.
+
+Engine activity is logged through =os.Logger= (subsystem
+=com.andreypudov.coreeq=). Follow it live with:
+
+#+begin_src sh
+log stream --predicate 'subsystem == "com.andreypudov.coreeq"' --level info
+#+end_src
+
+* Testing
+
+There is no automated test target yet. The DSP core (=EQProcessor=) and the
+models (=EQProfile=, =ProfileManager=, =SettingsStore=) are deliberately free
+of audio-hardware dependencies so a unit-test bundle can cover them directly;
+adding an XCTest target is the natural next step.
+
+Until then, a manual smoke test after changes:
+
+1. Build and launch; confirm the menu bar icon appears and the status line in
+   the main window reads “Processing system audio on …”.
+2. Play music; switch between *Flat* and *Bass Boost* — the change must be
+   audible, immediate, and free of clicks.
+3. Toggle *Enable Equalizer* — instant, glitch-free A/B.
+4. Drag a band slider — the sound tracks the slider smoothly; a *Reset*
+   button appears.
+5. Switch the system output device (e.g. speakers → headphones) — processing
+   resumes on the new device within ~1 s.
+6. Quit and relaunch — profile, slider tweaks, and enabled state are restored.
+7. Quit — system audio returns to the normal unprocessed path.
+
+* Packaging
+
+A release build:
+
+#+begin_src sh
+xcodebuild -project CoreEQ.xcodeproj -target CoreEQ -configuration Release build
+#+end_src
+
+produces =build/Release/CoreEQ.app=. For distribution outside your own machine
+you must sign with a Developer ID certificate, enable the hardened runtime,
+and notarize:
+
+#+begin_src sh
+xcodebuild -project CoreEQ.xcodeproj -target CoreEQ -configuration Release build \
+  CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+  ENABLE_HARDENED_RUNTIME=YES
+
+ditto -c -k --keepParent build/Release/CoreEQ.app CoreEQ.zip
+xcrun notarytool submit CoreEQ.zip --keychain-profile <profile> --wait
+xcrun stapler staple build/Release/CoreEQ.app
+#+end_src
+
+Notes:
+
+- The app is currently *unsandboxed*. App Store distribution would require
+  enabling the sandbox and revisiting the audio entitlements; direct
+  (Developer ID) distribution does not.
+- Bump =MARKETING_VERSION= / =CURRENT_PROJECT_VERSION= in the target build
+  settings for releases.
+
+* Project structure
+
+#+begin_example
+CoreEQ.xcodeproj          Xcode project (folder-synchronized sources)
+Config/Info.plist         LSUIElement, NSAudioCaptureUsageDescription, versions
+CoreEQ/
+  CoreEQApp.swift         SwiftUI entry point + AppDelegate (wiring, main window)
+  AudioEngine.swift       Tap + aggregate device + IO proc, device-change handling
+  EQProcessor.swift       Realtime biquad EQ with parameter smoothing
+  EQProfile.swift         EQBand / EQProfile models, built-in profiles
+  ProfileManager.swift    Active profile + working band values, persistence
+  SettingsStore.swift     UserDefaults wrapper
+  MenuBarController.swift NSStatusItem menu (profiles, bypass, open, quit)
+  MainWindowView.swift    SwiftUI EQ window (picker, sliders, status)
+#+end_example
+
+The =CoreEQ/= folder is a synchronized group: dropping a new =.swift= file
+into it adds it to the target automatically, no project-file edits needed.
+
+* Architecture
+
+** Audio path: how CoreEQ attaches to system audio
+
+Implemented in =AudioEngine.swift=:
+
+1. *Process tap.* The engine creates a global Core Audio process tap
+   (=AudioHardwareCreateProcessTap=, macOS 14.2+) covering every process
+   except CoreEQ itself — excluding itself prevents a feedback loop. The tap
+   uses =muteBehavior = .mutedWhenTapped=, so the tapped processes' original
+   audio is silenced at the hardware; the only signal reaching the speakers is
+   what CoreEQ writes back.
+2. *Private aggregate device.* The tap and the current default output device
+   are combined into a private (invisible) aggregate device with drift
+   compensation, so tap input and device output share one IO cycle.
+3. *IO proc.* An IO proc on the aggregate receives the tapped system mix each
+   cycle, runs it through =EQProcessor=, and writes it to the real device's
+   output buffers.
+
+Because the tap dies with the process, a crash or quit always returns the
+system to normal, unprocessed audio — there is no persistent driver state to
+clean up.
+
+** DSP
+
+=EQProcessor= is a cascade of RBJ audio-cookbook peaking biquads (transposed
+direct form II, independent state per band and channel; 7 bands, stereo).
+Custom biquads were chosen over wrapping Apple's EQ Audio Unit because they
+are trivially realtime-safe inside a HAL IO proc and have no format
+negotiation edge cases (the spec allows either).
+
+** Threading model
+
+- The IO proc runs on the Core Audio realtime thread and *never blocks*:
+  parameter changes (bands, bypass, sample rate) are staged behind an
+  =OSAllocatedUnfairLock= and consumed with =lockIfAvailable()= — under
+  contention the render path simply reuses the previous parameters for one
+  cycle.
+- Gain changes are smoothed over ~50 ms on the render thread, so profile
+  switches and slider drags are glitch-free.
+- Everything else (=AudioEngine=, =ProfileManager=, UI) is =@MainActor=.
+  =AppDelegate= wires =ProfileManager.$currentBands= to
+  =AudioEngine.apply(bands:)= via Combine.
+
+** Resilience
+
+- *Default output device changes* — a system-object property listener
+  schedules a debounced engine rebuild on the new device.
+- *Sample rate changes* — a listener on the aggregate device updates the
+  filter coefficients (and resets filter state).
+- *Sleep/wake* — =NSWorkspace.didWakeNotification= triggers a rebuild.
+- *Startup failure* (typically missing permission) — up to three automatic
+  retries, with the error surfaced in the menu and the main window.
+- *Bypass* keeps the tap running and passes audio through untouched, so
+  toggling is instant and glitch-free.
+
+** Persistence
+
+=SettingsStore= wraps =UserDefaults= with three keys: active profile name,
+enabled flag, and custom band gains (present only while the active profile is
+modified). =ProfileManager= restores all three on launch.
+
+** Design decisions
+
+- *Deployment target 14.2, not 13.0.* The process-tap API is the only way to
+  process all system audio without shipping a virtual audio driver; it was
+  introduced in macOS 14.2.
+- *Fixed band layout.* All profiles share the same seven center frequencies,
+  so a profile is just a named list of gains and switching never rebuilds
+  filters, only retargets gain smoothing.
