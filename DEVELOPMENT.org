@@ -153,7 +153,7 @@ clean up.
 ** DSP
 
 =EQProcessor= is a cascade of RBJ audio-cookbook peaking biquads (transposed
-direct form II, independent state per band and channel; 7 bands, stereo).
+direct form II, independent state per band and channel; 11 bands, stereo).
 Custom biquads were chosen over wrapping Apple's EQ Audio Unit because they
 are trivially realtime-safe inside a HAL IO proc and have no format
 negotiation edge cases (the spec allows either).
@@ -194,6 +194,9 @@ modified). =ProfileManager= restores all three on launch.
 - *Deployment target 14.2, not 13.0.* The process-tap API is the only way to
   process all system audio without shipping a virtual audio driver; it was
   introduced in macOS 14.2.
-- *Fixed band layout.* All profiles share the same seven center frequencies,
-  so a profile is just a named list of gains and switching never rebuilds
-  filters, only retargets gain smoothing.
+- *Fixed band layout.* All profiles share the same eleven center frequencies
+  (the ISO octave ladder 32 Hz – 8 kHz plus 15 and 20 kHz, Q 1.41 ≈ one-octave
+  bandwidth), so a profile is just a named list of gains and switching never
+  rebuilds filters, only retargets gain smoothing. The Nyquist guard in
+  =EQProcessor= sits at 0.47 × sample rate so the 20 kHz band stays active at
+  a 44.1 kHz device sample rate.

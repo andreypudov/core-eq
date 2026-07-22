@@ -9,16 +9,15 @@ extension: CoreEQ uses Apple's native Core Audio system-tap technology.
 * Features
 
 - *System-wide processing* — equalizes all system audio, not per-app.
-- *Six built-in profiles* — switch instantly, without clicks or dropouts:
-  | Profile             | Character                                    |
-  |---------------------+----------------------------------------------|
-  | Flat                | No change; reference                         |
-  | Bass Boost          | Fuller low end                               |
-  | Treble Boost        | More air and sparkle                         |
-  | V-Shaped            | Emphasized bass and treble                   |
-  | Voice / Podcast     | Mid-range clarity for speech                 |
-  | Classical / Neutral | Gentle, wide-band shaping                    |
-- *Seven bands* — 60, 150, 400 Hz, 1, 2.5, 6, 12 kHz, each adjustable ±12 dB.
+- *22 built-in profiles* — the classic preset set you know from Spotify and
+  iTunes, switchable instantly without clicks or dropouts:
+
+  Flat, Acoustic, Bass Booster, Bass Reducer, Classical, Dance, Deep,
+  Electronic, Hip-Hop, Jazz, Latin, Loudness, Lounge, Piano, Pop, R&B, Rock,
+  Small Speakers, Spoken Word, Treble Booster, Treble Reducer, Vocal Booster.
+- *Eleven bands covering the full audible range* — the professional octave
+  ladder 32, 64, 125, 250, 500 Hz, 1, 2, 4, 8 kHz, extended with 15 and
+  20 kHz. Each band is adjustable ±12 dB.
 - *Menu bar first* — change profiles or bypass the EQ in two clicks, without
   opening a window.
 - *Instant bypass* — one toggle compares equalized and original sound with no

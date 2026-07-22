@@ -176,7 +176,9 @@ final class EQProcessor {
 
     private func computeCoefficients(_ band: inout BandState) {
         // Bands at or above Nyquist, or with negligible gain, become identity.
-        guard band.frequency > 10, band.frequency < sampleRate * 0.45, abs(band.currentGain) > 0.001 else {
+        // The 0.47 ceiling keeps the 20 kHz band active at a 44.1 kHz sample
+        // rate (0.47 × 44 100 ≈ 20.7 kHz) while staying safely below Nyquist.
+        guard band.frequency > 10, band.frequency < sampleRate * 0.47, abs(band.currentGain) > 0.001 else {
             band.b0 = 1; band.b1 = 0; band.b2 = 0; band.a1 = 0; band.a2 = 0
             return
         }

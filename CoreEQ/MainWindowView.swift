@@ -13,7 +13,7 @@ struct MainWindowView: View {
             footer
         }
         .padding(24)
-        .frame(minWidth: 520)
+        .frame(minWidth: 680)
     }
 
     private var header: some View {
