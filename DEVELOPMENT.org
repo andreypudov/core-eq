@@ -31,6 +31,9 @@ Open =CoreEQ.xcodeproj= in Xcode and build (⌘B), or from the command line:
 xcodebuild -project CoreEQ.xcodeproj -target CoreEQ -configuration Debug build
 #+end_src
 
+=make build= does the same for the Release configuration (see “Packaging and
+releases” for all Makefile targets).
+
 The app lands in =build/Debug/CoreEQ.app=. The build is ad-hoc signed
 (=CODE_SIGN_IDENTITY=-=) with the hardened runtime disabled — fine for local
 development, revisit for distribution (see “Packaging”).
@@ -78,17 +81,47 @@ Until then, a manual smoke test after changes:
 6. Quit and relaunch — profile, slider tweaks, and enabled state are restored.
 7. Quit — system audio returns to the normal unprocessed path.
 
-* Packaging
+* Packaging and releases
 
-A release build:
+The =Makefile= wraps the common flows (it also auto-selects the full Xcode
+toolchain if =xcode-select= points at the Command Line Tools):
 
-#+begin_src sh
-xcodebuild -project CoreEQ.xcodeproj -target CoreEQ -configuration Release build
-#+end_src
+| =make build=   | Release build into =build/Release/CoreEQ.app=          |
+| =make install= | Build and install to =/Applications=                   |
+| =make release= | Build and zip to =dist/CoreEQ-<version>.zip= (=ditto=) |
+| =make clean=   | Remove =build/= and =dist/=                            |
 
-produces =build/Release/CoreEQ.app=. For distribution outside your own machine
-you must sign with a Developer ID certificate, enable the hardened runtime,
-and notarize:
+** Cutting a release
+
+CoreEQ is distributed unsigned (ad-hoc signature, no Apple Developer
+account). The release pipeline is GitHub Actions
+(=.github/workflows/release.yml=): pushing a tag matching =v*= builds
+=make release= on a macOS runner and attaches the zip to a GitHub Release
+with generated notes.
+
+1. Bump =MARKETING_VERSION= (and =CURRENT_PROJECT_VERSION=) in the target
+   build settings.
+2. Commit, then tag and push:
+   #+begin_src sh
+   git tag v1.1
+   git push origin v1.1
+   #+end_src
+
+Notes on unsigned distribution:
+
+- Downloaded (quarantined) copies trigger Gatekeeper; users bypass it once
+  via System Settings → Privacy & Security → *Open Anyway* or by clearing
+  the quarantine attribute. Building from source avoids this entirely —
+  local builds are never quarantined. Both paths are documented for users
+  in [[file:README.org][README.org]].
+- The System Audio Recording (TCC) permission is keyed to the code
+  signature; ad-hoc signatures have no stable identity, so each shipped
+  update re-prompts users for the permission.
+
+** If a Developer ID account becomes available
+
+Sign with hardened runtime and notarize; this removes the Gatekeeper
+warning and the per-update permission re-prompts:
 
 #+begin_src sh
 xcodebuild -project CoreEQ.xcodeproj -target CoreEQ -configuration Release build \
@@ -100,13 +133,9 @@ xcrun notarytool submit CoreEQ.zip --keychain-profile <profile> --wait
 xcrun stapler staple build/Release/CoreEQ.app
 #+end_src
 
-Notes:
-
-- The app is currently *unsandboxed*. App Store distribution would require
-  enabling the sandbox and revisiting the audio entitlements; direct
-  (Developer ID) distribution does not.
-- Bump =MARKETING_VERSION= / =CURRENT_PROJECT_VERSION= in the target build
-  settings for releases.
+The app is currently *unsandboxed*. App Store distribution would require
+enabling the sandbox and revisiting the audio entitlements; direct
+(Developer ID) distribution does not.
 
 * Project structure
 

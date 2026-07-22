@@ -32,6 +32,41 @@ extension: CoreEQ uses Apple's native Core Audio system-tap technology.
 - macOS *14.2 or later*.
 - Permission to record system audio (granted on first launch — see below).
 
+* Installing
+
+CoreEQ is open source and distributed without Apple notarization. There are
+two ways to get it.
+
+** Build from source (recommended)
+
+Requires Xcode 16 or later. Apps you build locally are not quarantined by
+macOS, so CoreEQ launches with no Gatekeeper warnings at all:
+
+#+begin_src sh
+git clone https://github.com/AndreyPudov/core-eq.git
+cd core-eq
+make install
+#+end_src
+
+This builds a Release copy and installs it to =/Applications=.
+
+** Prebuilt binary
+
+Download the latest =CoreEQ-x.y.zip= from the project's *Releases* page,
+unzip it, and drag =CoreEQ.app= into =/Applications=.
+
+Because the binary is not notarized, macOS reports on first launch that it
+“could not verify the app is free of malware”. To run it anyway, either:
+
+1. Try to open it once, then go to System Settings → Privacy & Security →
+   scroll down → *Open Anyway*, or
+2. remove the quarantine flag in Terminal:
+   #+begin_src sh
+   xattr -dr com.apple.quarantine /Applications/CoreEQ.app
+   #+end_src
+
+This is needed once per machine, and again after each update.
+
 * First launch
 
 1. Launch *CoreEQ*. A sliders icon appears in the menu bar (there is no Dock
