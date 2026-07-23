@@ -18,6 +18,15 @@ extension: CoreEQ uses Apple's native Core Audio system-tap technology.
 - *Eleven bands covering the full audible range* — the professional octave
   ladder 32, 64, 125, 250, 500 Hz, 1, 2, 4, 8 kHz, extended with 15 and
   20 kHz. Each band is adjustable ±12 dB.
+- *Live frequency response curve* — the main window plots the exact combined
+  response of all filters, updating in real time as you adjust bands or
+  switch profiles. Each band appears as a point on the curve, aligned with
+  its slider below.
+- *Edit by dragging the curve* — drag a band's point up or down directly on
+  the plot; the sliders follow, and the audio updates as you drag.
+- *Double-click to reset a band* — Lightroom-style: double-click a point on
+  the curve or a slider to return that one band to the active profile's
+  value.
 - *Menu bar first* — change profiles or bypass the EQ in two clicks, without
   opening a window.
 - *Instant bypass* — one toggle compares equalized and original sound with no
@@ -91,10 +100,15 @@ Click the sliders icon:
 ** From the main window
 
 - Pick a profile from the dropdown.
+- The plot shows the combined frequency response of all bands. Drag a point
+  on the curve up or down to adjust that band — the slider below follows,
+  and the gain value is shown while you drag.
 - Drag the vertical sliders to adjust individual bands; the profile name keeps
   its selection and a *Reset* button appears to return to the profile's
   original values. Your tweaks are kept across restarts until you select
   another profile.
+- Double-click a point on the curve, or a slider, to reset just that band to
+  the active profile's value.
 - The switch in the top-right corner enables or bypasses the EQ.
 - The status line at the bottom shows which output device is being processed,
   or an error if something is wrong.

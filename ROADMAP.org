@@ -1,0 +1,134 @@
+#+TITLE: CoreEQ – Feature Roadmap
+#+AUTHOR: Andrey Pudov
+#+OPTIONS: toc:2
+
+This document tracks planned features for CoreEQ beyond the current MVP
+(system-wide EQ via a Core Audio process tap, 22 built-in profiles, menu bar
+control, main window with band sliders, persistence of profile/bypass state).
+
+Features are split into *v2* — the recommended next milestone that transforms
+CoreEQ into a professional-looking, complete audio tool — and *Later* —
+valuable additions that build on v2.
+
+* v2 (recommended next milestone)
+
+The combination below gives the most impact per unit of effort: one visual
+centerpiece for the main window, a complete profile workflow, and closure of
+the one real audio-quality gap (clipping on boost-heavy profiles).
+
+** DONE Frequency response curve visualization
+
+Draw the composite EQ response curve (20 Hz – 20 kHz, log-frequency axis) in
+the main window, the way FabFilter, eqMac, and SoundSource do.
+
+- Evaluate the transfer-function magnitude of the peaking biquads from their
+  coefficients (the same RBJ math already in =EQProcessor=), summed across all
+  bands, and render it with SwiftUI =Canvas=.
+- Update the curve live as sliders move or profiles switch.
+- Per-band handles on the curve support vertical dragging (synced with the
+  sliders, snapped to the same 0.5 dB step) and double-click to reset a band
+  to the active profile's value; the sliders reset the same way on
+  double-click (Lightroom-style).
+- This is the single biggest "this looks professional" upgrade available.
+
+** Real-time spectrum analyzer
+
+Show a live spectrum of the audio behind the EQ curve.
+
+- Tap a downsampled copy of the signal in =EQProcessor.render= into a
+  lock-free ring buffer (render thread must stay realtime-safe).
+- Run an FFT (Accelerate/vDSP) on a timer on the main thread; display as a
+  smoothed, log-scaled spectrum behind the response curve.
+- Doubles as visible proof that the app is processing audio.
+- Pre/post toggle (analyze input vs. equalized output) is a nice stretch goal.
+
+** Custom user profiles
+
+Turn anonymous slider tweaks into a first-class profile workflow.
+
+- "Save as…" to create a named user profile from the current band values.
+- Rename and delete user profiles (built-ins stay immutable).
+- Persist user profiles as JSON (Codable already in place on
+  =EQProfile= / =EQBand=) via =SettingsStore= or a small file in
+  Application Support.
+- Import/export profiles as =.json= files for sharing.
+- User profiles appear alongside built-ins in both the main window picker and
+  the menu bar list.
+
+** Preamp control with clipping protection
+
+Fixes a real correctness gap: boost-heavy profiles (e.g. Bass Booster,
++5.5 dB) can push loud material past 0 dBFS and clip audibly.
+
+- Preamp slider (−12 … +12 dB) applied in =EQProcessor= before the filters,
+  smoothed like band gains.
+- Auto-gain option: automatically offset the preamp by the maximum band boost
+  of the active profile to guarantee headroom.
+- Optional soft limiter at the end of the chain as a safety net.
+- Small clip indicator in the main window UI.
+
+** DSP unit tests
+
+Cheap insurance before adding features that touch the render path
+(spectrum tap, limiter). =EQProcessor= is pure, deterministic DSP with no
+dependencies — ideal for testing.
+
+- Impulse/sine response vs. expected biquad magnitude at band frequencies.
+- Bypass transparency (output bit-identical to input).
+- Gain-smoothing convergence after profile switches.
+- Sample-rate change resets state without artifacts.
+
+* Later
+
+** Per-device profiles
+
+Remember and automatically apply a profile per output device (e.g. AirPods →
+Flat, desk speakers → Bass Booster). Device-change detection already exists in
+=AudioEngine=; key the stored profile by device UID. A marquee "it just works"
+feature — headphones and speakers genuinely need different EQ.
+
+** First-run onboarding for the audio-capture permission
+
+Replace the raw OSStatus error in the menu with a small welcome window that
+explains the System Audio Recording permission, detects a failed tap creation,
+and deep-links to System Settings (=x-apple.systempreferences:=). Fixes the
+roughest edge in the current first-run experience.
+
+** Launch at login
+
+=SMAppService.mainApp= registration with a settings toggle. Near-mandatory for
+a menu bar audio utility.
+
+** Settings window
+
+A standard =⌘,= settings window hosting launch-at-login, per-device behavior,
+menu bar options, and future preferences. Makes the app feel like a real macOS
+citizen.
+
+** Menu bar upgrades
+
+- Show the active profile name in a menu header.
+- Dim the menu bar icon when the EQ is bypassed.
+- Global hotkey to toggle bypass (great for A/B-ing the EQ by ear).
+- Optionally a richer =MenuBarExtra=-style popover with quick slider access.
+
+** Output level meter
+
+Post-EQ level meter in the main window (already suggested in the original
+spec). Cheap once audio metering exists for the spectrum analyzer.
+
+** A/B comparison
+
+Loudness-matched instant compare between the equalized and flat signal, so the
+"louder sounds better" bias doesn't skew judgment.
+
+** Distribution polish
+
+- About window with version and credits.
+- Sparkle auto-updates.
+- Notarized, signed DMG for distribution outside the App Store.
+
+** Accessibility and localization
+
+VoiceOver labels for sliders and menu items; localized strings for the UI and
+profile names.

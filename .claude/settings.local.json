@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project CoreEQ.xcodeproj -target CoreEQ -configuration Debug build)",
+      "Bash(/usr/libexec/PlistBuddy -c \"Print :LSUIElement\" -c \"Print :NSAudioCaptureUsageDescription\" -c \"Print :LSMinimumSystemVersion\" build/Debug/CoreEQ.app/Contents/Info.plist)",
+      "Bash(codesign -dv build/Debug/CoreEQ.app)"
+    ]
+  }
+}

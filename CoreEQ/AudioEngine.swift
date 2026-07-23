@@ -38,6 +38,10 @@ final class AudioEngine: ObservableObject {
 
     @Published private(set) var status: Status = .stopped
 
+    /// Nominal sample rate of the active aggregate device. The response curve
+    /// uses it so the drawn filters match what the processor actually renders.
+    @Published private(set) var sampleRate: Double = 44_100
+
     /// Global bypass. When false the engine keeps running but passes audio
     /// through untouched, so toggling is instant and glitch-free.
     @Published var isEnabled: Bool {
@@ -144,7 +148,9 @@ final class AudioEngine: ObservableObject {
         try check(AudioHardwareCreateAggregateDevice(description as CFDictionary, &newAggregateID), "creating the aggregate device")
         aggregateID = newAggregateID
 
-        processor.setSampleRate(try nominalSampleRate(of: aggregateID))
+        let rate = try nominalSampleRate(of: aggregateID)
+        processor.setSampleRate(rate)
+        sampleRate = rate
 
         let processor = self.processor
         var newProcID: AudioDeviceIOProcID?
@@ -221,6 +227,7 @@ final class AudioEngine: ObservableObject {
                 guard let self, self.aggregateID == deviceID else { return }
                 if let rate = try? self.nominalSampleRate(of: deviceID) {
                     self.processor.setSampleRate(rate)
+                    self.sampleRate = rate
                 }
             }
         }

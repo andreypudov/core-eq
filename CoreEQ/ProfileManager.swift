@@ -57,6 +57,15 @@ final class ProfileManager: ObservableObject {
         settings.customGains = currentBands.map(\.gain)
     }
 
+    /// Restores a single band to the active profile's original value
+    /// (Lightroom-style double-click reset).
+    func resetBand(at index: Int) {
+        let profileBands = getActiveProfile().bands
+        guard currentBands.indices.contains(index), profileBands.indices.contains(index) else { return }
+        currentBands[index].gain = profileBands[index].gain
+        settings.customGains = isModified ? currentBands.map(\.gain) : nil
+    }
+
     /// Restores the active profile's original band values.
     func resetToActiveProfile() {
         currentBands = getActiveProfile().bands
