@@ -46,7 +46,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showMainWindow() {
         if mainWindow == nil {
             let hosting = NSHostingController(
-                rootView: MainWindowView(profileManager: profileManager, audioEngine: audioEngine)
+                rootView: MainWindowView(
+                    profileManager: profileManager,
+                    audioEngine: audioEngine,
+                    spectrum: audioEngine.spectrum
+                )
             )
             let window = NSWindow(contentViewController: hosting)
             window.title = "CoreEQ"

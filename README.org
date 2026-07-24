@@ -22,6 +22,9 @@ extension: CoreEQ uses Apple's native Core Audio system-tap technology.
   response of all filters, updating in real time as you adjust bands or
   switch profiles. Each band appears as a point on the curve, aligned with
   its slider below.
+- *Real-time spectrum analyzer* — a live spectrum of the sound you're hearing
+  is drawn behind the response curve, on the same frequency axis, so you can
+  see the music move against your EQ shaping.
 - *Edit by dragging the curve* — drag a band's point up or down directly on
   the plot; the sliders follow, and the audio updates as you drag.
 - *Double-click to reset a band* — Lightroom-style: double-click a point on
@@ -100,9 +103,10 @@ Click the sliders icon:
 ** From the main window
 
 - Pick a profile from the dropdown.
-- The plot shows the combined frequency response of all bands. Drag a point
-  on the curve up or down to adjust that band — the slider below follows,
-  and the gain value is shown while you drag.
+- The plot shows the combined frequency response of all bands, with a live
+  spectrum of the current audio behind it on the same frequency axis. Drag a
+  point on the curve up or down to adjust that band — the slider below
+  follows, and the gain value is shown while you drag.
 - Drag the vertical sliders to adjust individual bands; the profile name keeps
   its selection and a *Reset* button appears to return to the profile's
   original values. Your tweaks are kept across restarts until you select

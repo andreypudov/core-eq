@@ -52,6 +52,10 @@ final class AudioEngine: ObservableObject {
         }
     }
 
+    /// Live spectrum of the played-back audio, driving the response plot's
+    /// backdrop. Fed by `processor` from the render thread.
+    let spectrum: SpectrumAnalyzer
+
     private let processor = EQProcessor()
     private let settings: SettingsStore
     private let logger = Logger(subsystem: "com.andreypudov.coreeq", category: "AudioEngine")
@@ -71,7 +75,9 @@ final class AudioEngine: ObservableObject {
     init(settings: SettingsStore) {
         self.settings = settings
         self.isEnabled = settings.isEnabled
+        self.spectrum = SpectrumAnalyzer(buffer: processor.spectrumBuffer, sampleRate: { 44_100 })
         processor.setBypassed(!settings.isEnabled)
+        spectrum.setSampleRateProvider { [weak self] in self?.sampleRate ?? 44_100 }
     }
 
     // MARK: - Lifecycle

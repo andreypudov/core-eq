@@ -18,6 +18,9 @@ import SwiftUI
 struct FrequencyResponseView: View {
     let bands: [EQBand]
     let sampleRate: Double
+    /// Log-spaced spectrum points (ascending frequency, level 0...1) drawn as a
+    /// backdrop behind the grid and curve. Empty hides the backdrop.
+    var spectrum: [SpectrumAnalyzer.Point] = []
     var onGainChange: ((_ bandIndex: Int, _ gain: Double) -> Void)?
     var onBandReset: ((_ bandIndex: Int) -> Void)?
 
@@ -39,6 +42,7 @@ struct FrequencyResponseView: View {
         GeometryReader { geometry in
             let size = geometry.size
             Canvas { context, _ in
+                drawSpectrum(context, size)
                 drawGrid(context, size)
                 drawCurve(context, size)
                 drawBandMarkers(context, size)
@@ -112,6 +116,33 @@ struct FrequencyResponseView: View {
     }
 
     // MARK: - Drawing
+
+    /// Live analyzer spectrum, drawn as a filled backdrop on the same
+    /// band-aligned x-axis as the curve so peaks line up with the bands. It
+    /// uses its own vertical scale (0...1 over the full height), independent of
+    /// the ±dB gain axis, since it represents signal level rather than gain.
+    private func drawSpectrum(_ context: GraphicsContext, _ size: CGSize) {
+        guard spectrum.count > 1 else { return }
+
+        var line = Path()
+        for (index, point) in spectrum.enumerated() {
+            let x = xPosition(point.frequency, size)
+            let y = size.height * (1 - CGFloat(point.level))
+            if index == 0 {
+                line.move(to: CGPoint(x: x, y: y))
+            } else {
+                line.addLine(to: CGPoint(x: x, y: y))
+            }
+        }
+
+        var fill = line
+        fill.addLine(to: CGPoint(x: xPosition(spectrum[spectrum.count - 1].frequency, size), y: size.height))
+        fill.addLine(to: CGPoint(x: xPosition(spectrum[0].frequency, size), y: size.height))
+        fill.closeSubpath()
+
+        context.fill(fill, with: .color(.primary.opacity(0.09)))
+        context.stroke(line, with: .color(.primary.opacity(0.22)), lineWidth: 1)
+    }
 
     private func drawGrid(_ context: GraphicsContext, _ size: CGSize) {
         var lines = Path()

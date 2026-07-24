@@ -31,16 +31,27 @@ the main window, the way FabFilter, eqMac, and SoundSource do.
   double-click (Lightroom-style).
 - This is the single biggest "this looks professional" upgrade available.
 
-** Real-time spectrum analyzer
+** DONE Real-time spectrum analyzer
 
 Show a live spectrum of the audio behind the EQ curve.
 
-- Tap a downsampled copy of the signal in =EQProcessor.render= into a
-  lock-free ring buffer (render thread must stay realtime-safe).
-- Run an FFT (Accelerate/vDSP) on a timer on the main thread; display as a
-  smoothed, log-scaled spectrum behind the response curve.
-- Doubles as visible proof that the app is processing audio.
-- Pre/post toggle (analyze input vs. equalized output) is a nice stretch goal.
+- A mono copy of the played-back output is tapped in =EQProcessor.render=
+  into =SpectrumAudioBuffer=, a single-producer/single-consumer ring buffer
+  that stays realtime-safe (the render thread only ever tries the lock and
+  drops the block on contention).
+- =SpectrumAnalyzer= runs a Hann-windowed vDSP real FFT on a 60 Hz timer,
+  maps the power spectrum onto log-spaced frequencies, normalises to 0...1,
+  and smooths with fast-attack / slow-release. It decays to silence when no
+  new audio arrives.
+- Drawn as a filled backdrop behind the grid and curve in
+  =FrequencyResponseView=, on the same band-aligned x-axis so peaks line up
+  with the bands and sliders. The analyzer only runs while the main window is
+  visible.
+- The tap sits after EQ processing, so the spectrum shows the equalized
+  output when enabled and the untouched passthrough when bypassed — visible
+  proof the app is processing audio.
+- Pre/post toggle (analyze input vs. equalized output) remains a possible
+  future stretch goal.
 
 ** Custom user profiles
 

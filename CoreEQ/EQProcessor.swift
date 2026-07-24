@@ -18,6 +18,11 @@ final class EQProcessor {
 
     private static let smoothingSeconds = 0.05
 
+    /// Mono copy of the played-back output, tapped for the spectrum analyzer.
+    /// 8192 samples is well beyond the analyzer's 4096-sample window, so the
+    /// consumer can snapshot without the producer overtaking the read region.
+    let spectrumBuffer = SpectrumAudioBuffer(capacity: 8_192)
+
     private struct BandState {
         var frequency = 1_000.0
         var q = 1.0
@@ -97,21 +102,36 @@ final class EQProcessor {
             }
         }
 
-        guard !bypassed, bandCount > 0, totalFrames > 0 else { return }
+        if !bypassed, bandCount > 0, totalFrames > 0 {
+            advanceSmoothing(frames: totalFrames)
 
-        advanceSmoothing(frames: totalFrames)
-
-        var channelBase = 0
-        for i in 0..<outABL.count where channelBase < Self.maxChannels {
-            let buffer = outABL[i]
-            let channels = Int(buffer.mNumberChannels)
-            guard channels > 0, let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
-            let frames = Int(buffer.mDataByteSize) / (MemoryLayout<Float>.size * channels)
-            for ch in 0..<channels where channelBase + ch < Self.maxChannels {
-                processChannel(data + ch, stride: channels, frames: frames, channel: channelBase + ch)
+            var channelBase = 0
+            for i in 0..<outABL.count where channelBase < Self.maxChannels {
+                let buffer = outABL[i]
+                let channels = Int(buffer.mNumberChannels)
+                guard channels > 0, let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
+                let frames = Int(buffer.mDataByteSize) / (MemoryLayout<Float>.size * channels)
+                for ch in 0..<channels where channelBase + ch < Self.maxChannels {
+                    processChannel(data + ch, stride: channels, frames: frames, channel: channelBase + ch)
+                }
+                channelBase += channels
             }
-            channelBase += channels
         }
+
+        feedSpectrum(outABL)
+    }
+
+    /// Hands a mono copy of the final output — equalized when enabled, the
+    /// untouched passthrough when bypassed — to the spectrum buffer, so the
+    /// analyzer always shows what is actually reaching the speakers. Runs off
+    /// the first output buffer, which covers the common interleaved case.
+    private func feedSpectrum(_ outABL: UnsafeMutableAudioBufferListPointer) {
+        guard let first = outABL.first,
+              let data = first.mData?.assumingMemoryBound(to: Float.self) else { return }
+        let channels = Int(first.mNumberChannels)
+        guard channels > 0 else { return }
+        let frames = Int(first.mDataByteSize) / (MemoryLayout<Float>.size * channels)
+        spectrumBuffer.write(interleaved: data, frames: frames, channels: channels)
     }
 
     // MARK: - Render-thread helpers

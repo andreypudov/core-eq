@@ -5,6 +5,7 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var profileManager: ProfileManager
     @ObservedObject var audioEngine: AudioEngine
+    @ObservedObject var spectrum: SpectrumAnalyzer
 
     var body: some View {
         VStack(spacing: 20) {
@@ -15,6 +16,8 @@ struct MainWindowView: View {
         }
         .padding(24)
         .frame(minWidth: 680)
+        .onAppear { spectrum.start() }
+        .onDisappear { spectrum.stop() }
     }
 
     private var header: some View {
@@ -44,6 +47,7 @@ struct MainWindowView: View {
         FrequencyResponseView(
             bands: profileManager.currentBands,
             sampleRate: audioEngine.sampleRate,
+            spectrum: spectrum.points,
             onGainChange: { index, gain in profileManager.setGain(gain, forBandAt: index) },
             onBandReset: { index in profileManager.resetBand(at: index) }
         )
