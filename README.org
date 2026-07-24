@@ -6,6 +6,8 @@ applies a multi-band EQ to *everything you hear* — music, videos, calls,
 games — regardless of which app is playing. No virtual audio driver, no kernel
 extension: CoreEQ uses Apple's native Core Audio system-tap technology.
 
+[[./Design/screenshots/core-eq-1.2.png]]
+
 * Features
 
 - *System-wide processing* — equalizes all system audio, not per-app.
