@@ -7,6 +7,7 @@ final class SettingsStore {
         static let activeProfileName = "activeProfileName"
         static let isEnabled = "isEQEnabled"
         static let customGains = "customBandGains"
+        static let tone = "quickToneControls"
     }
 
     private let defaults: UserDefaults
@@ -34,6 +35,19 @@ final class SettingsStore {
                 defaults.set(newValue, forKey: Key.customGains)
             } else {
                 defaults.removeObject(forKey: Key.customGains)
+            }
+        }
+    }
+
+    /// Menu-bar Quick EQ tone positions as `[bass, mid, treble]`, or nil when
+    /// all three are centred.
+    var tone: [Double]? {
+        get { defaults.array(forKey: Key.tone) as? [Double] }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Key.tone)
+            } else {
+                defaults.removeObject(forKey: Key.tone)
             }
         }
     }

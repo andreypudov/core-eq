@@ -1,20 +1,39 @@
 import AppKit
+import CoreAudio
 import Foundation
 
-/// Owns the NSStatusItem. The menu is rebuilt each time it opens
-/// (`menuNeedsUpdate`), so it always reflects the current state without any
-/// change observation plumbing.
+/// Owns the NSStatusItem and its menu. The menu is a real `NSMenu` assigned to
+/// the status item, so it behaves exactly like the system Wi‑Fi / Sound menus:
+/// no popover arrow, system menu font, and automatic dismissal when another menu
+/// bar menu opens. Interactive pieces the menu can't express natively — the
+/// header on/off switch, the live response graph, and the tone sliders — are
+/// custom views (`QuickEQMenuViews`) embedded via `NSMenuItem.view`. Preset and
+/// output selection use native submenus.
+///
+/// The menu is rebuilt each time it opens (`menuNeedsUpdate`), so it always
+/// reflects the current state without any change-observation plumbing.
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let profileManager: ProfileManager
     private let audioEngine: AudioEngine
     private let openMainWindow: () -> Void
+    private let openSettings: () -> Void
 
-    init(profileManager: ProfileManager, audioEngine: AudioEngine, openMainWindow: @escaping () -> Void) {
+    /// Kept between rebuilds so tone-slider changes can redraw the graph in
+    /// place while the menu stays open.
+    private weak var quickEQBody: QuickEQBodyView?
+
+    init(
+        profileManager: ProfileManager,
+        audioEngine: AudioEngine,
+        openMainWindow: @escaping () -> Void,
+        openSettings: @escaping () -> Void
+    ) {
         self.profileManager = profileManager
         self.audioEngine = audioEngine
         self.openMainWindow = openMainWindow
+        self.openSettings = openSettings
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -29,55 +48,140 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         let menu = NSMenu()
         menu.delegate = self
+        menu.autoenablesItems = false
         statusItem.menu = menu
     }
+
+    // MARK: - Menu construction
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        for profile in profileManager.listProfiles() {
-            let item = NSMenuItem(title: profile.name, action: #selector(selectProfile(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = profile.name
-            item.state = profile.name == profileManager.activeProfileName ? .on : .off
-            menu.addItem(item)
-        }
-
+        menu.addItem(headerItem())
         menu.addItem(.separator())
 
-        let bypassItem = NSMenuItem(title: "Enable Equalizer", action: #selector(toggleEnabled(_:)), keyEquivalent: "")
-        bypassItem.target = self
-        bypassItem.state = audioEngine.isEnabled ? .on : .off
-        menu.addItem(bypassItem)
-
-        if case .failed(let message) = audioEngine.status {
-            let statusItem = NSMenuItem(title: "⚠️ \(message)", action: nil, keyEquivalent: "")
-            statusItem.isEnabled = false
-            menu.addItem(statusItem)
-        }
-
+        menu.addItem(.sectionHeader(title: "Preset"))
+        menu.addItem(presetItem())
         menu.addItem(.separator())
 
-        let openItem = NSMenuItem(title: "Open CoreEQ…", action: #selector(openWindow(_:)), keyEquivalent: "")
+        menu.addItem(.sectionHeader(title: "Quick EQ"))
+        menu.addItem(quickEQItem())
+        menu.addItem(.separator())
+
+        menu.addItem(.sectionHeader(title: "Output"))
+        menu.addItem(outputItem())
+        menu.addItem(.separator())
+
+        let openItem = NSMenuItem(title: "Open Equalizer…", action: #selector(openWindow(_:)), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
 
-        let quitItem = NSMenuItem(title: "Quit CoreEQ", action: #selector(quit(_:)), keyEquivalent: "q")
+        // Settings is hidden until there's an actual settings window to show.
+        // let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettingsItem(_:)), keyEquivalent: ",")
+        // settingsItem.target = self
+        // menu.addItem(settingsItem)
+
+        menu.addItem(.separator())
+
+        let quitItem = NSMenuItem(title: "Quit CoreEQ", action: #selector(quit(_:)), keyEquivalent: "")
         quitItem.target = self
         menu.addItem(quitItem)
     }
 
-    @objc private func selectProfile(_ sender: NSMenuItem) {
+    // MARK: - Items
+
+    private func headerItem() -> NSMenuItem {
+        let item = NSMenuItem()
+        item.view = MenuHeaderView(isOn: audioEngine.isEnabled) { [weak self] isOn in
+            self?.audioEngine.isEnabled = isOn
+            self?.quickEQBody?.alphaValue = isOn ? 1.0 : 0.45
+        }
+        return item
+    }
+
+    private func presetItem() -> NSMenuItem {
+        let item = NSMenuItem(title: profileManager.activeProfileName, action: nil, keyEquivalent: "")
+
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        for profile in profileManager.listProfiles() {
+            let profileItem = NSMenuItem(title: profile.name, action: #selector(selectPreset(_:)), keyEquivalent: "")
+            profileItem.target = self
+            profileItem.representedObject = profile.name
+            profileItem.state = profile.name == profileManager.activeProfileName ? .on : .off
+            submenu.addItem(profileItem)
+        }
+        item.submenu = submenu
+        return item
+    }
+
+    private func quickEQItem() -> NSMenuItem {
+        let body = QuickEQBodyView(
+            bands: profileManager.currentBands,
+            tone: profileManager.tone,
+            sampleRate: audioEngine.sampleRate
+        ) { [weak self] axis, value in
+            self?.applyTone(axis: axis, value: value)
+        }
+        body.alphaValue = audioEngine.isEnabled ? 1.0 : 0.45
+        quickEQBody = body
+
+        let item = NSMenuItem()
+        item.view = body
+        return item
+    }
+
+    private func outputItem() -> NSMenuItem {
+        let currentID = AudioDevices.defaultOutputDeviceID()
+        let currentName = currentID.flatMap { AudioDevices.name(of: $0) } ?? "Unknown"
+        let item = NSMenuItem(title: currentName, action: nil, keyEquivalent: "")
+
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        let devices = AudioDevices.outputDevices()
+        if devices.isEmpty {
+            let empty = NSMenuItem(title: "No output devices", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            submenu.addItem(empty)
+        }
+        for device in devices {
+            let deviceItem = NSMenuItem(title: device.name, action: #selector(selectOutput(_:)), keyEquivalent: "")
+            deviceItem.target = self
+            deviceItem.representedObject = device.id
+            deviceItem.state = device.id == currentID ? .on : .off
+            submenu.addItem(deviceItem)
+        }
+        item.submenu = submenu
+        return item
+    }
+
+    // MARK: - Actions
+
+    private func applyTone(axis: QuickEQBodyView.Axis, value: Double) {
+        switch axis {
+        case .bass: profileManager.setTone(bass: value)
+        case .mid: profileManager.setTone(mid: value)
+        case .treble: profileManager.setTone(treble: value)
+        }
+        quickEQBody?.refreshGraph(bands: profileManager.currentBands)
+    }
+
+    @objc private func selectPreset(_ sender: NSMenuItem) {
         guard let name = sender.representedObject as? String else { return }
         profileManager.setActiveProfile(name: name)
     }
 
-    @objc private func toggleEnabled(_ sender: NSMenuItem) {
-        audioEngine.isEnabled.toggle()
+    @objc private func selectOutput(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? AudioDeviceID else { return }
+        AudioDevices.setDefaultOutputDevice(id)
     }
 
     @objc private func openWindow(_ sender: NSMenuItem) {
         openMainWindow()
+    }
+
+    @objc private func openSettingsItem(_ sender: NSMenuItem) {
+        openSettings()
     }
 
     @objc private func quit(_ sender: NSMenuItem) {

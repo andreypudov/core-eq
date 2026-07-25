@@ -135,7 +135,7 @@ final class AudioEngine: ObservableObject {
 
         let description: [String: Any] = [
             kAudioAggregateDeviceNameKey: "CoreEQ Aggregate",
-            kAudioAggregateDeviceUIDKey: "com.andreypudov.coreeq.aggregate.\(UUID().uuidString)",
+            kAudioAggregateDeviceUIDKey: "\(AudioDevices.coreEQAggregateUIDPrefix)\(UUID().uuidString)",
             kAudioAggregateDeviceMainSubDeviceKey: outputUID,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,

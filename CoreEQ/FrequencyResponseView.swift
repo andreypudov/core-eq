@@ -24,6 +24,11 @@ struct FrequencyResponseView: View {
     var onGainChange: ((_ bandIndex: Int, _ gain: Double) -> Void)?
     var onBandReset: ((_ bandIndex: Int) -> Void)?
 
+    /// Compact, read-only presentation for the menu-bar Quick EQ: no grid,
+    /// labels, band handles, or interaction — just the smooth curve, resembling
+    /// Apple's EQ preview. Defaults to the full interactive plot.
+    var minimal = false
+
     @State private var draggedBandIndex: Int?
     @State private var hoveredBandIndex: Int?
 
@@ -41,29 +46,37 @@ struct FrequencyResponseView: View {
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
-            Canvas { context, _ in
-                drawSpectrum(context, size)
-                drawGrid(context, size)
-                drawCurve(context, size)
-                drawBandMarkers(context, size)
-            }
-            .gesture(dragGesture(size))
-            .simultaneousGesture(doubleClickGesture(size))
-            .onContinuousHover { phase in
-                switch phase {
-                case .active(let location):
-                    hoveredBandIndex = bandIndex(near: location, size)
-                case .ended:
-                    hoveredBandIndex = nil
+            if minimal {
+                Canvas { context, _ in
+                    drawBaseline(context, size)
+                    drawCurve(context, size)
+                }
+            } else {
+                Canvas { context, _ in
+                    drawSpectrum(context, size)
+                    drawGrid(context, size)
+                    drawCurve(context, size)
+                    drawBandMarkers(context, size)
+                }
+                .gesture(dragGesture(size))
+                .simultaneousGesture(doubleClickGesture(size))
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active(let location):
+                        hoveredBandIndex = bandIndex(near: location, size)
+                    case .ended:
+                        hoveredBandIndex = nil
+                    }
                 }
             }
         }
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(.quaternary.opacity(0.5))
+                .fill(.quaternary.opacity(minimal ? 0.35 : 0.5))
         )
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityLabel("Equalizer frequency response curve")
+        .accessibilityHidden(minimal)
     }
 
     // MARK: - Interaction
@@ -142,6 +155,16 @@ struct FrequencyResponseView: View {
 
         context.fill(fill, with: .color(.primary.opacity(0.09)))
         context.stroke(line, with: .color(.primary.opacity(0.22)), lineWidth: 1)
+    }
+
+    /// Single faint 0 dB reference line for the minimal presentation, so the
+    /// curve reads as a deviation from flat without a full grid.
+    private func drawBaseline(_ context: GraphicsContext, _ size: CGSize) {
+        var line = Path()
+        let y = yPosition(0, size)
+        line.move(to: CGPoint(x: 0, y: y))
+        line.addLine(to: CGPoint(x: size.width, y: y))
+        context.stroke(line, with: .color(.primary.opacity(0.12)), lineWidth: 1)
     }
 
     private func drawGrid(_ context: GraphicsContext, _ size: CGSize) {
@@ -330,9 +353,17 @@ struct FrequencyResponseView: View {
         CGFloat(min(max(axisFraction(of: frequency), 0), 1)) * size.width
     }
 
+    /// The minimal menu graph reserves only half the stroke width at the top and
+    /// bottom, so at extreme settings the curve reaches the edges of the compact
+    /// box and clamps there — filling the space without the line bleeding past
+    /// the border. The full window keeps its original edge-to-edge mapping.
+    private var verticalInset: CGFloat { minimal ? 1 : 0 }
+
     private func yPosition(_ dB: Double, _ size: CGSize) -> CGFloat {
         let clamped = min(max(dB, -Self.maxDB), Self.maxDB)
-        return size.height / 2 * CGFloat(1.0 - clamped / Self.maxDB)
+        let half = size.height / 2
+        let usable = half - verticalInset
+        return half - usable * CGFloat(clamped / Self.maxDB)
     }
 
     /// Same label format as the slider columns, so plot and sliders read

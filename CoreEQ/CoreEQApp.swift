@@ -28,7 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController = MenuBarController(
             profileManager: profileManager,
             audioEngine: audioEngine,
-            openMainWindow: { [weak self] in self?.showMainWindow() }
+            openMainWindow: { [weak self] in self?.showMainWindow() },
+            openSettings: { [weak self] in self?.showSettings() }
         )
 
         let audioEngine = self.audioEngine
@@ -61,5 +62,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         mainWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Opens the standard SwiftUI Settings scene. As a menu bar (LSUIElement)
+    /// app CoreEQ isn't active when the popover is clicked, so activate first or
+    /// the settings window opens behind other apps.
+    private func showSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        // `showSettingsWindow:` on macOS 13+, older `showPreferencesWindow:` fallback.
+        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        }
     }
 }
