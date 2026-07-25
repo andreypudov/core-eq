@@ -14,6 +14,9 @@ enum AudioDevices {
     struct Device: Identifiable, Equatable {
         let id: AudioDeviceID
         let name: String
+        /// SF Symbol matching the device's transport type, mirroring the icons
+        /// the system Sound menu shows next to each output.
+        let symbolName: String
     }
 
     private static let logger = Logger(subsystem: "com.andreypudov.coreeq", category: "AudioDevices")
@@ -28,7 +31,7 @@ enum AudioDevices {
     static func outputDevices() -> [Device] {
         allDeviceIDs()
             .filter { hasOutputChannels($0) && !isCoreEQAggregate($0) }
-            .compactMap { id in name(of: id).map { Device(id: id, name: $0) } }
+            .compactMap { id in name(of: id).map { Device(id: id, name: $0, symbolName: symbolName(for: id)) } }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
@@ -81,6 +84,63 @@ enum AudioDevices {
             AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize, &ids
         ) == noErr else { return [] }
         return ids
+    }
+
+    /// SF Symbol for the device, approximating the system Sound menu's
+    /// per-device icons. Combines three signals, most specific first: the
+    /// device name (AirPods models, headsets), the built-in device's data
+    /// source (internal speakers vs the headphone jack), and finally the
+    /// transport type.
+    private static func symbolName(for deviceID: AudioDeviceID) -> String {
+        let name = (name(of: deviceID) ?? "").lowercased()
+
+        // Name cues identify headphone-class devices regardless of transport
+        // (USB / Bluetooth headsets, the jack's "External Headphones", …).
+        if name.contains("airpods max") { return "airpodsmax" }
+        if name.contains("airpods pro") { return "airpodspro" }
+        if name.contains("airpods") { return "airpods" }
+        if ["headphone", "headset", "earphone", "buds"].contains(where: name.contains) {
+            return "headphones"
+        }
+
+        switch transportType(of: deviceID) {
+        case kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE:
+            return "headphones"
+        case kAudioDeviceTransportTypeAirPlay:
+            return "airplayaudio"
+        case kAudioDeviceTransportTypeDisplayPort, kAudioDeviceTransportTypeHDMI:
+            return "display"
+        case kAudioDeviceTransportTypeBuiltIn:
+            return builtInSymbol(for: deviceID, name: name)
+        default:
+            return "speaker.wave.2"
+        }
+    }
+
+    /// Distinguishes the laptop's internal speakers from the headphone jack:
+    /// both are `builtIn` transport, but their output data source differs
+    /// ('ispk' internal speakers vs 'hdpn' headphones).
+    private static func builtInSymbol(for deviceID: AudioDeviceID, name: String) -> String {
+        let headphonesSource: UInt32 = 0x6864_706E  // 'hdpn'
+        var address = address(kAudioDevicePropertyDataSource, scope: kAudioObjectPropertyScopeOutput)
+        var source: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        if AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &source) == noErr,
+           source == headphonesSource {
+            return "headphones"
+        }
+        // Internal speakers: laptop glyph on MacBooks, generic speaker on
+        // desktop Macs.
+        return name.contains("macbook") ? "laptopcomputer" : "speaker.wave.2"
+    }
+
+    private static func transportType(of deviceID: AudioDeviceID) -> UInt32 {
+        var address = address(kAudioDevicePropertyTransportType)
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value)
+        guard status == noErr else { return kAudioDeviceTransportTypeUnknown }
+        return value
     }
 
     private static func isCoreEQAggregate(_ deviceID: AudioDeviceID) -> Bool {

@@ -148,11 +148,45 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             let deviceItem = NSMenuItem(title: device.name, action: #selector(selectOutput(_:)), keyEquivalent: "")
             deviceItem.target = self
             deviceItem.representedObject = device.id
-            deviceItem.state = device.id == currentID ? .on : .off
+            // Selection is shown Control-Center style — the icon badge fills
+            // with the accent colour — so no checkmark state is set.
+            deviceItem.image = Self.deviceIcon(device.symbolName, selected: device.id == currentID)
             submenu.addItem(deviceItem)
         }
         item.submenu = submenu
         return item
+    }
+
+    /// Renders a device SF Symbol inside a circular badge, Control-Center
+    /// style: a translucent circle behind the glyph, or an accent-filled circle
+    /// with a white glyph for the selected device. Drawn into a real bitmap
+    /// because NSMenu ignores symbol configurations and lays out symbol images
+    /// at its own standard size. The drawing handler runs at display time, so
+    /// the dynamic colours resolve correctly for Light / Dark mode.
+    private static func deviceIcon(_ symbolName: String, selected: Bool) -> NSImage? {
+        guard let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) else {
+            return nil
+        }
+        let side: CGFloat = 28
+        let glyphInset: CGFloat = 4
+        return NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            (selected ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.12)).setFill()
+            NSBezierPath(ovalIn: rect).fill()
+
+            let glyphColor: NSColor = selected ? .white : .labelColor
+            let tinted = symbol.withSymbolConfiguration(
+                NSImage.SymbolConfiguration(paletteColors: [glyphColor])
+            ) ?? symbol
+
+            let box = rect.insetBy(dx: glyphInset, dy: glyphInset)
+            let symbolSize = tinted.size
+            guard symbolSize.width > 0, symbolSize.height > 0 else { return true }
+            let scale = min(box.width / symbolSize.width, box.height / symbolSize.height)
+            let drawSize = NSSize(width: symbolSize.width * scale, height: symbolSize.height * scale)
+            let origin = NSPoint(x: rect.midX - drawSize.width / 2, y: rect.midY - drawSize.height / 2)
+            tinted.draw(in: NSRect(origin: origin, size: drawSize))
+            return true
+        }
     }
 
     // MARK: - Actions

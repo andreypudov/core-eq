@@ -81,7 +81,6 @@ final class QuickEQBodyView: NSView {
 
     private let graphHost: NSHostingView<FrequencyResponseView>
     private var sliders: [Axis: NSSlider] = [:]
-    private var valueLabels: [Axis: NSTextField] = [:]
     private let sampleRate: Double
     private let onToneChange: (Axis, Double) -> Void
 
@@ -143,15 +142,9 @@ final class QuickEQBodyView: NSView {
         slider.setAccessibilityLabel("\(axis.title) gain")
         sliders[axis] = slider
 
-        let label = NSTextField(labelWithString: format(value))
-        label.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuFont(ofSize: 0).pointSize - 1, weight: .regular)
-        label.textColor = .secondaryLabelColor
-        label.alignment = .right
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.widthAnchor.constraint(equalToConstant: 52).isActive = true
-        valueLabels[axis] = label
-
-        let row = NSStackView(views: [name, slider, label])
+        // No numeric readout: Control Center sliders never show values, and the
+        // live graph above already gives visual feedback.
+        let row = NSStackView(views: [name, slider])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 8
@@ -163,7 +156,6 @@ final class QuickEQBodyView: NSView {
         // Snap to the 0.5 dB step used across the app for a subtle detent.
         let snapped = (sender.doubleValue * 2).rounded() / 2
         sender.doubleValue = snapped
-        valueLabels[axis]?.stringValue = format(snapped)
         onToneChange(axis, snapped)
     }
 
@@ -173,13 +165,6 @@ final class QuickEQBodyView: NSView {
         case .mid: return tone.mid
         case .treble: return tone.treble
         }
-    }
-
-    private func format(_ dB: Double) -> String {
-        let rounded = (dB * 2).rounded() / 2
-        return rounded == rounded.rounded()
-            ? String(format: "%+.0f dB", rounded)
-            : String(format: "%+.1f dB", rounded)
     }
 }
 
