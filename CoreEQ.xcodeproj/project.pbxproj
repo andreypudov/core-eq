@@ -15,18 +15,18 @@
 		1A0000000000000000000015 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				AudioDevices.swift,
-				AudioEngine.swift,
-				CoreEQApp.swift,
-				EQProcessor.swift,
-				EqualizerDetailView.swift,
-				EqualizerSidebarView.swift,
-				FrequencyResponseView.swift,
-				MenuBarController.swift,
-				MenuListViews.swift,
-				QuickEQMenuViews.swift,
-				Theme.swift,
-				VerticalGainSlider.swift,
+				App/CoreEQApp.swift,
+				Audio/AudioDevices.swift,
+				Audio/AudioEngine.swift,
+				EQ/EQProcessor.swift,
+				UI/EqualizerDetailView.swift,
+				UI/EqualizerSidebarView.swift,
+				UI/FrequencyResponseView.swift,
+				UI/MenuBar/MenuBarController.swift,
+				UI/MenuBar/MenuListViews.swift,
+				UI/MenuBar/QuickEQMenuViews.swift,
+				UI/Theme.swift,
+				UI/VerticalGainSlider.swift,
 			);
 			target = 1A0000000000000000000010 /* CoreEQTests */;
 		};

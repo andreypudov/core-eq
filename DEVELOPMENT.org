@@ -104,7 +104,9 @@ Because the project uses =PBXFileSystemSynchronizedRootGroup=, the test target
 takes the whole =CoreEQ/= folder *minus* an exclusion list. A new source file
 joins the test target automatically — if it imports SwiftUI, AppKit, or
 CoreAudio, add it to =membershipExceptions= in =project.pbxproj= or the test
-build will fail.
+build will fail. Those entries are paths relative to =CoreEQ/=, so they carry
+the folder too (=UI/MenuBar/MenuBarController.swift=); moving a file between
+folders means updating its entry.
 
 ** Cutting a release
 
@@ -161,21 +163,41 @@ Design/
   logo.svg                Colored app icon source (not shipped)
   menubar.svg             Monochrome menu bar template source (not shipped)
 CoreEQ/
-  CoreEQApp.swift         SwiftUI entry point + AppDelegate (wiring, main window)
-  AudioEngine.swift       Tap + aggregate device + IO proc, device-change handling
-  EQProcessor.swift       Realtime biquad EQ with parameter smoothing
-  EQProfile.swift         EQBand / EQProfile models, built-in profiles
-  ProfileManager.swift    Active profile + working band values, persistence
-  SettingsStore.swift     UserDefaults wrapper
-  MenuBarController.swift NSStatusItem menu (profiles, bypass, open, quit)
-  MainWindowView.swift    SwiftUI EQ window (picker, sliders, status)
-  AppIcon.icns            Generated app icon (make icons)
-  MenuBarIconTemplate.png (+@2x) Generated menu bar template (make icons)
+  App/
+    CoreEQApp.swift         SwiftUI entry point + AppDelegate (wiring, main window)
+    SettingsStore.swift     UserDefaults wrapper
+    Utilities.swift         Small shared extensions (clamping, safe indexing)
+  Audio/
+    AudioEngine.swift       Tap + aggregate device + IO proc, device-change handling
+    AudioDevices.swift      Output device enumeration + default-device get/set
+    SpectrumAnalyzer.swift  FFT ring buffer feeding the response graph
+  EQ/
+    EQProcessor.swift       Realtime biquad EQ with parameter smoothing
+    PeakingFilter.swift     Single peaking-EQ biquad (coefficients + math)
+  Presets/
+    EQProfile.swift         EQBand / EQProfile models, built-in profiles
+    ProfileManager.swift    Active profile + working band values, persistence
+  UI/
+    Theme.swift             Design tokens (accent, spacing, metrics, formatting)
+    EqualizerDetailView.swift  Main window content column
+    EqualizerSidebarView.swift Preset list + preset actions
+    FrequencyResponseView.swift Response curve + spectrum overlay
+    VerticalGainSlider.swift   Band gain slider
+    MenuBar/
+      MenuBarController.swift NSStatusItem menu (presets, output, bypass, quit)
+      MenuListViews.swift     Inline chooser rows + scrolling option lists
+      QuickEQMenuViews.swift  Menu header switch, mini graph, tone sliders
+  Resources/
+    AppIcon.icns            Generated app icon (make icons)
+    AppIcon.icon/           Icon Composer document (macOS 26+ app icon)
+    MenuBarIconTemplate.png (+@2x) Generated menu bar template (make icons)
 #+end_example
 
 The =CoreEQ/= folder is a synchronized group: dropping a new =.swift= file
-into it adds it to the target automatically (and any other file type becomes
-a bundle resource), no project-file edits needed.
+anywhere inside it adds it to the target automatically (and any other file
+type becomes a bundle resource), no project-file edits needed. The
+subfolders are plain groups, not folder references, so resources are copied
+flat into =Contents/Resources/= regardless of which folder they live in.
 
 ** Icons
 
@@ -183,11 +205,11 @@ The shipped icon files are generated from the SVG sources in =Design/= by
 =make icons= (requires ImageMagick: =brew install imagemagick=). After
 editing an SVG, rerun the target and rebuild:
 
-- =Design/logo.svg= → =CoreEQ/AppIcon.icns= — rasterized at the ten
+- =Design/logo.svg= → =CoreEQ/Resources/AppIcon.icns= — rasterized at the ten
   standard sizes (16–1024 px) and packed with =iconutil=; referenced from
   =Config/Info.plist= via =CFBundleIconFile=. This is the *fallback* icon
   for macOS 14/15.
-- =CoreEQ/AppIcon.icon= — an Icon Composer document (background fill +
+- =CoreEQ/Resources/AppIcon.icon= — an Icon Composer document (background fill +
   =Assets/bars.svg= layer) compiled by =actool= into =Assets.car= during
   the build (=ASSETCATALOG_COMPILER_APPICON_NAME=, =CFBundleIconName=).
   This is the *primary* icon on macOS 26+: without it the system shows the
@@ -197,7 +219,7 @@ editing an SVG, rerun the target and rebuild:
   keep them in sync when the design changes. Icon caches are aggressive —
   after replacing the app, =lsregister -f /Applications/CoreEQ.app= plus
   =killall iconservicesagent Dock Finder= forces a refresh.
-- =Design/menubar.svg= → =CoreEQ/MenuBarIconTemplate.png= (18 pt) and
+- =Design/menubar.svg= → =CoreEQ/Resources/MenuBarIconTemplate.png= (18 pt) and
   =@2x= (36 pt) — a black-on-transparent copy of the logo's EQ bars.
   macOS renders it as a /template image/: only the alpha channel is used,
   recolored automatically for Light/Dark mode. Keep this SVG a solid

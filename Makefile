@@ -41,10 +41,10 @@ icons:
 	  magick build/logo_1024.png -resize $${s}x$${s} build/AppIcon.iconset/icon_$${s}x$${s}.png; \
 	  magick build/logo_1024.png -resize $$((s*2))x$$((s*2)) build/AppIcon.iconset/icon_$${s}x$${s}@2x.png; \
 	done
-	iconutil -c icns build/AppIcon.iconset -o $(APP)/AppIcon.icns
-	magick -background none -density 96 Design/menubar.svg -resize x18 $(APP)/MenuBarIconTemplate.png
-	magick -background none -density 192 Design/menubar.svg -resize x36 $(APP)/MenuBarIconTemplate@2x.png
-	@echo "Regenerated $(APP)/AppIcon.icns and $(APP)/MenuBarIconTemplate*.png"
+	iconutil -c icns build/AppIcon.iconset -o $(APP)/Resources/AppIcon.icns
+	magick -background none -density 96 Design/menubar.svg -resize x18 $(APP)/Resources/MenuBarIconTemplate.png
+	magick -background none -density 192 Design/menubar.svg -resize x36 $(APP)/Resources/MenuBarIconTemplate@2x.png
+	@echo "Regenerated $(APP)/Resources/AppIcon.icns and $(APP)/Resources/MenuBarIconTemplate*.png"
 
 clean:
 	rm -rf build $(DIST_DIR)
