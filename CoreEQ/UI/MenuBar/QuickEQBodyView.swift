@@ -1,68 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Custom views embedded in the status-bar `NSMenu` via `NSMenuItem.view`.
-///
-/// Everything the menu can express with a plain `NSMenuItem` (rows, submenus,
-/// separators, headers) is left to `MenuBarController` so it renders in the real
-/// system menu font and behaves like the Wi‑Fi / Sound menus. Only the pieces
-/// AppKit menus can't express — a header on/off switch, the live response graph,
-/// and the tone sliders — live here as `NSView`s sized to the menu's content
-/// width.
-enum QuickEQMenuMetrics {
-    /// Width of the custom content, chosen to sit comfortably next to the
-    /// standard menu rows. The menu sizes itself to its widest item.
-    static let contentWidth: CGFloat = 300
-    /// Leading/trailing inset that lines the custom content up with the text of
-    /// standard menu items.
-    static let horizontalInset: CGFloat = 14
-    static let graphHeight: CGFloat = 60
-}
-
-/// Header row: a bold "CoreEQ" title on the left and a native `NSSwitch` on the
-/// right, matching the Wi‑Fi menu's title-plus-toggle header. No icon.
-@MainActor
-final class MenuHeaderView: NSView {
-    private let toggle = NSSwitch()
-    private let onToggle: (Bool) -> Void
-
-    init(isOn: Bool, onToggle: @escaping (Bool) -> Void) {
-        self.onToggle = onToggle
-        super.init(frame: .zero)
-        // View-based menu items are sized by Auto Layout, so drive the whole
-        // view from constraints (fixed content width, fixed row height).
-        translatesAutoresizingMaskIntoConstraints = false
-
-        let title = NSTextField(labelWithString: "CoreEQ")
-        title.font = NSFont.menuFont(ofSize: 0).bold()
-        title.translatesAutoresizingMaskIntoConstraints = false
-
-        toggle.state = isOn ? .on : .off
-        toggle.target = self
-        toggle.action = #selector(switchToggled)
-        toggle.translatesAutoresizingMaskIntoConstraints = false
-        toggle.setAccessibilityLabel("CoreEQ equalizer")
-
-        addSubview(title)
-        addSubview(toggle)
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: QuickEQMenuMetrics.contentWidth),
-            heightAnchor.constraint(equalToConstant: 34),
-            title.leadingAnchor.constraint(equalTo: leadingAnchor, constant: QuickEQMenuMetrics.horizontalInset),
-            title.centerYAnchor.constraint(equalTo: centerYAnchor),
-            toggle.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -QuickEQMenuMetrics.horizontalInset),
-            toggle.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    @objc private func switchToggled() {
-        onToggle(toggle.state == .on)
-    }
-}
-
 /// Quick EQ body: the compact live response graph above three tone sliders
 /// (Bass / Mid / Treble). Dragging a slider calls back with the axis and its
 /// snapped value; `refreshGraph` redraws the curve from the new bands.
@@ -165,13 +103,5 @@ final class QuickEQBodyView: NSView {
         case .mid: return tone.mid
         case .treble: return tone.treble
         }
-    }
-}
-
-private extension NSFont {
-    /// Bold companion of the receiver, falling back to the original if the
-    /// bold variant is unavailable.
-    func bold() -> NSFont {
-        NSFontManager.shared.convert(self, toHaveTrait: .boldFontMask)
     }
 }

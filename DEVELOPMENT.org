@@ -164,40 +164,68 @@ Design/
   menubar.svg             Monochrome menu bar template source (not shipped)
 CoreEQ/
   App/
-    CoreEQApp.swift         SwiftUI entry point + AppDelegate (wiring, main window)
+    CoreEQApp.swift         SwiftUI entry point (@main)
+    AppDelegate.swift       App lifecycle, main-window construction, wiring
     SettingsStore.swift     UserDefaults wrapper
-    Utilities.swift         Small shared extensions (clamping, safe indexing)
   Audio/
     AudioEngine.swift       Tap + aggregate device + IO proc, device-change handling
     AudioDevices.swift      Output device enumeration + default-device get/set
-    SpectrumAnalyzer.swift  FFT ring buffer feeding the response graph
+    AudioDeviceList.swift   Observable device list for the main window
+    SpectrumAnalyzer.swift  Windowed FFT driving the response backdrop
+    SpectrumAudioBuffer.swift Lock-light ring buffer feeding the analyzer
   EQ/
     EQProcessor.swift       Realtime biquad EQ with parameter smoothing
     PeakingFilter.swift     Single peaking-EQ biquad (coefficients + math)
   Presets/
-    EQProfile.swift         EQBand / EQProfile models, built-in profiles
+    EQBand.swift            One band: frequency, gain, Q
+    EQProfile.swift         A named set of bands
+    BuiltInProfiles.swift   Shipped presets + the band ladder they share
+    QuickTone.swift         Bass / mid / treble weighting over the ladder
     ProfileManager.swift    Active profile + working band values, persistence
   UI/
-    Theme.swift             Design tokens (accent, spacing, metrics, formatting)
-    EqualizerDetailView.swift  Main window content column
-    EqualizerSidebarView.swift Preset list + preset actions
-    FrequencyResponseView.swift Response curve + spectrum overlay
-    VerticalGainSlider.swift   Band gain slider
+    Theme.swift             Design tokens (accent, spacing, metrics)
+    BandFormat.swift        Frequency and gain label formatting
+    MainWindow/
+      EqualizerSidebarView.swift Preset list + preset actions
+      EqualizerDetailView.swift  Content column: header, graph, bands, output
+      FrequencyResponseView.swift Response curve + spectrum overlay
+      VerticalGainSlider.swift   Band gain slider
+      WindowBackground.swift     Window material behind the content column
+      AppMark.swift              Vector app mark for the sidebar
+      DownwardPointer.swift      Tail shape under the gain readout
     MenuBar/
       MenuBarController.swift NSStatusItem menu (presets, output, bypass, quit)
-      MenuListViews.swift     Inline chooser rows + scrolling option lists
-      QuickEQMenuViews.swift  Menu header switch, mini graph, tone sliders
+      MenuHeaderView.swift    Title + on/off switch at the top of the menu
+      QuickEQBodyView.swift   Mini response graph + tone sliders
+      QuickEQMenuMetrics.swift Sizes shared by the menu's custom views
+      MenuRowView.swift       One menu row: icon, title, chevron, highlight
+      MenuListView.swift      Scrolling list a chooser row unfolds into
+      MenuListMetrics.swift   Sizes shared by row and list
+      FlippedStackView.swift  Top-down document view for the list
+  Extensions/
+    Double+Clamped.swift    Range clamping
+    Array+SafeIndex.swift   Bounds-checked element access
+    Color+CoreEQ.swift      Accent shorthand
+    NSFont+Bold.swift       Bold variant for the AppKit menu labels
   Resources/
     AppIcon.icns            Generated app icon (make icons)
     AppIcon.icon/           Icon Composer document (macOS 26+ app icon)
     MenuBarIconTemplate.png (+@2x) Generated menu bar template (make icons)
 #+end_example
 
+One top-level type per file, named after it — nested types stay with the
+type that owns them (=AudioEngine.Status=, =MenuRowView.Accessory=), and
+extensions on foreign types live in =Extensions/= as =Type+Feature.swift=.
+
 The =CoreEQ/= folder is a synchronized group: dropping a new =.swift= file
 anywhere inside it adds it to the target automatically (and any other file
 type becomes a bundle resource), no project-file edits needed. The
 subfolders are plain groups, not folder references, so resources are copied
 flat into =Contents/Resources/= regardless of which folder they live in.
+
+Note that stale =membershipExceptions= paths are not merely ignored: Xcode
+still resolves them as file references, and a moved file whose old path is
+left behind fails the build with “Multiple commands produce …”.
 
 ** Icons
 
