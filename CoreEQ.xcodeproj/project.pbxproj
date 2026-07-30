@@ -11,13 +11,8 @@
 		1A0000000000000000000011 /* CoreEQTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoreEQTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		1A0000000000000000000006 /* CoreEQ */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (1A0000000000000000000015 /* Exceptions for "CoreEQ" folder in "CoreEQTests" target */, ); explicitFileTypes = {}; explicitFolders = (); path = CoreEQ; sourceTree = "<group>"; };
-		1A0000000000000000000012 /* CoreEQTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CoreEQTests; sourceTree = "<group>"; };
-/* End PBXFileSystemSynchronizedRootGroup section */
-
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		1A0000000000000000000015 /* Exceptions for "CoreEQ" folder in "CoreEQTests" target */ = {
+		1A0000000000000000000015 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AudioDevices.swift,
@@ -28,6 +23,7 @@
 				EqualizerSidebarView.swift,
 				FrequencyResponseView.swift,
 				MenuBarController.swift,
+				MenuListViews.swift,
 				QuickEQMenuViews.swift,
 				Theme.swift,
 				VerticalGainSlider.swift,
@@ -35,6 +31,10 @@
 			target = 1A0000000000000000000010 /* CoreEQTests */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		1A0000000000000000000006 /* CoreEQ */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (1A0000000000000000000015 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = CoreEQ; sourceTree = "<group>"; };
+		1A0000000000000000000012 /* CoreEQTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CoreEQTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */

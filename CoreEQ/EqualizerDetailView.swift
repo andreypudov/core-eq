@@ -232,31 +232,21 @@ struct EqualizerDetailView: View {
 
     // MARK: - Output
 
-    /// A plain label and a native pop-up button, the way Finder and Music name
-    /// a device — no card of its own. An engine warning joins it on the rare
-    /// occasions the audio path isn't healthy.
+    /// A plain label and the current device, the way Finder and Music name one —
+    /// no card of its own. The device is a native pop-up button while there is
+    /// something to choose between, and plain text when there isn't. An engine
+    /// warning joins it on the rare occasions the audio path isn't healthy.
     private var outputRow: some View {
         HStack(spacing: 12) {
             Text("Output")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
 
-            Picker("Output Device", selection: outputSelection) {
-                ForEach(outputs.devices) { device in
-                    Label(device.name, systemImage: device.symbolName).tag(Optional(device.id))
-                }
-                if outputs.devices.isEmpty {
-                    Text("No Output Device").tag(AudioDeviceID?.none)
-                }
+            if outputs.hasChoice {
+                devicePicker
+            } else {
+                deviceName
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            // Large is the system's own bigger pop-up metrics — taller, roomier
-            // inside — rather than a small button padded out by hand.
-            .controlSize(.large)
-            .fixedSize()
-            .accessibilityLabel("Output device")
-            .accessibilityValue(outputs.defaultDeviceName)
 
             if let warning = engineWarning {
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
@@ -269,6 +259,38 @@ struct EqualizerDetailView: View {
 
             Spacer(minLength: 0)
         }
+    }
+
+    private var devicePicker: some View {
+        Picker("Output Device", selection: outputSelection) {
+            ForEach(outputs.devices) { device in
+                Label(device.name, systemImage: device.symbolName).tag(Optional(device.id))
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        // Large is the system's own bigger pop-up metrics — taller, roomier
+        // inside — rather than a small button padded out by hand.
+        .controlSize(.large)
+        .fixedSize()
+        .accessibilityLabel("Output device")
+        .accessibilityValue(outputs.defaultDeviceName)
+    }
+
+    /// The single output, or the lack of any: the same icon and name the pop-up
+    /// would carry, without the button chrome that would promise a choice the
+    /// machine can't offer. The leading inset stands in for the pop-up's own, so
+    /// the name starts where it did when a second device was plugged in.
+    private var deviceName: some View {
+        Label(outputs.defaultDeviceName, systemImage: outputs.defaultDeviceSymbolName)
+            .font(.system(size: 13))
+            .foregroundStyle(outputs.devices.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+            .labelStyle(.titleAndIcon)
+            .fixedSize()
+            .padding(.leading, 8)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Output device")
+            .accessibilityValue(outputs.defaultDeviceName)
     }
 
     /// Nil while the engine is processing normally — a healthy engine needs no
