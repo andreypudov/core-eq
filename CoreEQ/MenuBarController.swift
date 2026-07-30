@@ -76,11 +76,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         openItem.target = self
         menu.addItem(openItem)
 
-        // Settings is hidden until there's an actual settings window to show.
-        // let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettingsItem(_:)), keyEquivalent: ",")
-        // settingsItem.target = self
-        // menu.addItem(settingsItem)
-
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit CoreEQ", action: #selector(quit(_:)), keyEquivalent: "")

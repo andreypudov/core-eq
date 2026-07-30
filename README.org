@@ -1,60 +1,79 @@
 #+TITLE: CoreEQ
-#+SUBTITLE: System-wide equalizer for macOS
+#+SUBTITLE: Professional system-wide equalizer for macOS
 
-CoreEQ is a system-wide equalizer for macOS. It lives in your menu bar and
-applies a multi-band EQ to *everything you hear* — music, videos, calls,
-games — regardless of which app is playing. No virtual audio driver, no kernel
-extension: CoreEQ uses Apple's native Core Audio system-tap technology.
+CoreEQ is a system-wide equalizer for macOS. It applies an eleven-band graphic
+EQ to *everything you hear* — music, video, calls, games — no matter which
+application is playing, and without a virtual audio driver or a kernel
+extension. Processing runs entirely on Apple's native Core Audio process-tap
+API, so there is nothing to install into the system and nothing left behind
+when CoreEQ is not running.
 
-[[./Design/screenshots/core-eq-1.2.png]]
+[[./Design/screenshots/core-eq-1.5.png]]
 
 * Features
 
-- *System-wide processing* — equalizes all system audio, not per-app.
-- *22 built-in profiles* — the classic preset set you know from Spotify and
-  iTunes, switchable instantly without clicks or dropouts:
+** System-wide processing, driver-free
 
-  Flat, Acoustic, Bass Booster, Bass Reducer, Classical, Dance, Deep,
-  Electronic, Hip-Hop, Jazz, Latin, Loudness, Lounge, Piano, Pop, R&B, Rock,
-  Small Speakers, Spoken Word, Treble Booster, Treble Reducer, Vocal Booster.
-- *Eleven bands covering the full audible range* — the professional octave
-  ladder 32, 64, 125, 250, 500 Hz, 1, 2, 4, 8 kHz, extended with 15 and
-  20 kHz. Each band is adjustable ±12 dB.
-- *Live frequency response curve* — the main window plots the exact combined
-  response of all filters, updating in real time as you adjust bands or
-  switch profiles. Each band appears as a point on the curve, aligned with
-  its slider below.
-- *Real-time spectrum analyzer* — a live spectrum of the sound you're hearing
-  is drawn behind the response curve, on the same frequency axis, so you can
-  see the music move against your EQ shaping.
-- *Edit by dragging the curve* — drag a band's point up or down directly on
-  the plot; the sliders follow, and the audio updates as you drag.
-- *Double-click to reset a band* — Lightroom-style: double-click a point on
-  the curve or a slider to return that one band to the active profile's
-  value.
-- *Menu bar first* — change profiles or bypass the EQ in two clicks, without
-  opening a window.
-- *Instant bypass* — one toggle compares equalized and original sound with no
-  glitch.
-- *Remembers your settings* — the active profile, your slider tweaks, and the
-  on/off state are restored on every launch.
-- *Survives real life* — keeps working when you switch output devices, change
-  sample rates, or your Mac wakes from sleep.
+A global Core Audio process tap captures the mixed output of every application,
+equalizes it, and plays it back through the current output device. No
+=/Library/Audio= component, no reboot, no per-application setup. Quit CoreEQ and
+system audio returns to its normal path immediately.
+
+** Eleven-band equalizer
+
+The professional ISO octave ladder — 32, 64, 125, 250, 500 Hz and 1, 2, 4, 8,
+16, 20 kHz — at fixed centre frequencies, each adjustable ±12 dB. Bands are RBJ
+peaking biquads processed in transposed direct form II, with gain changes
+smoothed over ~50 ms so preset switches and slider moves never click or step.
+
+** Live frequency response, directly editable
+
+The main window plots the true combined magnitude response of the filter chain,
+computed from the same coefficients the audio path renders with — not an
+interpolated approximation. Drag a band's handle to change its gain, hover it to
+see the filter's own bell drawn beneath the composite, or double-click to reset
+that band alone.
+
+** Real-time spectrum analyzer
+
+A Hann-windowed FFT of the audio actually reaching your speakers is drawn behind
+the response curve on the same frequency axis, with fast-attack / slow-release
+smoothing, so you can read the programme material against your EQ shaping.
+
+** Presets
+
+Twenty-two built-in profiles — the classic set familiar from Apple Music and
+Spotify — plus your own, saved from the current band values and managed from the
+sidebar. Built-ins are immutable; your presets can be renamed, duplicated,
+edited, and deleted. Switching is instantaneous and glitch-free.
+
+** Menu bar control
+
+CoreEQ runs as a menu bar application with no Dock icon. The status menu carries
+a master switch, the preset list, a live response preview, three Quick EQ tone
+controls (bass, mid, treble) layered over the active preset, and output device
+selection — all without opening a window.
+
+** Built to stay running
+
+The engine rebuilds itself when the default output device changes, when the
+sample rate changes, and after the machine wakes from sleep, with bounded
+automatic retry on failure. Bypass is a real-time flag rather than a teardown,
+so comparing processed and original sound is instantaneous. The render path
+never allocates or blocks: parameter updates are staged behind an unfair lock
+and picked up only when uncontended.
 
 * Requirements
 
-- macOS *14.2 or later*.
-- Permission to record system audio (granted on first launch — see below).
+- macOS *14.2* or later
+- Permission to record system audio, requested on first launch
 
-* Installing
-
-CoreEQ is open source and distributed without Apple notarization. There are
-two ways to get it.
+* Installation
 
 ** Build from source (recommended)
 
-Requires Xcode 16 or later. Apps you build locally are not quarantined by
-macOS, so CoreEQ launches with no Gatekeeper warnings at all:
+Requires Xcode 16 or later. Locally built applications are not quarantined by
+macOS, so CoreEQ launches with no Gatekeeper warnings:
 
 #+begin_src sh
 git clone https://github.com/AndreyPudov/core-eq.git
@@ -66,77 +85,56 @@ This builds a Release copy and installs it to =/Applications=.
 
 ** Prebuilt binary
 
-Download the latest =CoreEQ-x.y.zip= from the project's *Releases* page,
-unzip it, and drag =CoreEQ.app= into =/Applications=.
+Download the latest =CoreEQ-x.y.zip= from the *Releases* page, unzip, and move
+=CoreEQ.app= to =/Applications=. The binary is not notarized, so macOS will
+report on first launch that it could not verify the app. Either open System
+Settings → Privacy & Security and choose *Open Anyway*, or clear the quarantine
+flag:
 
-Because the binary is not notarized, macOS reports on first launch that it
-“could not verify the app is free of malware”. To run it anyway, either:
-
-1. Try to open it once, then go to System Settings → Privacy & Security →
-   scroll down → *Open Anyway*, or
-2. remove the quarantine flag in Terminal:
-   #+begin_src sh
-   xattr -dr com.apple.quarantine /Applications/CoreEQ.app
-   #+end_src
-
-This is needed once per machine, and again after each update.
+#+begin_src sh
+xattr -dr com.apple.quarantine /Applications/CoreEQ.app
+#+end_src
 
 * First launch
 
-1. Launch *CoreEQ*. A sliders icon appears in the menu bar (there is no Dock
-   icon).
-2. macOS asks for permission to *record system audio*. CoreEQ needs it to
-   process the sound you hear; nothing is saved or sent anywhere. If you
-   dismissed the dialog, grant it manually under System Settings → Privacy &
-   Security → Screen & System Audio Recording.
-3. Pick a profile from the menu bar icon — the sound changes immediately.
+1. Launch CoreEQ. A sliders icon appears in the menu bar; there is no Dock icon.
+2. Grant *System Audio Recording* when macOS asks. CoreEQ needs it to process
+   the sound you hear. Nothing is recorded, stored, or transmitted. The
+   permission can also be granted under System Settings → Privacy & Security →
+   Screen & System Audio Recording.
+3. Choose a preset. The sound changes immediately.
 
 * Using CoreEQ
 
-** From the menu bar
+*Menu bar* — the master switch, preset selection, Quick EQ tone controls, and
+output device, plus *Open Equalizer…* and *Quit*.
 
-Click the sliders icon:
+*Main window* — presets in the sidebar with the master switch above them; the
+response graph, band sliders, and output device on the right. The preset menu
+and *Reset* sit beside the Equalizer heading. Right-click any preset for *New
+Preset*, *Rename*, *Duplicate*, *Save Changes*, *Reset to Preset*, and *Delete*.
 
-- Choose a *profile* — the active one is checked.
-- *Enable Equalizer* — toggle the EQ on and off (bypass).
-- *Open CoreEQ…* — open the main window.
-- *Quit CoreEQ* — audio returns to normal, unprocessed playback.
-
-** From the main window
-
-- Pick a profile from the dropdown.
-- The plot shows the combined frequency response of all bands, with a live
-  spectrum of the current audio behind it on the same frequency axis. Drag a
-  point on the curve up or down to adjust that band — the slider below
-  follows, and the gain value is shown while you drag.
-- Drag the vertical sliders to adjust individual bands; the profile name keeps
-  its selection and a *Reset* button appears to return to the profile's
-  original values. Your tweaks are kept across restarts until you select
-  another profile.
-- Double-click a point on the curve, or a slider, to reset just that band to
-  the active profile's value.
-- The switch in the top-right corner enables or bypasses the EQ.
-- The status line at the bottom shows which output device is being processed,
-  or an error if something is wrong.
-
-* Troubleshooting
-
-- *The sound doesn't change* — check the status line in the main window. If it
-  reports a permission problem, grant System Audio Recording access (see
-  “First launch”) ; CoreEQ retries automatically.
-- *No audio at all* — quit CoreEQ; system audio always returns to the normal,
-  unprocessed path when the app is not running (or has crashed).
-- *New output device* — CoreEQ follows the system default output device
-  automatically; a switch takes effect within about a second.
+Editing the active preset marks it *Edited*; *Save Changes* writes the values
+into one of your own presets, *Reset* discards them. Your edits, the active
+preset, and the on/off state are restored on every launch.
 
 * Limitations
 
 - Stereo processing: on multi-channel devices, channels beyond the first two
   pass through unequalized.
-- Profiles are built-in; custom named profiles cannot be created yet (tweaks
-  to the active profile are preserved, though).
+- Presets cannot yet be imported or exported as files.
 
-* For developers
+* Development
 
-Build, test, and packaging instructions, plus a tour of the architecture, are
-in [[file:DEVELOPMENT.org][DEVELOPMENT.org]].
+Architecture notes, build and test instructions are in
+[[file:DEVELOPMENT.org][DEVELOPMENT.org]].
+
+#+begin_src sh
+make build   # build the Release configuration
+make test    # run the unit test suite
+make release # build and package a distributable zip
+#+end_src
+
+* License
+
+Apache License 2.0. See [[file:LICENSE][LICENSE]].

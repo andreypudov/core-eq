@@ -1,9 +1,10 @@
 import Combine
 import Foundation
 
-/// Holds the built-in profiles, the active selection, and the current working
-/// band values (the active profile plus any slider tweaks). Persists the
-/// selection and tweaks through `SettingsStore` and restores them on launch.
+/// Holds the built-in profiles, any presets the user created, the active
+/// selection, and the current working band values (the active profile plus any
+/// slider tweaks). Persists the selection, the user presets, and the tweaks
+/// through `SettingsStore` and restores them on launch.
 @MainActor
 final class ProfileManager: ObservableObject {
     /// The three menu-bar Quick EQ tone positions. See `QuickTone`.
@@ -15,7 +16,12 @@ final class ProfileManager: ObservableObject {
         var isNeutral: Bool { self == ToneControls() }
     }
 
-    @Published private(set) var profiles: [EQProfile]
+    /// The profiles shipped with CoreEQ. Read-only.
+    let builtInProfiles: [EQProfile]
+
+    /// Presets the user created. Renameable, editable, and deletable.
+    @Published private(set) var userProfiles: [EQProfile]
+
     @Published private(set) var activeProfileName: String
     @Published private(set) var currentBands: [EQBand]
 
@@ -25,14 +31,32 @@ final class ProfileManager: ObservableObject {
     /// source of truth the engine renders.
     @Published private(set) var tone = ToneControls()
 
+    /// The preset the sidebar should be showing as an editable text field, or
+    /// nil when no rename is in progress.
+    ///
+    /// Lives here rather than in the sidebar's own `@State` because a preset can
+    /// be created from outside the sidebar — the window toolbar's + button — and
+    /// a freshly created preset should always land with its name selected. The
+    /// sidebar is the only reader; everyone else just asks for a rename.
+    @Published var profileAwaitingRename: String?
+
     private let settings: SettingsStore
 
     init(settings: SettingsStore) {
         self.settings = settings
 
-        let profiles = BuiltInProfiles.all
-        self.profiles = profiles
+        let builtIns = BuiltInProfiles.all
+        self.builtInProfiles = builtIns
 
+        // Drop any stored preset whose name collides with a built-in or with an
+        // earlier entry, so `profiles` always has unique, stable identifiers.
+        var seen = Set(builtIns.map(\.name))
+        let userProfiles = settings.userProfiles
+            .filter { seen.insert($0.name).inserted }
+            .map(Self.alignedToBandLadder)
+        self.userProfiles = userProfiles
+
+        let profiles = builtIns + userProfiles
         let savedName = settings.activeProfileName
         let active = profiles.first { $0.name == savedName }
             ?? profiles.first { $0.name == BuiltInProfiles.defaultProfileName }
@@ -65,24 +89,140 @@ final class ProfileManager: ObservableObject {
         self.currentBands = bands
     }
 
+    /// Built-in profiles first, then the user's own — the order the sidebar and
+    /// the menu bar present them in.
+    var profiles: [EQProfile] {
+        builtInProfiles + userProfiles
+    }
+
     func listProfiles() -> [EQProfile] {
         profiles
     }
 
     func getActiveProfile() -> EQProfile {
-        profiles.first { $0.name == activeProfileName } ?? profiles[0]
+        profiles.first { $0.name == activeProfileName } ?? builtInProfiles[0]
+    }
+
+    func profile(named name: String) -> EQProfile? {
+        profiles.first { $0.name == name }
     }
 
     /// Selecting a profile discards any custom slider tweaks and re-centres the
     /// Quick EQ tone controls, applying the profile's band values immediately.
     func setActiveProfile(name: String) {
-        guard let profile = profiles.first(where: { $0.name == name }) else { return }
+        guard let profile = profile(named: name) else { return }
         activeProfileName = profile.name
         tone = ToneControls()
         currentBands = profile.bands
         settings.activeProfileName = profile.name
         settings.customGains = nil
         settings.tone = nil
+    }
+
+    // MARK: - User presets
+
+    /// Creates a user preset from `bands` (the working values by default) and
+    /// makes it active. Returns the name it was actually stored under, which is
+    /// `name` made unique against the existing profiles.
+    @discardableResult
+    func addProfile(named name: String = "New Preset", bands: [EQBand]? = nil) -> String {
+        let profile = EQProfile(name: uniqueName(from: name), bands: bands ?? currentBands)
+        userProfiles.append(profile)
+        persistUserProfiles()
+        setActiveProfile(name: profile.name)
+        profileAwaitingRename = profile.name
+        return profile.name
+    }
+
+    /// Rewrites a stored profile's center frequencies and Q onto the current
+    /// band ladder, keeping its gains.
+    ///
+    /// Every profile shares one fixed ladder by design, so a profile saved under
+    /// an earlier ladder would otherwise keep stale frequencies and label its
+    /// slider differently from every other preset. Profiles whose band count no
+    /// longer matches are left untouched rather than silently reshaped.
+    private static func alignedToBandLadder(_ profile: EQProfile) -> EQProfile {
+        let ladder = BuiltInProfiles.frequencies
+        guard profile.bands.count == ladder.count else { return profile }
+        var aligned = profile
+        for index in aligned.bands.indices {
+            aligned.bands[index].frequency = ladder[index]
+            aligned.bands[index].q = BuiltInProfiles.defaultQ
+        }
+        return aligned
+    }
+
+    /// Asks the sidebar to put `name` into inline editing. Built-in profiles
+    /// can't be renamed, so requesting one is a no-op.
+    func beginRename(of name: String) {
+        guard canEditProfile(named: name) else { return }
+        profileAwaitingRename = name
+    }
+
+    /// Copies any profile — built-in or user — into a new user preset named
+    /// "<name> copy", and makes it active.
+    @discardableResult
+    func duplicateProfile(named name: String) -> String? {
+        guard let source = profile(named: name) else { return nil }
+        return addProfile(named: "\(source.name) copy", bands: source.bands)
+    }
+
+    /// Renames a user preset. Built-in profiles and empty names are ignored, and
+    /// a name that collides with an existing profile gets a numeric suffix.
+    @discardableResult
+    func renameProfile(named name: String, to newName: String) -> String? {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let index = userProfiles.firstIndex(where: { $0.name == name }),
+              !trimmed.isEmpty,
+              trimmed != name
+        else { return nil }
+
+        let unique = uniqueName(from: trimmed)
+        userProfiles[index].name = unique
+        persistUserProfiles()
+        if activeProfileName == name {
+            activeProfileName = unique
+            settings.activeProfileName = unique
+        }
+        return unique
+    }
+
+    /// Deletes a user preset. If it was active, the selection falls back to the
+    /// neighbouring preset, or to Flat when no user presets remain.
+    func deleteProfile(named name: String) {
+        guard let index = userProfiles.firstIndex(where: { $0.name == name }) else { return }
+        userProfiles.remove(at: index)
+        persistUserProfiles()
+        if profileAwaitingRename == name { profileAwaitingRename = nil }
+
+        guard activeProfileName == name else { return }
+        let fallback = userProfiles[safe: index]?.name
+            ?? userProfiles[safe: index - 1]?.name
+            ?? BuiltInProfiles.defaultProfileName
+        setActiveProfile(name: fallback)
+    }
+
+    /// Writes the working band values into the active user preset, so the
+    /// current sound becomes the preset's saved state.
+    func saveChangesToActiveProfile() {
+        guard let index = userProfiles.firstIndex(where: { $0.name == activeProfileName }) else { return }
+        userProfiles[index].bands = currentBands
+        persistUserProfiles()
+        tone = ToneControls()
+        settings.customGains = nil
+        settings.tone = nil
+    }
+
+    func canEditProfile(named name: String) -> Bool {
+        userProfiles.contains { $0.name == name }
+    }
+
+    // MARK: - Band editing
+
+    func setGain(_ gain: Double, forBandAt index: Int) {
+        guard currentBands.indices.contains(index) else { return }
+        currentBands[index].gain = gain.clamped(to: BuiltInProfiles.gainRange)
+        settings.customGains = currentBands.map(\.gain)
     }
 
     /// Updates one or more Quick EQ tone positions and re-derives the band
@@ -101,12 +241,6 @@ final class ProfileManager: ObservableObject {
         currentBands = bands
         settings.tone = tone.isNeutral ? nil : [tone.bass, tone.mid, tone.treble]
         settings.customGains = tone.isNeutral ? nil : currentBands.map(\.gain)
-    }
-
-    func setGain(_ gain: Double, forBandAt index: Int) {
-        guard currentBands.indices.contains(index) else { return }
-        currentBands[index].gain = gain.clamped(to: BuiltInProfiles.gainRange)
-        settings.customGains = currentBands.map(\.gain)
     }
 
     /// Restores a single band to the active profile's original value
@@ -130,10 +264,21 @@ final class ProfileManager: ObservableObject {
     var isModified: Bool {
         currentBands != getActiveProfile().bands
     }
-}
 
-private extension Double {
-    func clamped(to range: ClosedRange<Double>) -> Double {
-        min(max(self, range.lowerBound), range.upperBound)
+    // MARK: - Private
+
+    private func persistUserProfiles() {
+        settings.userProfiles = userProfiles
+    }
+
+    /// `name` if no profile uses it, otherwise "name 2", "name 3", …
+    private func uniqueName(from name: String) -> String {
+        let taken = Set(profiles.map(\.name))
+        guard taken.contains(name) else { return name }
+        var suffix = 2
+        while taken.contains("\(name) \(suffix)") {
+            suffix += 1
+        }
+        return "\(name) \(suffix)"
     }
 }

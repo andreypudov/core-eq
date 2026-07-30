@@ -1,13 +1,15 @@
 import Foundation
 
 /// Thin `UserDefaults` wrapper for the persisted app state: active profile,
-/// EQ enabled flag, and any custom band gain tweaks made in the main window.
+/// EQ enabled flag, user-created presets, and any custom band gain tweaks made
+/// in the main window.
 final class SettingsStore {
     private enum Key {
         static let activeProfileName = "activeProfileName"
         static let isEnabled = "isEQEnabled"
         static let customGains = "customBandGains"
         static let tone = "quickToneControls"
+        static let userProfiles = "userProfiles"
     }
 
     private let defaults: UserDefaults
@@ -48,6 +50,23 @@ final class SettingsStore {
                 defaults.set(newValue, forKey: Key.tone)
             } else {
                 defaults.removeObject(forKey: Key.tone)
+            }
+        }
+    }
+
+    /// Presets the user created in the main window, stored as JSON. Empty when
+    /// the user hasn't made any. Decoding failures fall back to an empty list
+    /// rather than throwing, so a corrupt entry can never block launch.
+    var userProfiles: [EQProfile] {
+        get {
+            guard let data = defaults.data(forKey: Key.userProfiles) else { return [] }
+            return (try? JSONDecoder().decode([EQProfile].self, from: data)) ?? []
+        }
+        set {
+            if newValue.isEmpty {
+                defaults.removeObject(forKey: Key.userProfiles)
+            } else if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: Key.userProfiles)
             }
         }
     }

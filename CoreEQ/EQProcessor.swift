@@ -29,7 +29,7 @@ final class EQProcessor {
         var targetGain = 0.0
         var currentGain = 0.0
         var needsCoefficientUpdate = true
-        var b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0
+        var filter = PeakingFilter.identity
         var z1L = 0.0, z2L = 0.0, z1R = 0.0, z2R = 0.0
 
         mutating func resetState() {
@@ -188,36 +188,24 @@ final class EQProcessor {
                 bands[i].needsCoefficientUpdate = true
             }
             if bands[i].needsCoefficientUpdate {
-                computeCoefficients(&bands[i])
+                // Coefficients come from the same `PeakingFilter` the response
+                // curve is drawn from, so the plot always matches the audio.
+                bands[i].filter = PeakingFilter(
+                    frequency: bands[i].frequency,
+                    gain: bands[i].currentGain,
+                    q: bands[i].q,
+                    sampleRate: sampleRate
+                )
                 bands[i].needsCoefficientUpdate = false
             }
         }
     }
 
-    private func computeCoefficients(_ band: inout BandState) {
-        // Bands at or above Nyquist, or with negligible gain, become identity.
-        // The 0.47 ceiling keeps the 20 kHz band active at a 44.1 kHz sample
-        // rate (0.47 × 44 100 ≈ 20.7 kHz) while staying safely below Nyquist.
-        guard band.frequency > 10, band.frequency < sampleRate * 0.47, abs(band.currentGain) > 0.001 else {
-            band.b0 = 1; band.b1 = 0; band.b2 = 0; band.a1 = 0; band.a2 = 0
-            return
-        }
-        let amp = pow(10.0, band.currentGain / 40.0)
-        let w0 = 2.0 * Double.pi * band.frequency / sampleRate
-        let alpha = sin(w0) / (2.0 * max(band.q, 0.05))
-        let cosw0 = cos(w0)
-        let a0 = 1.0 + alpha / amp
-        band.b0 = (1.0 + alpha * amp) / a0
-        band.b1 = (-2.0 * cosw0) / a0
-        band.b2 = (1.0 - alpha * amp) / a0
-        band.a1 = (-2.0 * cosw0) / a0
-        band.a2 = (1.0 - alpha / amp) / a0
-    }
-
     private func processChannel(_ samples: UnsafeMutablePointer<Float>, stride: Int, frames: Int, channel: Int) {
         for i in 0..<bandCount {
-            let b0 = bands[i].b0, b1 = bands[i].b1, b2 = bands[i].b2
-            let a1 = bands[i].a1, a2 = bands[i].a2
+            let filter = bands[i].filter
+            let b0 = filter.b0, b1 = filter.b1, b2 = filter.b2
+            let a1 = filter.a1, a2 = filter.a2
             var z1 = channel == 0 ? bands[i].z1L : bands[i].z1R
             var z2 = channel == 0 ? bands[i].z2L : bands[i].z2R
 

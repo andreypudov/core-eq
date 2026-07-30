@@ -9,10 +9,16 @@ ifneq (,$(findstring CommandLineTools,$(shell xcode-select -p)))
 export DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 endif
 
-.PHONY: build install release icons clean
+.PHONY: build test install release icons clean
 
 build:
 	xcodebuild -project $(APP).xcodeproj -target $(APP) -configuration $(CONFIG) build
+
+# Unit tests for the pure logic: filter math, profiles, and the analyzer ring
+# buffer. The bundle has no test host, so nothing launches the app or touches
+# audio hardware — it runs anywhere, including CI.
+test:
+	xcodebuild test -project $(APP).xcodeproj -scheme $(APP) -destination 'platform=macOS'
 
 install: build
 	rm -rf /Applications/$(APP).app

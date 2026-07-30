@@ -87,9 +87,24 @@ The =Makefile= wraps the common flows (it also auto-selects the full Xcode
 toolchain if =xcode-select= points at the Command Line Tools):
 
 | =make build=   | Release build into =build/Release/CoreEQ.app=          |
+| =make test=    | Run the =CoreEQTests= unit suite                       |
 | =make install= | Build and install to =/Applications=                   |
 | =make release= | Build and zip to =dist/CoreEQ-<version>.zip= (=ditto=) |
 | =make clean=   | Remove =build/= and =dist/=                            |
+
+*** Tests
+
+=CoreEQTests= is a host-less logic bundle: it never launches the app or touches
+audio hardware, so it runs anywhere, including CI. It covers the filter math,
+the built-in profiles and Quick EQ weighting, =ProfileManager= (naming, rename,
+delete fallback, persistence, band-ladder alignment), and the analyzer's ring
+buffer.
+
+Because the project uses =PBXFileSystemSynchronizedRootGroup=, the test target
+takes the whole =CoreEQ/= folder *minus* an exclusion list. A new source file
+joins the test target automatically — if it imports SwiftUI, AppKit, or
+CoreAudio, add it to =membershipExceptions= in =project.pbxproj= or the test
+build will fail.
 
 ** Cutting a release
 

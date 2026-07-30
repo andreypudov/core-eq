@@ -18,18 +18,29 @@ struct EQProfile: Codable, Equatable, Identifiable {
     var name: String
     var bands: [EQBand]
 
+    /// Built-in profiles ship with CoreEQ and can't be renamed, edited in place,
+    /// or deleted. User profiles support the full set of sidebar actions.
+    ///
+    /// Deliberately outside `CodingKeys`: only user profiles are ever persisted,
+    /// so a decoded profile is always a user profile.
+    var isBuiltIn = false
+
     var id: String { name }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, bands
+    }
 }
 
 /// The predefined profiles shipped with CoreEQ — the classic Apple/Spotify
 /// preset set, mapped onto the band layout below. All profiles share the same
 /// fixed center frequencies so switching between them only changes gains.
 ///
-/// The layout is the professional ISO octave graphic-EQ ladder (32 Hz – 8 kHz)
-/// extended with 15 kHz and 20 kHz to cover the full audible range. Q of 1.41
-/// gives each peaking filter a one-octave bandwidth, matching the spacing.
+/// The layout is the professional ISO octave graphic-EQ ladder (32 Hz – 16 kHz)
+/// extended with 20 kHz to cover the top of the audible range. Q of 1.41 gives
+/// each peaking filter a one-octave bandwidth, matching the spacing.
 enum BuiltInProfiles {
-    static let frequencies: [Double] = [32, 64, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 15_000, 20_000]
+    static let frequencies: [Double] = [32, 64, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000, 20_000]
     static let defaultQ = 1.41
     static let gainRange: ClosedRange<Double> = -12...12
 
@@ -62,7 +73,11 @@ enum BuiltInProfiles {
 
     private static func profile(_ name: String, _ gains: [Double]) -> EQProfile {
         assert(gains.count == frequencies.count)
-        return EQProfile(name: name, bands: zip(frequencies, gains).map { EQBand(frequency: $0, gain: $1) })
+        return EQProfile(
+            name: name,
+            bands: zip(frequencies, gains).map { EQBand(frequency: $0, gain: $1) },
+            isBuiltIn: true
+        )
     }
 }
 

@@ -5,11 +5,10 @@ import SwiftUI
 /// exactly above its slider column in the main window, with logarithmic
 /// interpolation between bands.
 ///
-/// The magnitude math mirrors `EQProcessor` exactly — the same RBJ
-/// peaking-filter coefficients and the same Nyquist / negligible-gain guards —
-/// so the curve shows what the render path actually does at the engine's
-/// sample rate (for example, the 20 kHz band flattens out when the output
-/// device runs at 44.1 kHz).
+/// The magnitude math comes from `PeakingFilter`, the same type `EQProcessor`
+/// renders with, so the curve shows what the audio path actually does at the
+/// engine's sample rate (for example, the 20 kHz band flattens out when the
+/// output device runs at 44.1 kHz).
 ///
 /// The band dots are interactive handles: dragging one vertically adjusts the
 /// band's gain (snapped to the same 0.5 dB step as the sliders), and a
@@ -29,6 +28,10 @@ struct FrequencyResponseView: View {
     /// Apple's EQ preview. Defaults to the full interactive plot.
     var minimal = false
 
+    /// Draws the plot's own rounded backdrop. Turned off in the main window,
+    /// where the enclosing section card already supplies the surface.
+    var showsBackground = true
+
     @State private var draggedBandIndex: Int?
     @State private var hoveredBandIndex: Int?
 
@@ -38,7 +41,16 @@ struct FrequencyResponseView: View {
     private static let curvePointCount = 160
     private static let handleHitRadius: CGFloat = 14
 
-    private static let gridDBs: [Double] = [-12, -6, 6, 12]
+    /// Only the extremes and the reference are marked. The ±6 dB rules were
+    /// noise: the curve is read against 0 dB, and the frequency divisions
+    /// already carry the grid.
+    private static let labeledDBs: [Double] = [12, 0, -12]
+
+    /// Width reserved at the left for the dB labels, so they sit outside the
+    /// plot rather than over the curve. The main window insets its band sliders
+    /// by the same amount to keep the two aligned; the minimal menu-bar graph
+    /// has no labels and so no gutter.
+    private var axisGutter: CGFloat { minimal ? 0 : Theme.axisGutter }
 
     /// Band center frequencies, ascending — the anchors of the x-axis.
     private var anchors: [Double] { bands.map(\.frequency).sorted() }
@@ -55,6 +67,7 @@ struct FrequencyResponseView: View {
                 Canvas { context, _ in
                     drawSpectrum(context, size)
                     drawGrid(context, size)
+                    drawBandCurve(context, size)
                     drawCurve(context, size)
                     drawBandMarkers(context, size)
                 }
@@ -72,7 +85,7 @@ struct FrequencyResponseView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(.quaternary.opacity(minimal ? 0.35 : 0.5))
+                .fill(.quaternary.opacity(showsBackground ? (minimal ? 0.35 : 0.5) : 0))
         )
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityLabel("Equalizer frequency response curve")
@@ -108,9 +121,11 @@ struct FrequencyResponseView: View {
     /// preferring the nearest when handles are close together.
     private func bandIndex(near location: CGPoint, _ size: CGSize) -> Int? {
         var best: (index: Int, distance: CGFloat)?
-        for (index, band) in bands.enumerated() {
-            let center = CGPoint(x: xPosition(band.frequency, size), y: yPosition(band.gain, size))
-            let distance = hypot(location.x - center.x, location.y - center.y)
+        for index in bands.indices {
+            let distance = hypot(
+                location.x - handleCenter(at: index, size).x,
+                location.y - handleCenter(at: index, size).y
+            )
             if distance <= Self.handleHitRadius, distance < (best?.distance ?? .infinity) {
                 best = (index, distance)
             }
@@ -122,10 +137,26 @@ struct FrequencyResponseView: View {
     /// slider range and snapped to the sliders' 0.5 dB step so the curve and
     /// the sliders always agree.
     private func snappedGain(atY y: CGFloat, _ size: CGSize) -> Double {
-        let dB = Self.maxDB * (1.0 - 2.0 * Double(y / max(size.height, 1)))
+        // Inverse of `yPosition`, so a dragged handle tracks the pointer exactly.
+        let dB = Self.maxDB * (1.0 - 2.0 * Double(y / plotHeight(size)))
         let range = BuiltInProfiles.gainRange
         let clamped = min(max(dB, range.lowerBound), range.upperBound)
         return (clamped * 2).rounded() / 2
+    }
+
+    /// Where a band's handle sits: at the band's own gain.
+    ///
+    /// Deliberately *not* on the composite curve. The handle is the filter — its
+    /// height is the parameter being edited, so it matches the band's slider and
+    /// its readout exactly, and moving one band never shifts another band's
+    /// handle. Because the bands overlap by an octave the summed curve rides
+    /// above the handles, which `drawBandCurve` explains by drawing the
+    /// highlighted band's own bell underneath it.
+    private func handleCenter(at index: Int, _ size: CGSize) -> CGPoint {
+        CGPoint(
+            x: xPosition(bands[index].frequency, size),
+            y: yPosition(bands[index].gain, size)
+        )
     }
 
     // MARK: - Drawing
@@ -135,12 +166,15 @@ struct FrequencyResponseView: View {
     /// uses its own vertical scale (0...1 over the full height), independent of
     /// the ±dB gain axis, since it represents signal level rather than gain.
     private func drawSpectrum(_ context: GraphicsContext, _ size: CGSize) {
-        guard spectrum.count > 1 else { return }
+        // Silence would otherwise stroke a flat line along the floor of the
+        // plot, which reads as a stray rule under the frequency labels.
+        guard spectrum.count > 1, spectrum.contains(where: { $0.level > 0.02 }) else { return }
 
+        let bottom = plotHeight(size)
         var line = Path()
         for (index, point) in spectrum.enumerated() {
             let x = xPosition(point.frequency, size)
-            let y = size.height * (1 - CGFloat(point.level))
+            let y = bottom * (1 - CGFloat(point.level))
             if index == 0 {
                 line.move(to: CGPoint(x: x, y: y))
             } else {
@@ -149,12 +183,14 @@ struct FrequencyResponseView: View {
         }
 
         var fill = line
-        fill.addLine(to: CGPoint(x: xPosition(spectrum[spectrum.count - 1].frequency, size), y: size.height))
-        fill.addLine(to: CGPoint(x: xPosition(spectrum[0].frequency, size), y: size.height))
+        fill.addLine(to: CGPoint(x: xPosition(spectrum[spectrum.count - 1].frequency, size), y: bottom))
+        fill.addLine(to: CGPoint(x: xPosition(spectrum[0].frequency, size), y: bottom))
         fill.closeSubpath()
 
-        context.fill(fill, with: .color(.primary.opacity(0.09)))
-        context.stroke(line, with: .color(.primary.opacity(0.22)), lineWidth: 1)
+        // Deliberately faint: the analyzer is context for the curve, not a
+        // second subject.
+        context.fill(fill, with: .color(.primary.opacity(0.05)))
+        context.stroke(line, with: .color(.primary.opacity(0.13)), lineWidth: 1)
     }
 
     /// Single faint 0 dB reference line for the minimal presentation, so the
@@ -168,38 +204,74 @@ struct FrequencyResponseView: View {
     }
 
     private func drawGrid(_ context: GraphicsContext, _ size: CGSize) {
-        var lines = Path()
+        let bottom = plotHeight(size)
+        let left = axisGutter
+
+        // Dotted verticals on the band centers are the whole grid — the major
+        // frequency divisions, and nothing else competing with the curve.
+        var verticals = Path()
         for frequency in anchors {
             let x = xPosition(frequency, size)
-            lines.move(to: CGPoint(x: x, y: 0))
-            lines.addLine(to: CGPoint(x: x, y: size.height))
+            verticals.move(to: CGPoint(x: x, y: 0))
+            verticals.addLine(to: CGPoint(x: x, y: bottom))
         }
-        for dB in Self.gridDBs {
-            let y = yPosition(dB, size)
-            lines.move(to: CGPoint(x: 0, y: y))
-            lines.addLine(to: CGPoint(x: size.width, y: y))
-        }
-        context.stroke(lines, with: .color(.primary.opacity(0.07)), lineWidth: 1)
+        context.stroke(
+            verticals,
+            with: .color(.primary.opacity(0.09)),
+            style: StrokeStyle(lineWidth: 1, dash: [2, 4])
+        )
 
-        // Emphasized 0 dB line.
+        // The single reference the curve is actually read against.
         var zeroLine = Path()
         let zeroY = yPosition(0, size)
-        zeroLine.move(to: CGPoint(x: 0, y: zeroY))
+        zeroLine.move(to: CGPoint(x: left, y: zeroY))
         zeroLine.addLine(to: CGPoint(x: size.width, y: zeroY))
-        context.stroke(zeroLine, with: .color(.primary.opacity(0.2)), lineWidth: 1)
+        context.stroke(zeroLine, with: .color(.primary.opacity(0.14)), lineWidth: 1)
 
         for frequency in anchors {
-            let label = Text(frequencyLabel(frequency))
-                .font(.system(size: 9))
+            let label = Text(BandFormat.frequency(frequency))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            context.draw(label, at: CGPoint(x: xPosition(frequency, size), y: size.height - 3), anchor: .bottom)
+            context.draw(label, at: CGPoint(x: xPosition(frequency, size), y: bottom + labelStripHeight / 2), anchor: .center)
         }
-        for dB in Self.gridDBs {
-            let label = Text(String(format: "%+.0f", dB))
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-            context.draw(label, at: CGPoint(x: 4, y: yPosition(dB, size)), anchor: .leading)
+        // Lighter than the frequency labels: the dB scale should never pull the
+        // eye off the curve.
+        for dB in Self.labeledDBs {
+            let label = Text(BandFormat.axisGain(dB))
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+            context.draw(label, at: CGPoint(x: left - 8, y: yPosition(dB, size)), anchor: .trailing)
         }
+    }
+
+    /// The highlighted band's own filter, on its own, under the composite.
+    ///
+    /// This is what makes the handles legible. The bands overlap by an octave,
+    /// so the summed curve sits above any single band's gain and the handles
+    /// appear to float off it. Showing the one bell the handle belongs to —
+    /// peaking exactly at the handle — makes it plain that the bold line is the
+    /// sum of eleven of these, not the thing being dragged.
+    private func drawBandCurve(_ context: GraphicsContext, _ size: CGSize) {
+        guard let index = draggedBandIndex ?? hoveredBandIndex, bands.indices.contains(index) else { return }
+        let filter = PeakingFilter(band: bands[index], sampleRate: sampleRate)
+
+        var bell = Path()
+        for step in 0..<Self.curvePointCount {
+            let fraction = Double(step) / Double(Self.curvePointCount - 1)
+            let dB = filter.magnitudeDB(at: frequency(atFraction: fraction), sampleRate: sampleRate)
+            let point = CGPoint(x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
+            if step == 0 {
+                bell.move(to: point)
+            } else {
+                bell.addLine(to: point)
+            }
+        }
+
+        context.stroke(
+            bell,
+            with: .color(.coreEQAccent.opacity(0.5)),
+            style: StrokeStyle(lineWidth: 1, lineJoin: .round, dash: [3, 3])
+        )
     }
 
     private func drawCurve(_ context: GraphicsContext, _ size: CGSize) {
@@ -210,15 +282,27 @@ struct FrequencyResponseView: View {
         curve.move(to: points[0])
         curve.addLines(Array(points.dropFirst()))
 
-        // Fill the area between the curve and the 0 dB line.
-        let zeroY = yPosition(0, size)
+        // Fill the area under the curve down to the floor of the plot — a flat
+        // wash rather than a gradient, so it reads as a tint and not as a
+        // second graphic competing with the line.
+        let floor = plotHeight(size)
         var fill = curve
-        fill.addLine(to: CGPoint(x: points[points.count - 1].x, y: zeroY))
-        fill.addLine(to: CGPoint(x: points[0].x, y: zeroY))
+        fill.addLine(to: CGPoint(x: points[points.count - 1].x, y: floor))
+        fill.addLine(to: CGPoint(x: points[0].x, y: floor))
         fill.closeSubpath()
-        context.fill(fill, with: .color(.accentColor.opacity(0.15)))
+        // A gentle fade rather than a flat wash: at a constant opacity the fill
+        // reads as a solid green block, because a boosted curve sits above zero
+        // across the whole range and the area under it is most of the plot.
+        context.fill(
+            fill,
+            with: .linearGradient(
+                Gradient(colors: [.coreEQAccent.opacity(0.20), .coreEQAccent.opacity(0.02)]),
+                startPoint: CGPoint(x: 0, y: 0),
+                endPoint: CGPoint(x: 0, y: floor)
+            )
+        )
 
-        context.stroke(curve, with: .color(.accentColor), style: StrokeStyle(lineWidth: 2, lineJoin: .round))
+        context.stroke(curve, with: .color(.coreEQAccent), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
     }
 
     private func drawBandMarkers(_ context: GraphicsContext, _ size: CGSize) {
@@ -226,22 +310,29 @@ struct FrequencyResponseView: View {
         for (index, band) in bands.enumerated() {
             // Bands the processor turns into identity filters (at or above
             // Nyquist for the current sample rate) are shown dimmed.
-            let isActive = band.frequency < sampleRate * 0.47
-            let center = CGPoint(x: xPosition(band.frequency, size), y: yPosition(band.gain, size))
-            let radius: CGFloat = index == highlightedIndex ? 5.5 : 3.5
+            let isActive = PeakingFilter.isActive(
+                frequency: band.frequency, gain: band.gain, sampleRate: sampleRate
+            ) || band.gain == 0
+            let center = handleCenter(at: index, size)
+            let radius: CGFloat = index == highlightedIndex ? 6 : 5
             let dot = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-            context.fill(dot, with: .color(.accentColor.opacity(isActive ? 1.0 : 0.35)))
-            if index == highlightedIndex {
-                context.stroke(dot, with: .color(.primary.opacity(0.4)), lineWidth: 1)
-            }
+
+            // Logic Pro's handle: a white core inside an accent ring, which
+            // stays legible over both the fill and the grid.
+            context.fill(dot, with: .color(.white.opacity(isActive ? 0.95 : 0.35)))
+            context.stroke(
+                dot,
+                with: .color(.coreEQAccent.opacity(isActive ? 1.0 : 0.35)),
+                lineWidth: index == highlightedIndex ? 2.5 : 2
+            )
         }
 
         // Gain readout above the handle while dragging.
         if let index = draggedBandIndex, bands.indices.contains(index) {
             let band = bands[index]
-            let center = CGPoint(x: xPosition(band.frequency, size), y: yPosition(band.gain, size))
-            let label = Text(String(format: "%+.1f dB", band.gain))
-                .font(.system(size: 10, weight: .medium).monospacedDigit())
+            let center = handleCenter(at: index, size)
+            let label = Text(BandFormat.gain(band.gain))
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
                 .foregroundStyle(.primary)
             let position = CGPoint(
                 x: min(max(center.x, 26), size.width - 26),
@@ -254,54 +345,14 @@ struct FrequencyResponseView: View {
     // MARK: - Response math (mirrors EQProcessor)
 
     private func responsePoints(_ size: CGSize) -> [CGPoint] {
-        let coefficients = bands.compactMap { peakingCoefficients(for: $0) }
+        let filters = bands.map { PeakingFilter(band: $0, sampleRate: sampleRate) }
 
         return (0..<Self.curvePointCount).map { index in
             let fraction = Double(index) / Double(Self.curvePointCount - 1)
             let frequency = frequency(atFraction: fraction)
-            let dB = coefficients.reduce(0.0) { $0 + magnitudeDB($1, at: frequency) }
-            return CGPoint(x: fraction * size.width, y: yPosition(dB, size))
+            let dB = filters.reduce(0.0) { $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate) }
+            return CGPoint(x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
         }
-    }
-
-    private struct BiquadCoefficients {
-        var b0: Double, b1: Double, b2: Double, a1: Double, a2: Double
-    }
-
-    /// RBJ peaking-filter coefficients, with the same guards as
-    /// `EQProcessor.computeCoefficients`; nil means the band is an identity
-    /// filter and contributes nothing to the curve.
-    private func peakingCoefficients(for band: EQBand) -> BiquadCoefficients? {
-        guard band.frequency > 10, band.frequency < sampleRate * 0.47, abs(band.gain) > 0.001 else {
-            return nil
-        }
-        let amp = pow(10.0, band.gain / 40.0)
-        let w0 = 2.0 * Double.pi * band.frequency / sampleRate
-        let alpha = sin(w0) / (2.0 * max(band.q, 0.05))
-        let cosw0 = cos(w0)
-        let a0 = 1.0 + alpha / amp
-        return BiquadCoefficients(
-            b0: (1.0 + alpha * amp) / a0,
-            b1: (-2.0 * cosw0) / a0,
-            b2: (1.0 - alpha * amp) / a0,
-            a1: (-2.0 * cosw0) / a0,
-            a2: (1.0 - alpha / amp) / a0
-        )
-    }
-
-    /// Magnitude of H(e^jw) in dB for one biquad at the given frequency.
-    private func magnitudeDB(_ c: BiquadCoefficients, at frequency: Double) -> Double {
-        let w = 2.0 * Double.pi * frequency / sampleRate
-        let cosw = cos(w), sinw = sin(w)
-        let cos2w = cos(2 * w), sin2w = sin(2 * w)
-        let numeratorReal = c.b0 + c.b1 * cosw + c.b2 * cos2w
-        let numeratorImag = -(c.b1 * sinw + c.b2 * sin2w)
-        let denominatorReal = 1.0 + c.a1 * cosw + c.a2 * cos2w
-        let denominatorImag = -(c.a1 * sinw + c.a2 * sin2w)
-        let numerator = numeratorReal * numeratorReal + numeratorImag * numeratorImag
-        let denominator = denominatorReal * denominatorReal + denominatorImag * denominatorImag
-        guard denominator > 0 else { return 0 }
-        return 10.0 * log10(numerator / denominator)
     }
 
     // MARK: - Coordinate mapping
@@ -349,8 +400,13 @@ struct FrequencyResponseView: View {
         return anchors[i] * pow(anchors[i + 1] / anchors[i], position - Double(i))
     }
 
+    /// Horizontal extent of the plot, to the right of the dB-label gutter.
+    private func plotWidth(_ size: CGSize) -> CGFloat {
+        max(size.width - axisGutter, 1)
+    }
+
     private func xPosition(_ frequency: Double, _ size: CGSize) -> CGFloat {
-        CGFloat(min(max(axisFraction(of: frequency), 0), 1)) * size.width
+        axisGutter + CGFloat(min(max(axisFraction(of: frequency), 0), 1)) * plotWidth(size)
     }
 
     /// The minimal menu graph reserves only half the stroke width at the top and
@@ -359,22 +415,21 @@ struct FrequencyResponseView: View {
     /// the border. The full window keeps its original edge-to-edge mapping.
     private var verticalInset: CGFloat { minimal ? 1 : 0 }
 
+    /// Strip along the bottom holding the frequency labels. Keeping it outside
+    /// the dB scale stops the lowest gridline label from landing on top of the
+    /// first band's label in the corner.
+    private var labelStripHeight: CGFloat { minimal ? 0 : 17 }
+
+    /// Vertical extent of the dB scale, above the frequency-label strip.
+    private func plotHeight(_ size: CGSize) -> CGFloat {
+        max(size.height - labelStripHeight, 1)
+    }
+
     private func yPosition(_ dB: Double, _ size: CGSize) -> CGFloat {
         let clamped = min(max(dB, -Self.maxDB), Self.maxDB)
-        let half = size.height / 2
+        let half = plotHeight(size) / 2
         let usable = half - verticalInset
         return half - usable * CGFloat(clamped / Self.maxDB)
     }
 
-    /// Same label format as the slider columns, so plot and sliders read
-    /// identically (e.g. "125", "1k", "15k").
-    private func frequencyLabel(_ frequency: Double) -> String {
-        if frequency >= 1_000 {
-            let kilohertz = frequency / 1_000
-            return kilohertz == kilohertz.rounded()
-                ? "\(Int(kilohertz))k"
-                : String(format: "%.1fk", kilohertz)
-        }
-        return "\(Int(frequency))"
-    }
 }
