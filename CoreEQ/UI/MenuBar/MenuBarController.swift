@@ -11,11 +11,12 @@ import Foundation
 /// `NSMenuItem.view`.
 ///
 /// Preset and output selection follow the Wi‑Fi menu: the row names the current
-/// value and carries a chevron, and clicking it opens the options *in this
-/// menu*, in the row's own place, scrolling once the list outgrows its cap. Only
-/// one section is open at a time. Expanding swaps the row for a single list item
-/// on the live menu (`expand(_:in:)`) instead of rebuilding it, so the menu
-/// never flickers and never closes mid-choice.
+/// value and carries a `>`, and clicking it turns that into a `v` and unfolds
+/// the remaining options *in this menu*, right below the row, scrolling once the
+/// list outgrows its cap. The row stays put, so clicking it again folds the list
+/// away. Only one section is open at a time. Expanding inserts a single list
+/// item into the live menu (`expand(_:in:)`) instead of rebuilding it, so the
+/// menu never flickers and never closes mid-choice.
 ///
 /// The menu is rebuilt each time it opens (`menuNeedsUpdate`), so it always
 /// reflects the current state without any change-observation plumbing.
@@ -37,9 +38,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     /// State of the open menu: which section has its list showing, the value
-    /// rows that list displaced, and the list item itself. All of it is torn
+    /// rows that own the chevrons, and the list item itself. All of it is torn
     /// down when the menu closes.
     private var expandedSection: ListSection?
+    private var disclosureRows: [ListSection: MenuRowView] = [:]
     private var sectionItems: [ListSection: NSMenuItem] = [:]
     private var listItem: NSMenuItem?
 
@@ -77,6 +79,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         expandedSection = nil
         listItem = nil
+        disclosureRows.removeAll()
         sectionItems.removeAll()
 
         menu.addItem(headerItem())
@@ -110,6 +113,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     func menuDidClose(_ menu: NSMenu) {
         expandedSection = nil
         listItem = nil
+        disclosureRows.removeAll()
         sectionItems.removeAll()
     }
 
@@ -124,7 +128,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         return item
     }
 
-    /// The active preset, with a chevron that opens the full list in its place.
+    /// The active preset, with a chevron that unfolds the others below it.
     private func presetItem() -> NSMenuItem {
         disclosureItem(
             for: .preset,
@@ -150,10 +154,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         return item
     }
 
-    /// The device the sound is going to. Clicking it puts every device in its
-    /// place — unless the machine only has the one, when there is nothing to
-    /// choose between: the row then states where the sound goes, without a
-    /// chevron.
+    /// The device the sound is going to. Clicking it unfolds the others below
+    /// it — unless the machine only has the one, when there is nothing to choose
+    /// between: the row then states where the sound goes, without a chevron.
     private func outputItem() -> NSMenuItem {
         let currentID = AudioDevices.defaultOutputDeviceID()
         let devices = AudioDevices.outputDevices()
@@ -177,7 +180,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     /// Builds one of the two value rows: a `MenuRowView` in a view-based item,
-    /// registered so `expand(_:in:)` knows which item its list replaces.
+    /// registered so `expand(_:in:)` knows where to put its list and which
+    /// chevron to turn.
     private func disclosureItem(
         for section: ListSection,
         title: String,
@@ -192,42 +196,46 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             image: image,
             gutter: gutter,
             height: height,
-            accessory: canExpand ? .disclosure : .none
+            accessory: canExpand ? .disclosure(expanded: false) : .none
         ) { [weak self] in
             guard canExpand else { return }
-            self?.expand(section)
+            self?.toggle(section)
         }
         item.view = row
+        disclosureRows[section] = row
         sectionItems[section] = item
         return item
     }
 
     // MARK: - Disclosure
 
-    /// Puts the section's options where its row was. Any other open section
-    /// folds back to its row first, so the menu only ever shows one list.
-    private func expand(_ section: ListSection) {
-        guard let menu = statusItem.menu, expandedSection != section else { return }
+    /// Opens the section under its row, folding away whichever section was open
+    /// — or folds this one away if it was the one open. That second case is what
+    /// makes the value row a way back out: it is still there above the list,
+    /// still showing the current choice, and clicking it closes the list again.
+    private func toggle(_ section: ListSection) {
+        guard let menu = statusItem.menu else { return }
+        let wasOpen = expandedSection == section
         collapse(in: menu)
+        guard !wasOpen else { return }
         expand(section, in: menu)
     }
 
-    /// Restores the open section's row in place of its list.
+    /// Removes the open list and turns its chevron back to `>`.
     private func collapse(in menu: NSMenu) {
-        defer {
-            listItem = nil
-            expandedSection = nil
+        if let listItem, menu.index(of: listItem) >= 0 {
+            menu.removeItem(listItem)
         }
-        guard let expandedSection, let listItem, let rowItem = sectionItems[expandedSection] else { return }
-        let index = menu.index(of: listItem)
-        guard index >= 0 else { return }
-        menu.removeItem(at: index)
-        menu.insertItem(rowItem, at: index)
+        listItem = nil
+        if let expandedSection {
+            disclosureRows[expandedSection]?.setExpanded(false)
+        }
+        expandedSection = nil
     }
 
-    /// Swaps the section's row for its options. The menu is open while this
-    /// runs: AppKit re-lays it out around the new item, which is what makes the
-    /// list appear in place rather than in a submenu.
+    /// Inserts the section's other options directly under its row. The menu is
+    /// open while this runs: AppKit re-lays it out around the new item, which is
+    /// what makes the list appear in place rather than in a submenu.
     private func expand(_ section: ListSection, in menu: NSMenu) {
         guard let rowItem = sectionItems[section] else { return }
         let index = menu.index(of: rowItem)
@@ -235,60 +243,56 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         let rowHeight: CGFloat
         let rows: [MenuRowView]
-        let activeIndex: Int
         switch section {
         case .preset:
             rowHeight = MenuListMetrics.rowHeight
-            (rows, activeIndex) = presetRows()
+            rows = presetRows()
         case .output:
             rowHeight = MenuListMetrics.deviceRowHeight
-            (rows, activeIndex) = outputRows()
+            rows = outputRows()
         }
         guard !rows.isEmpty else { return }
 
-        let list = MenuListView(rows: rows, rowHeight: rowHeight)
         let item = NSMenuItem()
-        item.view = list
-        menu.removeItem(at: index)
-        menu.insertItem(item, at: index)
-        list.revealRow(at: activeIndex)
+        item.view = MenuListView(rows: rows, rowHeight: rowHeight)
+        menu.insertItem(item, at: index + 1)
 
         listItem = item
         expandedSection = section
+        disclosureRows[section]?.setExpanded(true)
     }
 
-    /// Every preset, plain. Nothing marks the active one: the row you clicked to
-    /// get here was its name, and picking any of these closes the menu.
-    private func presetRows() -> ([MenuRowView], Int) {
-        let profiles = profileManager.listProfiles()
+    /// Every preset except the active one — that one is the row above, and
+    /// repeating it here would only offer a choice that changes nothing.
+    private func presetRows() -> [MenuRowView] {
         let active = profileManager.activeProfileName
-        let rows = profiles.map { profile in
-            MenuRowView(title: profile.name, height: MenuListMetrics.rowHeight) { [weak self] in
-                self?.profileManager.setActiveProfile(name: profile.name)
-                self?.dismissMenu()
+        return profileManager.listProfiles()
+            .filter { $0.name != active }
+            .map { profile in
+                MenuRowView(title: profile.name, height: MenuListMetrics.rowHeight) { [weak self] in
+                    self?.profileManager.setActiveProfile(name: profile.name)
+                    self?.dismissMenu()
+                }
             }
-        }
-        return (rows, profiles.firstIndex { $0.name == active } ?? 0)
     }
 
-    /// Every output device. The one in use is the one with the accent-filled
-    /// badge — the same mark the collapsed row carries — so the list needs no
-    /// checkmark of its own.
-    private func outputRows() -> ([MenuRowView], Int) {
-        let devices = AudioDevices.outputDevices()
+    /// Every output device except the one in use. Its accent-filled badge stays
+    /// on the row above, so the list is all plain badges: what else there is.
+    private func outputRows() -> [MenuRowView] {
         let currentID = AudioDevices.defaultOutputDeviceID()
-        let rows = devices.map { device in
-            MenuRowView(
-                title: device.name,
-                image: Self.deviceIcon(device.symbolName, selected: device.id == currentID),
-                gutter: MenuListMetrics.badgeGutter,
-                height: MenuListMetrics.deviceRowHeight
-            ) { [weak self] in
-                AudioDevices.setDefaultOutputDevice(device.id)
-                self?.dismissMenu()
+        return AudioDevices.outputDevices()
+            .filter { $0.id != currentID }
+            .map { device in
+                MenuRowView(
+                    title: device.name,
+                    image: Self.deviceIcon(device.symbolName, selected: false),
+                    gutter: MenuListMetrics.badgeGutter,
+                    height: MenuListMetrics.deviceRowHeight
+                ) { [weak self] in
+                    AudioDevices.setDefaultOutputDevice(device.id)
+                    self?.dismissMenu()
+                }
             }
-        }
-        return (rows, devices.firstIndex { $0.id == currentID } ?? 0)
     }
 
     /// Picking an option closes the menu, as picking one in a submenu did.

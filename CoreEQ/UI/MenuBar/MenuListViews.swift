@@ -1,17 +1,21 @@
 import AppKit
 
 /// Inline choosers for the status-bar menu, in the spirit of the system Wi‑Fi
-/// network list: a row names the current value and carries a chevron, and
-/// clicking it opens the options *inside the same menu* rather than in a
-/// submenu. The options take the row's own place — they are what that line of
-/// the menu becomes — and a list longer than `MenuListMetrics.maxVisibleRows`
-/// scrolls there instead of stretching the menu down the screen.
+/// network list: a row names the current value and carries a `>`, and clicking
+/// it turns that into a `v` and unfolds the *other* options directly below,
+/// inside the same menu rather than in a submenu. The value row stays where it
+/// is, so clicking it again folds the list away. A list longer than
+/// `MenuListMetrics.maxVisibleRows` scrolls instead of stretching the menu down
+/// the screen.
+///
+/// The open list never repeats the value row's own entry: what is showing above
+/// it is the current choice, and everything below is what else there is.
 ///
 /// AppKit has no such control, so every row here is an `NSView` inside a
 /// view-based `NSMenuItem`: `MenuRowView` draws one row (highlight, click,
 /// chevron) and `MenuListView` stacks the option rows in a scroll view.
-/// `MenuBarController` owns which section is open and swaps the row for the list
-/// on the live menu.
+/// `MenuBarController` owns which section is open and inserts the list under the
+/// row on the live menu.
 enum MenuListMetrics {
     /// Height of a row that is only text.
     static let rowHeight: CGFloat = 24
@@ -44,8 +48,8 @@ final class MenuRowView: NSView {
     enum Accessory {
         /// Nothing — an option row, or a value with nothing to choose from.
         case none
-        /// A `>` promising more, on a row that opens a list in its place.
-        case disclosure
+        /// A chevron: `>` while the list is folded, `v` while it is open below.
+        case disclosure(expanded: Bool)
     }
 
     private let highlight = NSVisualEffectView()
@@ -60,7 +64,7 @@ final class MenuRowView: NSView {
     /// lit and a fast scroll would leave a trail of them.
     weak var listOwner: MenuListView?
 
-    private let accessory: Accessory
+    private var accessory: Accessory
     private var isHighlighted = false {
         didSet {
             guard isHighlighted != oldValue else { return }
@@ -150,15 +154,27 @@ final class MenuRowView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// Flips the chevron between `>` and `v` without rebuilding the menu, so the
+    /// row can answer a click while the menu stays open.
+    func setExpanded(_ expanded: Bool) {
+        guard case .disclosure = accessory else { return }
+        accessory = .disclosure(expanded: expanded)
+        applyAccessory()
+    }
+
     private func applyAccessory() {
         switch accessory {
         case .none:
             chevronView.image = nil
-        case .disclosure:
-            let symbol = NSImage(systemSymbolName: "chevron.forward", accessibilityDescription: nil)
+        case .disclosure(let expanded):
+            let symbol = NSImage(
+                systemSymbolName: expanded ? "chevron.down" : "chevron.forward",
+                accessibilityDescription: nil
+            )
             chevronView.image = symbol?.withSymbolConfiguration(
                 NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
             )
+            setAccessibilityValue(expanded ? "expanded" : "collapsed")
         }
     }
 
@@ -210,18 +226,16 @@ final class MenuRowView: NSView {
 
 /// The unfolded list: option rows stacked in a scroll view that stops growing
 /// after `MenuListMetrics.maxVisibleRows`. Lives in one view-based menu item, so
-/// expanding a section is a single insertion into the open menu.
+/// expanding a section is a single insertion into the open menu. Always opens at
+/// the top: the current choice is the row above, never one of these.
 @MainActor
 final class MenuListView: NSView {
     private let scroll = NSScrollView()
     private let rows: [MenuRowView]
-    private let rowHeight: CGFloat
     private let visibleHeight: CGFloat
-    private var pendingReveal: Int?
 
     init(rows: [MenuRowView], rowHeight: CGFloat) {
         self.rows = rows
-        self.rowHeight = rowHeight
         self.visibleHeight = (rowHeight * min(CGFloat(rows.count), MenuListMetrics.maxVisibleRows)).rounded()
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -292,29 +306,6 @@ final class MenuListView: NSView {
         }
     }
 
-    /// Brings the active option into view when it sits past the fold, so opening
-    /// the list of a device far down the alphabet still shows which one is in
-    /// use. Recorded now and applied once the menu has put the list on screen —
-    /// scrolling a clip view that has no frame yet does nothing.
-    func revealRow(at index: Int) {
-        pendingReveal = index
-        if window != nil { applyPendingReveal() }
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        applyPendingReveal()
-    }
-
-    private func applyPendingReveal() {
-        guard let index = pendingReveal, index >= 0, window != nil else { return }
-        pendingReveal = nil
-        layoutSubtreeIfNeeded()
-        let bottomOfRow = CGFloat(index + 1) * rowHeight
-        guard bottomOfRow > visibleHeight else { return }
-        scroll.contentView.scroll(to: NSPoint(x: 0, y: bottomOfRow - visibleHeight))
-        scroll.reflectScrolledClipView(scroll.contentView)
-    }
 }
 
 /// Document view of the list's scroll view. Flipped so the rows start at the top
