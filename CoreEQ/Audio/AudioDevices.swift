@@ -60,11 +60,11 @@ enum AudioDevices {
 
     static func name(of deviceID: AudioDeviceID) -> String? {
         var address = address(kAudioObjectPropertyName)
-        var name: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
+        var name: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &name)
         guard status == noErr else { return nil }
-        return name as String
+        return name?.takeRetainedValue() as String?
     }
 
     // MARK: - Private
@@ -150,11 +150,11 @@ enum AudioDevices {
 
     private static func uid(of deviceID: AudioDeviceID) -> String? {
         var address = address(kAudioDevicePropertyDeviceUID)
-        var uid: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
+        var uid: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &uid)
         guard status == noErr else { return nil }
-        return uid as String
+        return uid?.takeRetainedValue() as String?
     }
 
     private static func hasOutputChannels(_ deviceID: AudioDeviceID) -> Bool {
