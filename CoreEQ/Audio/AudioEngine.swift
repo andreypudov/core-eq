@@ -292,18 +292,18 @@ final class AudioEngine: ObservableObject {
 
     private func deviceUID(of deviceID: AudioDeviceID) throws -> String {
         var addr = propertyAddress(kAudioDevicePropertyDeviceUID)
-        var uid: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
+        var uid: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         try check(AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &uid), "reading the device UID")
-        return uid as String
+        return uid?.takeRetainedValue() as String? ?? ""
     }
 
     private func deviceName(of deviceID: AudioDeviceID) throws -> String {
         var addr = propertyAddress(kAudioObjectPropertyName)
-        var name: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
+        var name: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         try check(AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &name), "reading the device name")
-        return name as String
+        return name?.takeRetainedValue() as String? ?? ""
     }
 
     private func nominalSampleRate(of deviceID: AudioDeviceID) throws -> Double {
