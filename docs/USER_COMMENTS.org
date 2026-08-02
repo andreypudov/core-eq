@@ -1,0 +1,45 @@
+#+title: User Comments
+#+date: <2026-08-02 Sun>
+
+- Damn, this eq curve....
+  R: You are a HERO
+
+- If I remember right, Apple made a deal with Beatles' Apple music, to not dapple with audio products.  So "sosumi" sound bites. I suppose the clause still holds.
+  R: Haha yeah, that old Apple vs. Apple Records story still pops up from time to time. If the clause really still holds, then I guess it leaves some room for little projects like mine to exist outside of Apple’s own audio stack. Thanks for the comment — love this kind of trivia.
+
+- But these bobbly bobbles and dips in the curve are just visual, right? Do you have options to change the approximation and interpolation? How do you calculate the frequency lets say between 8 and 16k where that weird dip is …
+  R: Thanks for digging into this — I really appreciate the feedback, and I'm glad to improve how the app works. The bobbles aren't a drawing artifact, they're the real response. The graph doesn't approximate anything: it evaluates the actual filter math at ~160 points across the plot and sums them, using the exact same filter code the audio runs through. So what you see is what you hear. The dip between 8k and 16k comes from two things: - Each band is a bell about one octave wide, and the bands sit one octave apart. When two neighbours are boosted the same amount, their skirts cross a little low, so the total sags slightly halfway between them. That happens between every pair of bands. - The x-axis gives each of the 11 bands equal width, so 8k→16k (a full octave) gets the same space as 16k→20k (a third of an octave). The top end is stretched out, which makes that same small dip look much bigger than it is. Near 16–20k the filters also get distorted by the sample rate limit, deepening it further. No options for it yet — the bandwidth and the axis are both fixed. On my list: adjustable bandwidth per band, a proper log axis, and shelf filters for the top and bottom bands. Narrower bells would smooth the sum out; the trade-off is bands bleeding into each other.
+  Q: Thanks for explaining. My concern would be that this sag was audible in some cases? I don’t know how other equalizers do that to eliminate interpolation artifacts  it keep on going … very much appreciate your efforts … I think distribution through homebrew would give a major boost
+  R: Thanks for pointing this out — really appreciate the thoughtful feedback. I’m not totally sure yet how other equalizers deal with that sag or eliminate interpolation artifacts, but I’m definitely going to dig into it. Super glad you mentioned it, because it’s exactly the kind of detail that helps me improve CoreEQ. And yeah, I agree — distributing through Homebrew is the right move. I’m planning to work on that so it’s easier for people to install and update.
+
+-  this looks cool dude.... I was so fed up with no EQ in MacOs except for Boom audio n all, so I had to make one for myself too lol, If y'all used FxSound in Windows, I have made an open-source port of it. feel free to check it out... I used this andrey and yes it's actually v good!! keep up the good work, FOSS forever!!!
+  R: Thanks man, really appreciate that — super cool to hear you tried it and liked it. And your FxSound‑style port sounds awesome; love seeing more FOSS audio tools popping up. I originally made CoreEQ out of frustration too, so it’s fun seeing other people solve the same problem in their own way. FOSS forever indeed.
+
+- If you could build one without drivers, why there was never one before? Or what was you main different point?
+  R: Fair question — it isn't cleverness on my part, it's timing. Apple only shipped the Core Audio process-tap API in macOS 14.2. Before that, capturing system output genuinely required a virtual audio device, because there was no supported way to read the system mix from userspace. So my main difference is mostly that I built on the new API instead of the old approach. The trade-off is it requires macOS 14.2 or later.
+
+- To make this usable for normal people you really need to have global gain setting. Modern mixing hardly has headroom for +6 bass etc. What's with the graphics, the green lines and markers are plain weird?
+  R: Thanks — both fair hits, and I appreciate you saying it plainly. You're right about global gain. There's no preamp right now, so if you push +6 on the bass you're just eating whatever headroom the source left you, which on modern masters is basically none. That's a real design gap, not a preference thing — a master/preamp slider (and probably auto-trim that pulls back by the peak of the curve) is going straight to the top of the list. On the graphics: the green is deliberate — it's Apple's System Green, hardcoded so the curve reads as the app's own colour instead of shifting with whatever accent you've set. But "plain weird" is useful feedback, so I'll take it. If you can say what specifically reads badly — the fill under the curve, the band handles, the brightness of it — I'll happily rework it. Making it follow the system accent, or just toning it down to something less neon, are both easy changes. Thanks again for taking the time.
+
+- Check out wearemey.com for the Unity balancer free and big in performance
+  R: Thanks for the pointer — really appreciate it. I’ll check out the Unity balancer from wearemey.com, sounds like a solid reference for performance‑heavy audio tools.
+
+- Any chances to modify the frequency per band, the bandwidth and linear phase?
+  R: Thanks for these ideas — really appreciate you taking the time to write them out. Right now things like adjustable band frequencies, bandwidth, and linear‑phase processing aren’t implemented, but I definitely want to move development in that direction to make the tool more flexible and useful.
+  Q: That could be very helpful , maybe you should take a look to Camilla-dsp
+  R: Thanks for the suggestion — really appreciate it. Camilla‑DSP is a great reference point, and I’ll definitely take a look at it as I keep expanding CoreEQ.
+
+- Amd what use case is covered?
+  R: Thanks for the question — happy to explain the use case a bit more. I originally built CoreEQ just for myself. Part of it was simple curiosity: I wanted to learn how macOS handles audio under the hood and how the Core Audio process‑tap works in real applications. And the other part was practical — I wanted a straightforward EQ for everyday listening, especially for audio coming from web browsers. Things like YouTube, Netflix, online radio, random streams… all the places where you can’t use a player‑specific EQ. So the project started as a mix of learning and solving my own small annoyance, and I’m glad it’s resonating with others too.
+
+- Do you have plan for custom frequency?
+  R: Thanks! Custom frequency control is definitely on the list for future development — really appreciate you asking about it.
+
+- Are you working on a version for iOS? Been desperate for this!!
+  R: Thanks a lot for the idea — really appreciate it. iOS isn’t on the plan right now just because my resources are pretty limited, but it’s definitely something I’d like to consider later once the macOS version matures a bit. Thanks again for the suggestion, it means a lot.
+
+- Was thinking about this the other day
+  R: Thanks! Funny timing — I’ve had the same thought bouncing around in my head for a while, so I’m glad it resonated with someone else too.
+
+- AutoEQ + this would be awesome
+  R: Thanks — that combo would be super cool. AutoEQ + CoreEQ could make a really solid setup, and it’s definitely something I want to look into as the app grows.
