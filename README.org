@@ -70,7 +70,31 @@ and picked up only when uncontended.
 
 * Installation
 
-** Build from source (recommended)
+** Homebrew (default)
+
+The simplest way to install CoreEQ:
+
+#+begin_src sh
+brew tap andreypudov/core-eq
+brew trust andreypudov/core-eq
+brew install --cask core-eq
+#+end_src
+
+CoreEQ is currently unsigned/unnotarized, so macOS may block first launch. If
+that happens, allow it in System Settings → Privacy & Security, or run:
+
+#+begin_src sh
+xattr -dr com.apple.quarantine /Applications/CoreEQ.app
+#+end_src
+
+Upgrade later with:
+
+#+begin_src sh
+brew update
+brew upgrade --cask core-eq
+#+end_src
+
+** Build from source
 
 Requires Xcode 16 or later. Locally built applications are not quarantined by
 macOS, so CoreEQ launches with no Gatekeeper warnings:
@@ -83,7 +107,7 @@ make install
 
 This builds a Release copy and installs it to =/Applications=.
 
-** Prebuilt binary
+** Prebuilt binary (manual)
 
 Download the latest =CoreEQ-x.y.zip= from the *Releases* page, unzip, and move
 =CoreEQ.app= to =/Applications=. The binary is not notarized, so macOS will
