@@ -70,7 +70,7 @@ and picked up only when uncontended.
 
 * Installation
 
-** Homebrew (default)
+** Homebrew (recommended)
 
 The simplest way to install CoreEQ:
 
