@@ -8,9 +8,9 @@ import SwiftUI
 /// than on the output row because it belongs to the sound the preset describes,
 /// not to where that sound is going.
 ///
-/// The plot above spans the full width, but its band ladder is laid out across
-/// only the width this column leaves — see `bandAxisTrailingInset` — so each
-/// slider still sits directly under its own point on the curve.
+/// Drag the slider, or double-click it to return to 0 dB. The value reads out
+/// under the track rather than in a field: the plot above already shows the
+/// whole curve moving with it, so this only has to say where it is.
 struct GlobalGainView: View {
     @ObservedObject var profileManager: ProfileManager
     let isEnabled: Bool
@@ -44,19 +44,10 @@ struct GlobalGainView: View {
             }
             .frame(maxWidth: .infinity)
 
-            TextField(
-                "",
-                value: Binding(
-                    get: { profileManager.currentPreamp },
-                    set: { profileManager.setPreamp($0) }
-                ),
-                format: .number.precision(.fractionLength(1))
-            )
-            .textFieldStyle(.roundedBorder)
-            .multilineTextAlignment(.center)
-            .controlSize(.small)
-            .disabled(!isEnabled)
-            .accessibilityLabel("Global gain in decibels")
+            Text(BandFormat.gain(profileManager.currentPreamp))
+                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                .foregroundStyle(profileManager.currentPreamp == 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.coreEQAccent))
+                .accessibilityHidden(true)
 
             Text("Preamp")
                 .font(.system(size: 11))

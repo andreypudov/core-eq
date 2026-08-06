@@ -127,13 +127,10 @@ struct EqualizerDetailView: View {
             // Only while the Parametric tab is showing, so a stray double-click
             // on the graph can never conjure a band the user cannot see.
             allowsFilterCreation: tab == .parametric,
-            showsBackground: false,
-            // The plot fills the width; only its band ladder stops where the
-            // slider strip does, so the sliders stay under their own points.
-            bandAxisTrailingInset: Theme.globalGainWidth + Theme.Spacing.inner + Theme.blockPadding
+            showsBackground: false
         )
-        // Vertical only: horizontal padding would shift the plot's band axis out
-        // of line with the sliders underneath, which share `axisGutter`.
+        // Vertical only: the plot spans its own width from 32 Hz to 20 kHz, so
+        // horizontal padding would only shrink the range on show.
         .padding(.vertical, 16)
         // A low floor, not a comfortable one: every point the fixed sections
         // don't need goes here, so the graph is large whenever the window is,

@@ -8,10 +8,8 @@ enum Theme {
     /// the app's own green regardless of the system setting.
     static let accent = Color.green
 
-    /// Width reserved at the left of the response plot for its dB labels. The
-    /// band slider row reserves the same, so every band's slider stays directly
-    /// under its point on the curve — the two are only aligned because they
-    /// share this number.
+    /// Width reserved at the left of the response plot for its dB labels, and
+    /// at the left of the band slider row for its own scale.
     static let axisGutter: CGFloat = 52
 
     /// An 8 pt spacing system throughout the content column.
@@ -22,17 +20,9 @@ enum Theme {
     }
 
     /// Inset between a content block's border and what it contains.
-    ///
-    /// The plot's own axis gutter and the band strip's trailing inset are both
-    /// derived from it, so the sliders stay under their points on the curve when
-    /// this changes.
     static let blockPadding: CGFloat = 12
 
     /// Width of the Global Gain column beside the editor.
-    ///
-    /// The plot spans the full width, but lays its band ladder out across the
-    /// width this column leaves — see `FrequencyResponseView.bandAxisTrailingInset`
-    /// — so each slider stays directly under its own point on the curve.
     static let globalGainWidth: CGFloat = 132
 
     /// Fixed height of the editing area, so switching tabs changes the controls
