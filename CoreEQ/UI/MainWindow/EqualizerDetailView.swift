@@ -49,7 +49,10 @@ struct EqualizerDetailView: View {
                 .padding(.top, 8)
         }
         .padding(.horizontal, Theme.Spacing.window)
-        .padding(.top, 8)
+        // The same gap the header has to the graph below it. The header sits
+        // between two equal spaces rather than being crowded against the top
+        // edge — deliberately `section`, so the two can't drift apart.
+        .padding(.top, Theme.Spacing.section)
         .padding(.bottom, 28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(WindowBackground())
@@ -124,7 +127,10 @@ struct EqualizerDetailView: View {
             // Only while the Parametric tab is showing, so a stray double-click
             // on the graph can never conjure a band the user cannot see.
             allowsFilterCreation: tab == .parametric,
-            showsBackground: false
+            showsBackground: false,
+            // The plot fills the width; only its band ladder stops where the
+            // slider strip does, so the sliders stay under their own points.
+            bandAxisTrailingInset: Theme.globalGainWidth + Theme.Spacing.inner
         )
         // Vertical only: horizontal padding would shift the plot's band axis out
         // of line with the sliders underneath, which share `axisGutter`.
@@ -146,10 +152,6 @@ struct EqualizerDetailView: View {
         .opacity(audioEngine.isEnabled ? 1.0 : 0.5)
         .allowsHitTesting(audioEngine.isEnabled)
         .help("Drag a point up or down to adjust its band; double-click a point to reset it")
-        // Outside the card, so it insets the plot rather than padding it: the
-        // graph and the band sliders below then span exactly the same width,
-        // which is the only reason each slider sits under its own point.
-        .padding(.trailing, Theme.globalGainWidth + Theme.Spacing.inner)
     }
 
     // MARK: - Band levels
@@ -193,7 +195,8 @@ struct EqualizerDetailView: View {
     // MARK: - Editor
 
     /// The editing area: whichever editor the tab selects, with the output trim
-    /// beside it. Fixed height, so switching tabs never moves the graph.
+    /// in a column beside it. Fixed height, so switching tabs never moves the
+    /// graph.
     private var editor: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.inner) {
             Group {
@@ -381,6 +384,8 @@ struct EqualizerDetailView: View {
                 deviceName
             }
 
+            Spacer(minLength: 16)
+
             volumeControl
 
             if let warning = engineWarning {
@@ -391,8 +396,6 @@ struct EqualizerDetailView: View {
                     .truncationMode(.tail)
                     .help(audioEngine.status.description)
             }
-
-            Spacer(minLength: 0)
         }
     }
 
@@ -423,7 +426,7 @@ struct EqualizerDetailView: View {
                 ),
                 in: 0...1
             )
-            .frame(width: 132)
+            .frame(width: 112)
             .disabled(!outputs.canSetVolume)
             .accessibilityLabel("Output volume")
 

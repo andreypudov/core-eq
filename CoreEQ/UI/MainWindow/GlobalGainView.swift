@@ -1,12 +1,16 @@
 import SwiftUI
 
-/// Output trim, beside the editing area.
+/// Output trim, in its own column to the right of the editing area.
 ///
 /// Two filters can boost the same frequency, and the chain has no idea how much
 /// headroom the source had — so a boosted preset can ask for more than there is
-/// and clip. This is where it is given back. It sits next to the editor rather
-/// than in the output row because it belongs to the sound the preset describes,
+/// and clip. This is where it is given back. It sits beside the editor rather
+/// than on the output row because it belongs to the sound the preset describes,
 /// not to where that sound is going.
+///
+/// The plot above spans the full width, but its band ladder is laid out across
+/// only the width this column leaves — see `bandAxisTrailingInset` — so each
+/// slider still sits directly under its own point on the curve.
 struct GlobalGainView: View {
     @ObservedObject var profileManager: ProfileManager
     let isEnabled: Bool
@@ -15,13 +19,13 @@ struct GlobalGainView: View {
     @State private var isHovering = false
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             Text("Global Gain")
                 .font(.system(size: 13, weight: .semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
 
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 6) {
                 VerticalGainSlider(
                     value: preamp,
                     range: BuiltInProfiles.preampRange,
@@ -38,6 +42,7 @@ struct GlobalGainView: View {
 
                 scale
             }
+            .frame(maxWidth: .infinity)
 
             TextField(
                 "",
@@ -57,7 +62,7 @@ struct GlobalGainView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }
-        .padding(12)
+        .padding(10)
         .frame(width: Theme.globalGainWidth)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -65,6 +70,7 @@ struct GlobalGainView: View {
                 .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
         )
         .opacity(isEnabled ? 1.0 : 0.5)
+        .help("Output trim applied after the whole chain — use it to give back headroom a boosted preset takes")
     }
 
     /// Marks at the two extremes and the reference, positioned with the same
@@ -84,11 +90,11 @@ struct GlobalGainView: View {
                     )
             }
         }
-        .frame(height: sliderHeight)
+        .frame(width: 34, height: sliderHeight)
         .accessibilityHidden(true)
     }
 
-    /// Matches the band strip's slider so the two read as one scale when the
+    /// Matches the band strip's slider, so the two read as one scale when the
     /// Graphic tab is showing.
     private var sliderHeight: CGFloat { Theme.BandRow.sliderHeight }
 

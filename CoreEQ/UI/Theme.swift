@@ -23,18 +23,18 @@ enum Theme {
 
     /// Width of the Global Gain column beside the editor.
     ///
-    /// The graph carries the same trailing inset, so the band sliders stay
-    /// directly under their points on the curve — the alignment the whole
-    /// window is built on.
+    /// The plot spans the full width, but lays its band ladder out across the
+    /// width this column leaves — see `FrequencyResponseView.bandAxisTrailingInset`
+    /// — so each slider stays directly under its own point on the curve.
     static let globalGainWidth: CGFloat = 132
 
     /// Fixed height of the editing area, so switching tabs changes the controls
     /// and nothing else — no reflow, no jump in the graph above it.
     ///
     /// Sized to the tallest thing that lives there, which is the Global Gain
-    /// card at ~249 pt, not the band strip at ~218. Drop below that and the card
-    /// clips instead of the graph giving up a few points.
-    static let editorHeight: CGFloat = 256
+    /// card, not the band strip. Drop below that and the card clips instead of
+    /// the graph giving up a few points.
+    static let editorHeight: CGFloat = 244
 
     enum FilterRow {
         /// One row plus its spacing. The filter list multiplies this to size its

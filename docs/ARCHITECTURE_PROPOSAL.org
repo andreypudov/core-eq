@@ -127,10 +127,12 @@ height so nothing above it moves when you switch.
 #+begin_src text
  [ Graphic | Parametric ]                    Classical ▾   Reset
 
- Parametric Bands — 2 bands                            ⏻   │ Global Gain
-   ● Bell         180 Hz    −3.0 dB    Q 1.20              │     ▐
-   ● High Shelf     8 kHz   −2.0 dB    Q 0.70              │   2.0 dB
- + Add Band                                               │   Preamp
+ Parametric Bands — 2 bands                                        ⏻
+   ● Bell         180 Hz    −3.0 dB    Q 1.20
+   ● High Shelf     8 kHz   −2.0 dB    Q 0.70
+ + Add Band
+
+ Output [MacBook Pro Speakers]   Preamp ──▪── +2.0 dB   🔈 ──▪── 70%
 #+end_src
 
 The Graphic tab is the default and is what a user who knows the Apple Music or
@@ -307,6 +309,12 @@ Two filters can boost the same frequency and the chain cannot know how much
 headroom the source had, so a boosted preset can ask for more than there is.
 This is where it is given back. The response curve includes it — the curve is
 what you hear — and so does the total under each slider.
+
+The control sits on the bottom row with the output device and volume, not in a
+column beside the editor. A column of its own would narrow the band sliders
+without narrowing the plot above them, and each slider sitting directly under
+its own point on the curve is what the window is built on. On the bottom row it
+costs width from neither, and it stays visible in both tabs.
 
 Automatic trim from the computed peak is not implemented; the control is manual.
 

@@ -53,6 +53,15 @@ struct FrequencyResponseView: View {
     /// where the enclosing section card already supplies the surface.
     var showsBackground = true
 
+    /// Width at the right of the plot that the band ladder does *not* span.
+    ///
+    /// The main window sets this to the width of the Global Gain column beside
+    /// the sliders. The ladder then lays out across exactly the width the slider
+    /// strip occupies — so each slider stays under its own point — while the
+    /// curve, fill, and spectrum still run to the right edge, with the strip
+    /// past 20 kHz carrying the extrapolated top end rather than nothing.
+    var bandAxisTrailingInset: CGFloat = 0
+
     /// A grabbable point on the plot. Bands are addressed by ladder slot and
     /// free filters by identity, so neither can be confused for the other when
     /// the chain changes under a drag.
@@ -214,8 +223,12 @@ struct FrequencyResponseView: View {
         return (clamped * 2).rounded() / 2
     }
 
+    /// Band-region fraction under the pointer, used to turn a drag into a
+    /// frequency. Allowed past 1 so a node can be dragged into the strip beyond
+    /// the last band, exactly as far as the curve is drawn.
     private func fraction(atX x: CGFloat, _ size: CGSize) -> Double {
-        Double(min(max((x - axisGutter) / plotWidth(size), 0), 1))
+        let plot = Double(min(max((x - axisGutter) / plotWidth(size), 0), 1))
+        return bandFraction(ofPlotFraction: plot, size)
     }
 
     /// Where a band's handle sits: at the band's own gain.
@@ -344,7 +357,8 @@ struct FrequencyResponseView: View {
         var response = Path()
         for step in 0..<Self.curvePointCount {
             let fraction = Double(step) / Double(Self.curvePointCount - 1)
-            let dB = biquad.magnitudeDB(at: frequency(atFraction: fraction), sampleRate: sampleRate)
+            let probe = frequency(atFraction: bandFraction(ofPlotFraction: fraction, size))
+            let dB = biquad.magnitudeDB(at: probe, sampleRate: sampleRate)
             let point = CGPoint(x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
             if step == 0 {
                 response.move(to: point)
@@ -478,7 +492,7 @@ struct FrequencyResponseView: View {
 
         return (0..<Self.curvePointCount).map { index in
             let fraction = Double(index) / Double(Self.curvePointCount - 1)
-            let frequency = frequency(atFraction: fraction)
+            let frequency = frequency(atFraction: bandFraction(ofPlotFraction: fraction, size))
             let dB = biquads.reduce(preamp) { $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate) }
             return CGPoint(x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
         }
@@ -535,8 +549,25 @@ struct FrequencyResponseView: View {
         max(size.width - axisGutter, 1)
     }
 
+    /// The part of the plot the band ladder is laid out across.
+    private func bandRegionWidth(_ size: CGSize) -> CGFloat {
+        max(plotWidth(size) - bandAxisTrailingInset, 1)
+    }
+
+    /// Fraction of the *plot* at which a fraction of the *band region* falls.
+    /// Positions past the last band land beyond 1, which is what lets the curve
+    /// carry on to the right edge.
+    private func plotFraction(ofBandFraction t: Double, _ size: CGSize) -> Double {
+        t * Double(bandRegionWidth(size) / plotWidth(size))
+    }
+
+    private func bandFraction(ofPlotFraction t: Double, _ size: CGSize) -> Double {
+        t * Double(plotWidth(size) / bandRegionWidth(size))
+    }
+
     private func xPosition(_ frequency: Double, _ size: CGSize) -> CGFloat {
-        axisGutter + CGFloat(min(max(axisFraction(of: frequency), 0), 1)) * plotWidth(size)
+        let band = min(max(axisFraction(of: frequency), 0), 1)
+        return axisGutter + CGFloat(plotFraction(ofBandFraction: band, size)) * plotWidth(size)
     }
 
     /// The minimal menu graph reserves only half the stroke width at the top and

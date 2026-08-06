@@ -88,6 +88,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // screen with no way back. The window owns its size; the content
             // lays out inside whatever it is given.
             contentController.sizingOptions = []
+            // The content column runs to the top of the window rather than
+            // starting below the titlebar. Without this it is inset by the
+            // titlebar height to match the sidebar, which leaves an empty strip
+            // above the Equalizer heading; with it, the heading and its controls
+            // sit level with the traffic lights, as they should.
+            contentController.safeAreaRegions = []
 
             let content = NSSplitViewItem(viewController: contentController)
             content.minimumThickness = 720
