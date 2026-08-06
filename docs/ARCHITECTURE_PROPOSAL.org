@@ -1,544 +1,322 @@
 #+TITLE: CoreEQ Architecture Proposal
-#+SUBTITLE: Layer-Based Equalizer Architecture
-#+AUTHOR: Architecture Proposal
+#+SUBTITLE: One filter chain, three depths of access
+#+DATE: <2026-08-06 Thu>
 #+OPTIONS: toc:3 num:nil
 
-* Vision
+* Goal
 
-CoreEQ should expose one equalizer with multiple editing experiences.
+CoreEQ needs parametric editing — arbitrary centre frequency and bandwidth is
+the single most requested change in [[file:COMMENTS_ANALYSIS.org][COMMENTS_ANALYSIS.org]], and headphone
+correction and AutoEQ import are unimplementable without it. It also needs to
+stay an application a person opens to make their music sound better, not an
+audio workstation.
 
-Graphic EQ and Parametric EQ are not separate equalizers.
+Those two goals only conflict if parametric editing is treated as a second
+equalizer that has to coexist with the first. This proposal removes the
+conflict by not having a second equalizer.
 
-Instead, they are different editing layers contributing to a single frequency response.
+* The model
 
-Users should never think about conversions.
+There is one equalizer: a chain of biquad filters.
 
-Users should never wonder which equalizer is currently active.
+Eleven of those filters have their frequency and Q locked to the ISO octave
+ladder. Those are the sliders. Any other filter in the chain is free — the user
+chooses its type, frequency, gain, and Q.
 
-Instead, they should understand a very simple mental model:
+Both kinds are the same object, processed by the same engine, drawn on the same
+graph. "Graphic" and "parametric" are not two equalizers, two modes, or two
+layers. They are two ways of reaching filters in one chain.
 
-"I have one equalizer composed of several layers."
-
-Every layer contributes to the final sound.
-
-The frequency response graph always represents the complete result.
-
-* Design Principles
-
-The architecture is based on the following principles.
-
-** One preset
-
-A preset represents one equalizer configuration.
-
-** One DSP engine
-
-Only one DSP engine exists.
-
-** One frequency response
-
-The graph always represents the complete DSP output.
-
-** Additive editing
-
-Every editing mode contributes additional processing.
-
-Nothing is converted.
-
-Nothing is destroyed.
-
-Nothing changes identity.
-
-** Progressive disclosure
-
-Graphic editing is simple.
-
-Parametric editing is powerful.
-
-Advanced DSP features integrate naturally without changing the basic workflow.
-
-* High-Level Architecture
+** Filter
 
 #+begin_src text
-Preset
-│
-├── Global Gain
-│
-├── Graphic Layer
-│
-├── Parametric Layer
-│
-├── System Layer
-│
-└── Metadata
-        │
-        ▼
-    DSP Engine
-        │
-        ▼
-Frequency Response
-        │
-        ▼
-    Audio Output
+Filter
+{
+    Type          bell | low shelf | high shelf | high pass | low pass
+    Frequency
+    Gain
+    Q
+    Enabled
+    Band          ladder slot index, or none
+}
 #+end_src
 
-The DSP engine processes every enabled filter from every layer.
+=Band= is what makes a filter a slider. A filter with a slot index is drawn in
+the slider strip; its frequency comes from =BuiltInProfiles.frequencies= at
+that index and its Q from =BuiltInProfiles.defaultQ=, and neither is editable.
+A filter without one is drawn in the filter list and on the graph as a free
+node.
 
-Layers are purely organizational.
+The slot index — not the frequency — is the identity of a band, so the slider
+strip has a stable mapping into a variable-length array.
 
-* Preset Model
+** Preset
 
 #+begin_src text
 Preset
 {
-    UUID
-
     Name
-
-    Description
-
-    GlobalGain
-
-    GraphicLayer
-
-    ParametricLayer
-
-    SystemLayer
-
-    Metadata
+    Filters
 }
 #+end_src
 
-The preset contains no "Graphic EQ" object.
+That is the whole preset. A built-in preset is eleven band filters carrying
+that preset's gains. =Flat= is eleven band filters at 0 dB, which is to say
+nothing at all — a 0 dB filter is already identity in =PeakingFilter= and costs
+no processing.
 
-It contains no "Parametric EQ" object.
+Identity stays the name, as today. There is no UUID — nothing in this proposal
+needs preset identity to change, and changing it would cost a migration for no
+benefit.
 
-Instead it contains processing layers.
-
-* Layer Architecture
-
-Each layer has a different responsibility.
-
-Layers are independent.
-
-Layers never replace one another.
-
-Layers are additive.
-
-** Graphic Layer
-
-The Graphic Layer is the beginner-friendly editor.
-
-It always contains the predefined ISO frequency bands.
-
-Example:
+* DSP pipeline
 
 #+begin_src text
-32 Hz
-
-64 Hz
-
-125 Hz
-
-250 Hz
-
-500 Hz
-
-1 kHz
-
-2 kHz
-
-4 kHz
-
-8 kHz
-
-16 kHz
+Preset filters
+      │
+      ▼
+  enabled, non-identity
+      │
+      ▼
+  flat [Filter] array
+      │
+      ▼
+   EQProcessor
+      │
+      ├──▶ Frequency response
+      │
+      ▼
+  Audio output
 #+end_src
 
-Each band contains:
+One flattening step, in one place, producing one array. =EQProcessor= receives
+it exactly the way it receives bands today and has no knowledge of slots,
+sliders, or lists. Filters are cascaded, so their magnitudes multiply and their
+dB contributions add exactly. The response curve is arithmetic, not an
+approximation, and filter order has no effect on either magnitude or phase.
+
+The chain is minimum phase. This is the expected and correct choice for a
+system equalizer; linear-phase processing is a separate mode and out of scope
+here.
+
+* Three depths of access
+
+The same chain is reachable at three levels. Most users only ever use the
+first.
+
+** Menu bar
+
+Master switch, preset list, response preview, bass/mid/treble, output device.
+Unchanged. Filters never appear here — this is the surface for someone who
+wants their music to sound better and nothing else.
+
+** Window
+
+Preset menu, response graph, eleven sliders, output device. Unchanged from
+today. This is what opens, and it is what a user who knows the Apple Music or
+Spotify equalizer already knows how to operate.
+
+** Filters
+
+One collapsed row at the bottom of =EqualizerDetailView=, below the sliders:
 
 #+begin_src text
-Frequency
+ Band Levels                                    ⏻
+ ▐  ▐  ▐  ▐  ▐  ▐  ▐  ▐  ▐  ▐  ▐
+ 32 64 125 250 500 1k 2k 4k 8k 16k 20k
 
-Gain
+ ▸ Filters — None
 #+end_src
 
-Frequency is fixed.
-
-Q is fixed.
-
-Filter type is fixed.
-
-Only gain is editable.
-
-Graphic Layer is always present.
-
-Its structure never changes.
-
-** Parametric Layer
-
-Initially the Parametric Layer is empty.
+Expanded:
 
 #+begin_src text
-Parametric Layer
-
-(empty)
+ ▾ Filters                                   ⏻  +
+   ● Bell         180 Hz    −3.0 dB    Q 1.20
+   ● High Shelf     8 kHz   −2.0 dB    Q 0.70
 #+end_src
 
-The user may create any number of filters.
+Collapsed by default, state remembered. A user who never opens it sees the
+application exactly as it is now, plus one quiet line.
 
-Examples:
+Once someone expands the section they have opted in, so the controls inside use
+the standard vocabulary — Bell, Low Shelf, High Shelf, High Pass, Low Pass, and
+Q labelled Q. Renaming Q to something friendlier helps nobody: the casual user
+still does not want it, and the knowledgeable user then has to guess whether it
+means Q, bandwidth, or octaves. The deep end is hidden well rather than made
+shallow.
 
-- Bell
-- Low Shelf
-- High Shelf
-- High Pass
-- Low Pass
-- Notch
-- Band Pass
+Notch and band-pass are deliberately omitted. Every filter type is a
+coefficient formula that has to be mirrored exactly between the audio path and
+the plot, and neither type earns that cost in a listening application.
 
-Each filter contains:
+* The graph
+
+The graph always shows the complete response of the chain — the sum of every
+enabled filter, band and free alike. That curve is what reaches the speakers.
+
+** Two kinds of point
+
+Band handles sit at the eleven ladder positions and move vertically only. Free
+filter nodes move in both axes, with a modifier drag or scroll for Q.
+
+The constraint is the explanation: a band handle physically cannot be dragged
+sideways, so the difference between a locked band and a free filter is learned
+from the mouse rather than from a label. They should look different as well —
+band handles small and on the ladder positions, filter nodes larger and ringed.
+
+** Creating filters from the graph
+
+While the Filters section is collapsed the graph behaves exactly as it does
+today, and a filter cannot be created by accident. While it is expanded,
+double-clicking empty graph space creates a bell at that frequency and gain and
+adds it to the list.
+
+** Double-click
+
+Double-click keeps its existing meaning — reset this point's gain to 0 dB — for
+both kinds of point. Most parametric editors delete a node on double-click;
+consistency inside CoreEQ is worth more than matching that convention, and an
+accidental reset is recoverable in a way an accidental delete is not. Delete
+lives in the node's context menu and in the list row.
+
+* Rules that keep it predictable
+
+These are the guarantees the design exists to provide.
+
+1. A slider shows the gain of its own filter, and nothing else. It never moves
+   on its own.
+2. The graph shows the sum of the whole chain. It is exact.
+3. Where those two differ, a faint tick on the slider track marks the total at
+   that frequency.
+4. A preset sets the entire chain.
+5. Nothing is ever fitted, estimated, or redistributed.
+
+** The tick
 
 #+begin_src text
-Type
-
-Frequency
-
-Gain
-
-Q
-
-Enabled
+   +12 ┤
+       │
+    +6 ┤   ▐   ← knob: this band is +6.0 dB
+       │   ┄   ← tick: the chain totals +8.0 dB here
+     0 ┤   ▐
 #+end_src
 
-The Parametric Layer never modifies the Graphic Layer.
-
-It simply adds more processing.
-
-** System Layer
-
-System Layer contains automatically generated DSP processing.
-
-Examples:
-
-- Headphone correction
-- AutoEQ
-- Device calibration
-- Loudness compensation
-- Hearing compensation
-- Room correction
-- FIR convolution
-- Safety limiter
-
-These filters are managed by CoreEQ.
-
-Users normally enable or disable features instead of editing individual filters.
-
-Future DSP functionality should be implemented inside the System Layer whenever possible.
-
-* DSP Pipeline
-
-The DSP engine is intentionally simple.
-
-#+begin_src text
-Graphic Layer
-
-+
-
-Parametric Layer
-
-+
-
-System Layer
-
-↓
-
-Enabled Filters
-
-↓
-
-DSP Engine
-
-↓
-
-Frequency Response
-
-↓
-
-Audio Output
-#+end_src
-
-The DSP engine has no knowledge of editing modes.
-
-It simply processes filters.
-
-* Editing Modes
-
-Editing modes are user interface concepts.
-
-They never affect the DSP architecture.
-
-** Graphic Mode
-
-Graphic Mode edits only the Graphic Layer.
-
-The user edits:
-
-- Gain
-
-The user cannot edit:
-
-- Frequency
-- Q
-- Filter Type
-
-Graphic Mode is intentionally simple.
-
-It always displays the same set of sliders.
-
-Nothing disappears.
-
-Nothing changes identity.
-
-The graph always displays the complete response generated by every layer.
-
-** Parametric Mode
-
-Parametric Mode edits only the Parametric Layer.
-
-Initially no filters exist.
-
-The user explicitly creates filters.
-
-Example workflow:
-
-#+begin_src text
-Open Parametric
-
-↓
-
-Empty list
-
-↓
-
-+ Add Filter
-
-↓
-
-Bell
-
-↓
-
-180 Hz
-
-↓
-
-+3 dB
-
-↓
-
-Q 0.8
-#+end_src
-
-The Graphic Layer remains untouched.
-
-The graph immediately reflects the new filter.
-
-* Layer Interaction
-
-Layers are additive.
-
-Example.
-
-Graphic Layer:
-
-#+begin_src text
-125 Hz
-
-+3 dB
-#+end_src
-
-Parametric Layer:
-
-#+begin_src text
-Bell
-
-180 Hz
-
-+2 dB
-#+end_src
-
-Result:
-
-Both filters are processed.
-
-Neither replaces the other.
-
-Nothing is converted.
-
-Nothing is disabled.
-
-Both remain editable forever.
-
-* Example Workflow
-
-Preset:
-
-#+begin_src text
-Graphic Layer
-
-125 Hz
-
-+2 dB
-#+end_src
-
-Graph:
-
-#+begin_src text
-      /\
-_____/  \_____
-#+end_src
-
-User opens Parametric Mode.
-
-The Parametric Layer is empty.
-
-User creates:
-
-#+begin_src text
-Bell
-
-180 Hz
-
-+2 dB
-
-Q 0.8
-#+end_src
-
-Graph becomes:
-
-#+begin_src text
-     /\_/\
-____/     \____
-#+end_src
-
-Returning to Graphic Mode:
-
-The Graphic Layer remains unchanged.
-
-The 125 Hz slider still exists.
-
-It still controls only the Graphic Layer.
-
-The graph still displays the combined response.
-
-* Why Layers Instead of Conversion
-
-Traditional approaches attempt to convert between Graphic EQ and Parametric EQ.
-
-This introduces difficult questions.
-
-Examples:
-
-- Which filter owns the sound?
-- What happens when frequency changes?
-- Can the Graphic sliders still represent the DSP?
-- How is reverse conversion performed?
-
-Layering removes every one of these questions.
-
-Graphic editing remains Graphic editing.
-
-Parametric editing remains Parametric editing.
-
-Both simply contribute processing.
-
-* Advantages
-
-** No conversion
-
-Nothing is ever converted.
-
-** No synchronization
-
-Graphic and Parametric editors never synchronize.
-
-They edit independent layers.
-
-** Stable UI
-
-Graphic Mode always contains the same sliders.
-
-Nothing disappears.
-
-Nothing changes identity.
-
-** Deterministic
-
-Every edit has a predictable result.
-
-No optimization.
-
-No approximation.
-
-No hidden algorithms.
-
-** Extensible
-
-Future DSP features naturally become additional System Layer processing.
-
-Examples:
-
-- AutoEQ
-- Headphone correction
-- FIR convolution
-- Room correction
-- Loudness
-- Hearing correction
-
-No architecture changes are required.
-
-* UI Philosophy
-
-The graph is the visual truth.
-
-The controls are editing tools.
-
-Changing tabs never changes:
-
-- preset
-- graph
-- DSP
-- audio
-
-Only the editing tools change.
-
-Graphic Mode should feel approachable.
-
-Parametric Mode should feel professional.
-
-System processing should integrate without overwhelming users.
-
-The complexity of the application grows through additional layers rather than replacing existing functionality.
-
-* Guiding Principle
-
-CoreEQ should never ask:
-
-"Should this be Graphic EQ or Parametric EQ?"
-
-Instead it should ask:
-
-"Which processing layer should own this filter?"
-
-Graphic processing remains simple.
-
-Parametric processing remains powerful.
-
-System processing remains automatic.
-
-Together they produce one deterministic frequency response through one DSP engine.
-
-The user experiences one equalizer composed of multiple independent processing layers.
-
-This architecture minimizes surprises, scales naturally with future DSP features, and follows a non-destructive editing philosophy similar to modern creative applications such as Apple Photos, Logic Pro, and Adobe Photoshop.
+A slider that reports the total instead of its own value would be a control
+that lies. Adding a free filter near 125 Hz would slide the 125 Hz slider by
+itself; a high pass below it would make the top of the slider's own scale
+unreachable; and dragging the slider would require solving for the gain that
+produces a requested total, which is exactly the kind of inverse problem this
+design exists to avoid.
+
+The tick gives the same information — what is happening at this frequency —
+without any of that. Both values are visible on one control and only one of
+them is draggable. An untouched band reads as "I am contributing nothing here,
+but something else is."
+
+* Crossing over
+
+A band is a filter with two parameters locked. Unlocking is therefore not a
+conversion but a change of one field: clear the slot index, and the filter
+leaves the slider strip for the list with its frequency, gain, and Q intact.
+The coefficients are unchanged, so the sound is identical across the operation.
+
+This is offered as *Edit as filter* in a slider's context menu, and it is the
+direct answer to the most requested feature — "I like what 125 Hz is doing, but
+I want it narrower."
+
+The reverse is not offered. Collapsing free filters back onto eleven fixed
+slots is a curve fit: an optimizer, a residual, and a result that only
+approximates what the user had. Moving one filter between presentations is
+exact; fitting many filters into a fixed ladder is not, and only the exact
+operation belongs in this application.
+
+* Presets
+
+A preset is the complete sound. Selecting one replaces the whole chain,
+including any free filters, and built-in presets carry none. =Flat= is
+therefore flat.
+
+The alternative — presets that set only the eleven bands and leave free filters
+in place — makes every preset name a lie for as long as any filter exists. That
+trades a one-time confirmation prompt for permanent untrustworthiness.
+
+Switching away from an edited chain uses the existing unsaved-changes path:
+=ProfileManager.isModified= already covers slider edits and extends to filters
+without change. Saving a user preset captures the whole chain.
+
+* Why not layers or modes
+
+An earlier draft of this document proposed a Graphic Layer and a Parametric
+Layer edited through separate modes. Both ideas are dropped.
+
+*Modes.* The stated aim is that a user never wonders which equalizer is active.
+Two tabs guarantee they will, because a mode is a thing you have to keep track
+of. Eleven sliders and a short filter list fit on one screen, so nothing is
+gained by hiding either behind the other.
+
+*Layers.* Two arrays summed by the engine is a correct model, but the summing
+is the only thing it adds — and a single array already sums. The layer split
+also forces a wholesale ban on moving filters between layers, which throws away
+the exact, useful case described above along with the lossy one.
+
+*Conversion between two equalizers.* Rejected for the reason the earlier draft
+gave, and it remains the right rejection. Fitting a free filter set onto a fixed
+ladder is an approximation, and approximations are what this application is
+trying not to make.
+
+* Impact on the code
+
+The engine is nearly unaffected, which is the strongest evidence the model is
+right.
+
+- =EQBand= becomes =Filter=: adds =type=, =enabled=, and the slot index.
+- =PeakingFilter= becomes a typed biquad. Its defining property must survive
+  unchanged: one coefficient implementation, used by both =EQProcessor= and
+  =FrequencyResponseView=. This is what makes the drawn curve a truthful
+  picture of the audio path, and every new filter type is a new opportunity to
+  break it.
+- =EQProfile= holds =[Filter]= instead of =[EQBand]=. Existing user presets
+  decode into eleven band filters; the migration is a decoder default.
+- =EQProcessor.maxBands= rises from 16. Eleven slots plus a cap of sixteen free
+  filters plus room for future automatic processing suggests 32. Each filter is
+  one more pass over the buffer in =processChannel=, so the cap is a real
+  budget rather than a formality.
+- =EqualizerDetailView= gains one collapsible section between the sliders and
+  the output row.
+- =FrequencyResponseView= gains free nodes alongside the band handles, and
+  two-axis dragging for them.
+- =QuickTone= is unaffected: it offsets band gains by slot, and slots still
+  exist.
+
+* Deferred
+
+Out of scope here, but the shape above should not have to change to accept
+them.
+
+- *Preamp and headroom.* Two filters boosting the same frequency compounds, and
+  the first user to stack a band and a free filter will clip. The preset schema
+  should reserve the field now even if nothing sets it, so this does not become
+  a second migration.
+- *Ladder Q.* At Q 1.41 and octave spacing, eleven equal slider settings do not
+  produce a flat curve — the response peaks at the centres and sags between
+  them. Because CoreEQ draws the true response rather than a decorative spline,
+  that ripple is visible on screen. It is the one detail that undercuts the
+  claim that nothing here is approximate, and it is the first thing a
+  knowledgeable user tests.
+- *Automatic processing.* Headphone correction, AutoEQ import, room correction.
+  These arrive as filters with a flag marking them as machine-generated, which
+  the model above already accommodates. Their value to a casual user is that
+  presets become better, not that anyone edits a filter table.
+- *Linear phase.* A second processing mode, not a change to this model.
+
+* Summary
+
+One chain of filters. Eleven of them locked to the ISO ladder and drawn as
+sliders; the rest free and drawn as a list. One graph showing the exact sum.
+Three depths of access, with the shallowest unchanged from today.
+
+A casual user sees the equalizer they already know. A knowledgeable user opens
+one section and finds a filter chain with honest numbers and a truthful curve.
+Neither is asked to think about layers, modes, or conversion, because there
+are none.
