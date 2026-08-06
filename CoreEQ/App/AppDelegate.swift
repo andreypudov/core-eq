@@ -20,8 +20,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let audioEngine = self.audioEngine
-        profileManager.$currentBands
-            .sink { audioEngine.apply(bands: $0) }
+        profileManager.$currentFilters
+            .sink { audioEngine.apply(filters: $0) }
+            .store(in: &cancellables)
+
+        profileManager.$currentPreamp
+            .sink { audioEngine.apply(preamp: $0) }
             .store(in: &cancellables)
 
         audioEngine.start()
@@ -70,16 +74,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sidebar.canCollapse = false
             splitViewController.addSplitViewItem(sidebar)
 
-            let content = NSSplitViewItem(
-                viewController: NSHostingController(
-                    rootView: EqualizerDetailView(
-                        profileManager: profileManager,
-                        audioEngine: audioEngine,
-                        spectrum: audioEngine.spectrum
-                    )
+            let contentController = NSHostingController(
+                rootView: EqualizerDetailView(
+                    profileManager: profileManager,
+                    audioEngine: audioEngine,
+                    spectrum: audioEngine.spectrum
                 )
             )
-            content.minimumThickness = 620
+            // The window must never size itself from its content. By default a
+            // hosting controller reports the SwiftUI view's intrinsic size as a
+            // preferred size, and AppKit grows the window to satisfy it — so
+            // opening the Filters section pushed the window taller than the
+            // screen with no way back. The window owns its size; the content
+            // lays out inside whatever it is given.
+            contentController.sizingOptions = []
+
+            let content = NSSplitViewItem(viewController: contentController)
+            content.minimumThickness = 720
             splitViewController.addSplitViewItem(content)
 
             let window = NSWindow(contentViewController: splitViewController)
@@ -127,10 +138,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.toolbarStyle = .unified
 
             window.isReleasedWhenClosed = false
-            // Taller than the sections strictly need: the surplus all goes to
-            // the response graph, which is the point of the window.
-            window.contentMinSize = NSSize(width: 900, height: 700)
-            window.setContentSize(NSSize(width: 1000, height: 780))
+            // The minimum is what the fixed sections actually need; every point
+            // above it goes to the response graph, which is the point of the
+            // window. The opening size is capped to the visible frame so the
+            // window always arrives fully on screen, including on a laptop
+            // display.
+            // The editing area is a fixed height and the graph floor is 120 pt,
+            // so the fixed sections come to ~525 pt. The extra width covers the
+            // Global Gain column the graph is now inset by.
+            window.contentMinSize = NSSize(width: 960, height: 600)
+            let visible = (NSScreen.main?.visibleFrame.size).map {
+                NSSize(width: min(1_120, $0.width - 80), height: min(760, $0.height - 80))
+            } ?? NSSize(width: 1_120, height: 760)
+            window.setContentSize(visible)
             window.center()
             mainWindow = window
         }

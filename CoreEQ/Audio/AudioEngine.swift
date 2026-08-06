@@ -105,8 +105,12 @@ final class AudioEngine: ObservableObject {
         status = .stopped
     }
 
-    func apply(bands: [EQBand]) {
-        processor.setBands(bands)
+    func apply(filters: [EQFilter]) {
+        processor.setFilters(filters)
+    }
+
+    func apply(preamp: Double) {
+        processor.setPreamp(preamp)
     }
 
     // MARK: - Engine assembly

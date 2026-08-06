@@ -21,6 +21,27 @@ enum Theme {
         static let inner: CGFloat = 12
     }
 
+    /// Width of the Global Gain column beside the editor.
+    ///
+    /// The graph carries the same trailing inset, so the band sliders stay
+    /// directly under their points on the curve — the alignment the whole
+    /// window is built on.
+    static let globalGainWidth: CGFloat = 132
+
+    /// Fixed height of the editing area, so switching tabs changes the controls
+    /// and nothing else — no reflow, no jump in the graph above it.
+    ///
+    /// Sized to the tallest thing that lives there, which is the Global Gain
+    /// card at ~249 pt, not the band strip at ~218. Drop below that and the card
+    /// clips instead of the graph giving up a few points.
+    static let editorHeight: CGFloat = 256
+
+    enum FilterRow {
+        /// One row plus its spacing. The filter list multiplies this to size its
+        /// scroll box, so the two must not drift apart.
+        static let height: CGFloat = 28
+    }
+
     enum BandRow {
         static let sliderHeight: CGFloat = 146
         /// Just clears the gain bubble. Any taller and it reads as a gap between

@@ -214,7 +214,7 @@ struct EqualizerSidebarView: View {
         let isActive = name == profileManager.activeProfileName
 
         Button("New Preset") {
-            profileManager.addProfile(bands: profileManager.currentBands)
+            profileManager.addProfile(filters: profileManager.currentFilters)
         }
 
         Divider()

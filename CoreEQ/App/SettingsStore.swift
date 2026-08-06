@@ -1,13 +1,15 @@
 import Foundation
 
 /// Thin `UserDefaults` wrapper for the persisted app state: active profile,
-/// EQ enabled flag, user-created presets, and any custom band gain tweaks made
-/// in the main window.
+/// EQ enabled flag, user-created presets, and the working chain — the active
+/// preset plus whatever the user has changed since selecting it.
 final class SettingsStore {
     private enum Key {
         static let activeProfileName = "activeProfileName"
         static let isEnabled = "isEQEnabled"
         static let customGains = "customBandGains"
+        static let workingFilters = "workingFilters"
+        static let workingPreamp = "workingPreamp"
         static let tone = "quickToneControls"
         static let userProfiles = "userProfiles"
     }
@@ -28,15 +30,50 @@ final class SettingsStore {
         set { defaults.set(newValue, forKey: Key.isEnabled) }
     }
 
-    /// Gains the user has dialed in on top of the active profile, or nil when
-    /// the profile is unmodified.
-    var customGains: [Double]? {
+    /// Band gains dialed in on top of the active profile by CoreEQ 1.x.
+    ///
+    /// Read once at launch, migrated into `workingFilters`, then set to nil so
+    /// the two can't disagree. Nothing in the app writes a value here — that is
+    /// a fact about the callers, not something this setter enforces.
+    var legacyCustomGains: [Double]? {
         get { defaults.array(forKey: Key.customGains) as? [Double] }
         set {
             if let newValue {
                 defaults.set(newValue, forKey: Key.customGains)
             } else {
                 defaults.removeObject(forKey: Key.customGains)
+            }
+        }
+    }
+
+    /// The chain the user is actually hearing — the active preset plus any
+    /// edits since — or nil when it still matches the preset.
+    ///
+    /// Stored whole rather than as a gain array, because free filters carry a
+    /// kind, frequency, and Q that a bare list of gains cannot express.
+    var workingFilters: [EQFilter]? {
+        get {
+            guard let data = defaults.data(forKey: Key.workingFilters) else { return nil }
+            return try? JSONDecoder().decode([EQFilter].self, from: data)
+        }
+        set {
+            if let newValue, let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: Key.workingFilters)
+            } else {
+                defaults.removeObject(forKey: Key.workingFilters)
+            }
+        }
+    }
+
+    /// Output trim the user has dialed in on top of the active preset, or nil
+    /// when it still matches.
+    var workingPreamp: Double? {
+        get { defaults.object(forKey: Key.workingPreamp) as? Double }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Key.workingPreamp)
+            } else {
+                defaults.removeObject(forKey: Key.workingPreamp)
             }
         }
     }

@@ -16,6 +16,17 @@ struct VerticalGainSlider: View {
     /// Hovered or being dragged: the only state in which the band shows its
     /// accent colour, so a row at rest is a quiet ladder of grey tracks.
     let isActive: Bool
+
+    /// What the whole chain totals at this band's frequency, marked as a faint
+    /// tick across the track. Nil hides it.
+    ///
+    /// The knob is this band's own gain and the tick is everything summed, so
+    /// the two only part company when something else in the chain reaches this
+    /// frequency. That gap is the information: it says "you are contributing
+    /// this much, and the result is that much", without the knob ever reporting
+    /// a value it does not control.
+    var totalGain: Double?
+
     let onDragChange: (Bool) -> Void
     let onReset: () -> Void
 
@@ -46,6 +57,23 @@ struct VerticalGainSlider: View {
                         .fill(Color.coreEQAccent)
                         .frame(width: Self.trackWidth, height: max(bottomY - knobY, 0))
                         .position(x: midX, y: (knobY + bottomY) / 2)
+                }
+
+                // Drawn under the knob: where the two coincide — the common
+                // case of a band nothing else overlaps — the tick simply
+                // disappears behind it rather than doubling the marker.
+                if let totalGain, abs(totalGain - value) > 0.1 {
+                    Capsule()
+                        .fill(Color.primary.opacity(0.35))
+                        .frame(width: Self.knobDiameter - 2, height: 1.5)
+                        .position(
+                            x: midX,
+                            y: Self.knobCenterY(
+                                for: totalGain.clamped(to: range),
+                                in: height,
+                                range: range
+                            )
+                        )
                 }
 
                 Circle()

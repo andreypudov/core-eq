@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Quick EQ body: the compact live response graph above three tone sliders
 /// (Bass / Mid / Treble). Dragging a slider calls back with the axis and its
-/// snapped value; `refreshGraph` redraws the curve from the new bands.
+/// snapped value; `refreshGraph` redraws the curve from the new chain.
 @MainActor
 final class QuickEQBodyView: NSView {
     enum Axis: Int, CaseIterable {
@@ -23,14 +23,14 @@ final class QuickEQBodyView: NSView {
     private let onToneChange: (Axis, Double) -> Void
 
     init(
-        bands: [EQBand],
+        filters: [EQFilter],
         tone: ProfileManager.ToneControls,
         sampleRate: Double,
         onToneChange: @escaping (Axis, Double) -> Void
     ) {
         self.sampleRate = sampleRate
         self.onToneChange = onToneChange
-        self.graphHost = NSHostingView(rootView: FrequencyResponseView(bands: bands, sampleRate: sampleRate, minimal: true))
+        self.graphHost = NSHostingView(rootView: FrequencyResponseView(filters: filters, sampleRate: sampleRate, minimal: true))
         super.init(frame: .zero)
         // View-based menu items are sized by Auto Layout: fix the content width
         // and let the vertical stack determine the height.
@@ -61,9 +61,9 @@ final class QuickEQBodyView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    /// Redraws the response curve after a tone change updates the bands.
-    func refreshGraph(bands: [EQBand]) {
-        graphHost.rootView = FrequencyResponseView(bands: bands, sampleRate: sampleRate, minimal: true)
+    /// Redraws the response curve after a tone change updates the chain.
+    func refreshGraph(filters: [EQFilter]) {
+        graphHost.rootView = FrequencyResponseView(filters: filters, sampleRate: sampleRate, minimal: true)
     }
 
     private func makeSliderRow(_ axis: Axis, value: Double) -> NSView {

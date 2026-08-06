@@ -1,5 +1,5 @@
 #+TITLE: CoreEQ Architecture Proposal
-#+SUBTITLE: One filter chain, three depths of access
+#+SUBTITLE: One filter chain, two editors, three depths of access
 #+DATE: <2026-08-06 Thu>
 #+OPTIONS: toc:3 num:nil
 
@@ -57,13 +57,14 @@ Preset
 {
     Name
     Filters
+    Preamp
 }
 #+end_src
 
 That is the whole preset. A built-in preset is eleven band filters carrying
 that preset's gains. =Flat= is eleven band filters at 0 dB, which is to say
-nothing at all — a 0 dB filter is already identity in =PeakingFilter= and costs
-no processing.
+nothing at all — a 0 dB filter is already identity in =Biquad= and costs no
+processing.
 
 Identity stays the name, as today. There is no UUID — nothing in this proposal
 needs preset identity to change, and changing it would cost a migration for no
@@ -118,29 +119,27 @@ Spotify equalizer already knows how to operate.
 
 ** Filters
 
-One collapsed row at the bottom of =EqualizerDetailView=, below the sliders:
+A =Graphic= / =Parametric= tab pair in the window header switches the editing
+area below the graph. The tab changes the controls and nothing else — same
+preset, same chain, same curve, same audio — and the editing area is a fixed
+height so nothing above it moves when you switch.
 
 #+begin_src text
- Band Levels                                    ⏻
- ▐  ▐  ▐  ▐  ▐  ▐  ▐  ▐  ▐  ▐  ▐
- 32 64 125 250 500 1k 2k 4k 8k 16k 20k
+ [ Graphic | Parametric ]                    Classical ▾   Reset
 
- ▸ Filters — None
+ Parametric Bands — 2 bands                            ⏻   │ Global Gain
+   ● Bell         180 Hz    −3.0 dB    Q 1.20              │     ▐
+   ● High Shelf     8 kHz   −2.0 dB    Q 0.70              │   2.0 dB
+ + Add Band                                               │   Preamp
 #+end_src
 
-Expanded:
+The Graphic tab is the default and is what a user who knows the Apple Music or
+Spotify equalizer already knows how to operate. Each tab keeps its own power
+switch over its half of the chain, so either half can be heard on its own —
+which is what teaches that both feed the one curve above.
 
-#+begin_src text
- ▾ Filters                                   ⏻  +
-   ● Bell         180 Hz    −3.0 dB    Q 1.20
-   ● High Shelf     8 kHz   −2.0 dB    Q 0.70
-#+end_src
-
-Collapsed by default, state remembered. A user who never opens it sees the
-application exactly as it is now, plus one quiet line.
-
-Once someone expands the section they have opted in, so the controls inside use
-the standard vocabulary — Bell, Low Shelf, High Shelf, High Pass, Low Pass, and
+Choosing the Parametric tab is opting in, so the controls there use the
+standard vocabulary — Bell, Low Shelf, High Shelf, High Pass, Low Pass, and
 Q labelled Q. Renaming Q to something friendlier helps nobody: the casual user
 still does not want it, and the knowledgeable user then has to guess whether it
 means Q, bandwidth, or octaves. The deep end is hidden well rather than made
@@ -158,7 +157,10 @@ enabled filter, band and free alike. That curve is what reaches the speakers.
 ** Two kinds of point
 
 Band handles sit at the eleven ladder positions and move vertically only. Free
-filter nodes move in both axes, with a modifier drag or scroll for Q.
+filter nodes move in both axes — horizontally for frequency, vertically for
+gain. Q is set numerically in the list rather than by dragging: the graph is
+where a filter is dialled in by feel, the list is where it is set exactly, and
+one of the two has to be the precise one.
 
 The constraint is the explanation: a band handle physically cannot be dragged
 sideways, so the difference between a locked band and a free filter is learned
@@ -167,8 +169,8 @@ band handles small and on the ladder positions, filter nodes larger and ringed.
 
 ** Creating filters from the graph
 
-While the Filters section is collapsed the graph behaves exactly as it does
-today, and a filter cannot be created by accident. While it is expanded,
+While the Graphic tab is showing, the graph behaves exactly as it does today and
+a filter cannot be created by accident. While the Parametric tab is showing,
 double-clicking empty graph space creates a bell at that frequency and gain and
 adds it to the list.
 
@@ -189,7 +191,7 @@ These are the guarantees the design exists to provide.
 2. The graph shows the sum of the whole chain. It is exact.
 3. Where those two differ, a faint tick on the slider track marks the total at
    that frequency.
-4. A preset sets the entire chain.
+4. A preset sets the entire chain, including its output trim.
 5. Nothing is ever fitted, estimated, or redistributed.
 
 ** The tick
@@ -218,8 +220,10 @@ but something else is."
 
 A band is a filter with two parameters locked. Unlocking is therefore not a
 conversion but a change of one field: clear the slot index, and the filter
-leaves the slider strip for the list with its frequency, gain, and Q intact.
-The coefficients are unchanged, so the sound is identical across the operation.
+leaves the slider strip for the list with its kind, frequency, gain, and Q
+intact. Its slot stays in the strip at 0 dB — identity — so the ladder keeps
+its eleven sliders and the chain sums to exactly what it did before. The
+coefficients are unchanged, so the sound is identical across the operation.
 
 This is offered as *Edit as filter* in a slider's context menu, and it is the
 direct answer to the most requested feature — "I like what 125 Hz is doing, but
@@ -250,10 +254,13 @@ without change. Saving a user preset captures the whole chain.
 An earlier draft of this document proposed a Graphic Layer and a Parametric
 Layer edited through separate modes. Both ideas are dropped.
 
-*Modes.* The stated aim is that a user never wonders which equalizer is active.
-Two tabs guarantee they will, because a mode is a thing you have to keep track
-of. Eleven sliders and a short filter list fit on one screen, so nothing is
-gained by hiding either behind the other.
+*Modes.* An earlier revision put both editors on one screen, with the filter
+list in a collapsed section under the sliders, on the grounds that a mode is a
+thing the user has to keep track of. That lost to the practical objection: the
+two editors plus the graph plus the output row did not fit a window that also
+had to stay smaller than a laptop screen. Tabs are the compromise, and the cost
+is contained by the rule above — a tab switches the controls and nothing else,
+so there is no state to keep track of beyond which tool is in your hand.
 
 *Layers.* Two arrays summed by the engine is a correct model, but the summing
 is the only thing it adds — and a single array already sums. The layer split
@@ -289,15 +296,35 @@ right.
 - =QuickTone= is unaffected: it offsets band gains by slot, and slots still
   exist.
 
+* Global gain
+
+=EQProfile.preamp= is an output trim in dB, applied after the whole chain by
+=EQProcessor= and smoothed on the same path as the band gains. It belongs to the
+preset because it is a property of the sound the preset describes, and it is
+saved and restored with it.
+
+Two filters can boost the same frequency and the chain cannot know how much
+headroom the source had, so a boosted preset can ask for more than there is.
+This is where it is given back. The response curve includes it — the curve is
+what you hear — and so does the total under each slider.
+
+Automatic trim from the computed peak is not implemented; the control is manual.
+
+* Output volume
+
+The row that names the output device also carries the system output volume: a
+mute button, a slider, and a percentage. This is the device's own volume, not
+CoreEQ's gain — it reads and writes =kAudioDevicePropertyVolumeScalar= on the
+default output and follows changes made from the Sound menu or the volume keys.
+
+Outputs that expose no settable volume, which is common for digital ones, keep
+the control in place but disabled, so switching devices never reflows the row.
+
 * Deferred
 
 Out of scope here, but the shape above should not have to change to accept
 them.
 
-- *Preamp and headroom.* Two filters boosting the same frequency compounds, and
-  the first user to stack a band and a free filter will clip. The preset schema
-  should reserve the field now even if nothing sets it, so this does not become
-  a second migration.
 - *Ladder Q.* At Q 1.41 and octave spacing, eleven equal slider settings do not
   produce a flat curve — the response peaks at the centres and sags between
   them. Because CoreEQ draws the true response rather than a decorative spline,

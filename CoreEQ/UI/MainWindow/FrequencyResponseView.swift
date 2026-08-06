@@ -1,30 +1,51 @@
 import SwiftUI
 
-/// Composite frequency response of the current EQ bands, drawn on a
-/// frequency / dB grid. The x-axis is band-aligned: each band's center sits
-/// exactly above its slider column in the main window, with logarithmic
-/// interpolation between bands.
+/// Composite frequency response of the whole filter chain, drawn on a
+/// frequency / dB grid. The x-axis is band-aligned: each ladder band's centre
+/// sits exactly above its slider column in the main window, with logarithmic
+/// interpolation between bands. Free filters sit wherever their frequency puts
+/// them and never move the grid.
 ///
-/// The magnitude math comes from `PeakingFilter`, the same type `EQProcessor`
-/// renders with, so the curve shows what the audio path actually does at the
-/// engine's sample rate (for example, the 20 kHz band flattens out when the
-/// output device runs at 44.1 kHz).
+/// The magnitude math comes from `Biquad`, the same type `EQProcessor` renders
+/// with, so the curve shows what the audio path actually does at the engine's
+/// sample rate (for example, the 20 kHz band flattens out when the output
+/// device runs at 44.1 kHz).
 ///
-/// The band dots are interactive handles: dragging one vertically adjusts the
-/// band's gain (snapped to the same 0.5 dB step as the sliders), and a
-/// double-click resets the band to the active profile's original value.
-/// Frequencies are fixed by design, so dragging is vertical-only.
+/// Two kinds of point sit on the plot, and the difference between them is
+/// enforced by the drag rather than explained by a label:
+///
+/// - *Band handles* are locked to the ladder, so they move vertically only.
+/// - *Filter nodes* are free, so they move in both axes.
+///
+/// Double-click resets a point's gain to 0 dB. With `allowsFilterCreation` set —
+/// which the main window ties to the Filters section being open — double-
+/// clicking empty space creates a filter there instead, so a user who never
+/// opens that section can never make one by accident.
 struct FrequencyResponseView: View {
-    let bands: [EQBand]
+    /// The whole chain: ladder filters and free filters together.
+    let filters: [EQFilter]
     let sampleRate: Double
+
+    /// Output trim in dB, applied after the chain. The curve is what you hear,
+    /// so it moves with the trim just as the audio does.
+    var preamp: Double = 0
+
     /// Log-spaced spectrum points (ascending frequency, level 0...1) drawn as a
     /// backdrop behind the grid and curve. Empty hides the backdrop.
     var spectrum: [SpectrumAnalyzer.Point] = []
-    var onGainChange: ((_ bandIndex: Int, _ gain: Double) -> Void)?
-    var onBandReset: ((_ bandIndex: Int) -> Void)?
+
+    var onBandGainChange: ((_ slot: Int, _ gain: Double) -> Void)?
+    var onBandReset: ((_ slot: Int) -> Void)?
+    var onFilterMove: ((_ id: UUID, _ frequency: Double, _ gain: Double) -> Void)?
+    var onFilterReset: ((_ id: UUID) -> Void)?
+    var onFilterCreate: ((_ frequency: Double, _ gain: Double) -> Void)?
+
+    /// Whether double-clicking empty space creates a filter. Off unless the
+    /// user has opened the Filters section.
+    var allowsFilterCreation = false
 
     /// Compact, read-only presentation for the menu-bar Quick EQ: no grid,
-    /// labels, band handles, or interaction — just the smooth curve, resembling
+    /// labels, handles, or interaction — just the smooth curve, resembling
     /// Apple's EQ preview. Defaults to the full interactive plot.
     var minimal = false
 
@@ -32,11 +53,19 @@ struct FrequencyResponseView: View {
     /// where the enclosing section card already supplies the surface.
     var showsBackground = true
 
-    @State private var draggedBandIndex: Int?
-    @State private var hoveredBandIndex: Int?
+    /// A grabbable point on the plot. Bands are addressed by ladder slot and
+    /// free filters by identity, so neither can be confused for the other when
+    /// the chain changes under a drag.
+    private enum Handle: Equatable {
+        case band(Int)
+        case filter(UUID)
+    }
+
+    @State private var dragged: Handle?
+    @State private var hovered: Handle?
 
     /// Display range. Slightly wider than the ±12 dB slider range because
-    /// overlapping bands can sum a few dB past a single band's maximum.
+    /// overlapping filters can sum a few dB past a single one's maximum.
     private static let maxDB = 14.0
     private static let curvePointCount = 160
     private static let handleHitRadius: CGFloat = 14
@@ -52,7 +81,20 @@ struct FrequencyResponseView: View {
     /// has no labels and so no gutter.
     private var axisGutter: CGFloat { minimal ? 0 : Theme.axisGutter }
 
-    /// Band center frequencies, ascending — the anchors of the x-axis.
+    /// The ladder filters, in slot order.
+    private var bands: [EQFilter] {
+        filters.filter(\.isBand).sorted { ($0.band ?? 0) < ($1.band ?? 0) }
+    }
+
+    private var freeFilters: [EQFilter] {
+        filters.filter { !$0.isBand }
+    }
+
+    /// Band centre frequencies, ascending — the anchors of the x-axis.
+    ///
+    /// Deliberately the ladder alone: a free filter must never shift the grid or
+    /// the frequency labels, or adding one would move every other point on the
+    /// plot sideways.
     private var anchors: [Double] { bands.map(\.frequency).sorted() }
 
     var body: some View {
@@ -67,18 +109,19 @@ struct FrequencyResponseView: View {
                 Canvas { context, _ in
                     drawSpectrum(context, size)
                     drawGrid(context, size)
-                    drawBandCurve(context, size)
+                    drawHighlightedFilterCurve(context, size)
                     drawCurve(context, size)
                     drawBandMarkers(context, size)
+                    drawFilterNodes(context, size)
                 }
                 .gesture(dragGesture(size))
                 .simultaneousGesture(doubleClickGesture(size))
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let location):
-                        hoveredBandIndex = bandIndex(near: location, size)
+                        hovered = handle(near: location, size)
                     case .ended:
-                        hoveredBandIndex = nil
+                        hovered = nil
                     }
                 }
             }
@@ -99,63 +142,100 @@ struct FrequencyResponseView: View {
         // of a double-click) from grabbing a handle and jittering its gain.
         DragGesture(minimumDistance: 3)
             .onChanged { value in
-                guard let index = draggedBandIndex ?? bandIndex(near: value.startLocation, size) else { return }
-                draggedBandIndex = index
-                onGainChange?(index, snappedGain(atY: value.location.y, size))
+                guard let handle = dragged ?? handle(near: value.startLocation, size) else { return }
+                dragged = handle
+                switch handle {
+                case .band(let slot):
+                    // Locked to the ladder: vertical only.
+                    onBandGainChange?(slot, snappedGain(atY: value.location.y, size))
+                case .filter(let id):
+                    guard let filter = freeFilters.first(where: { $0.id == id }) else { return }
+                    let frequency = frequency(atFraction: fraction(atX: value.location.x, size))
+                    // A high or low pass has no gain to drag, so it stays on the
+                    // 0 dB line and only its frequency follows the pointer.
+                    let gain = filter.kind.usesGain ? snappedGain(atY: value.location.y, size) : filter.gain
+                    onFilterMove?(id, frequency, gain)
+                }
             }
             .onEnded { _ in
-                draggedBandIndex = nil
+                dragged = nil
             }
     }
 
     private func doubleClickGesture(_ size: CGSize) -> some Gesture {
         SpatialTapGesture(count: 2)
             .onEnded { value in
-                if let index = bandIndex(near: value.location, size) {
-                    onBandReset?(index)
+                switch handle(near: value.location, size) {
+                case .band(let slot):
+                    onBandReset?(slot)
+                case .filter(let id):
+                    onFilterReset?(id)
+                case nil:
+                    guard allowsFilterCreation else { return }
+                    onFilterCreate?(
+                        frequency(atFraction: fraction(atX: value.location.x, size)),
+                        snappedGain(atY: value.location.y, size)
+                    )
                 }
             }
     }
 
-    /// The band whose handle is within grabbing distance of `location`,
-    /// preferring the nearest when handles are close together.
-    private func bandIndex(near location: CGPoint, _ size: CGSize) -> Int? {
-        var best: (index: Int, distance: CGFloat)?
-        for index in bands.indices {
-            let distance = hypot(
-                location.x - handleCenter(at: index, size).x,
-                location.y - handleCenter(at: index, size).y
-            )
-            if distance <= Self.handleHitRadius, distance < (best?.distance ?? .infinity) {
-                best = (index, distance)
+    /// The point within grabbing distance of `location`, preferring the nearest.
+    /// Free filters are tested first: they are drawn on top, so they should be
+    /// grabbed first where the two overlap.
+    private func handle(near location: CGPoint, _ size: CGSize) -> Handle? {
+        var best: (handle: Handle, distance: CGFloat)?
+
+        func consider(_ handle: Handle, _ center: CGPoint, bias: CGFloat) {
+            let distance = hypot(location.x - center.x, location.y - center.y)
+            guard distance <= Self.handleHitRadius else { return }
+            if distance - bias < (best?.distance ?? .infinity) {
+                best = (handle, distance - bias)
             }
         }
-        return best?.index
+
+        for filter in freeFilters {
+            consider(.filter(filter.id), filterNodeCenter(filter, size), bias: Self.handleHitRadius / 2)
+        }
+        for (slot, band) in bands.enumerated() {
+            consider(.band(slot), bandHandleCenter(band, size), bias: 0)
+        }
+        return best?.handle
     }
 
-    /// Gain for a handle dragged to vertical position `y`, clamped to the
-    /// slider range and snapped to the sliders' 0.5 dB step so the curve and
-    /// the sliders always agree.
+    /// Gain for a point dragged to vertical position `y`, clamped to the slider
+    /// range and snapped to the 0.5 dB step used across the app, so the curve
+    /// and the numeric readouts always agree.
     private func snappedGain(atY y: CGFloat, _ size: CGSize) -> Double {
-        // Inverse of `yPosition`, so a dragged handle tracks the pointer exactly.
+        // Inverse of `yPosition`, so a dragged point tracks the pointer exactly.
         let dB = Self.maxDB * (1.0 - 2.0 * Double(y / plotHeight(size)))
         let range = BuiltInProfiles.gainRange
         let clamped = min(max(dB, range.lowerBound), range.upperBound)
         return (clamped * 2).rounded() / 2
     }
 
+    private func fraction(atX x: CGFloat, _ size: CGSize) -> Double {
+        Double(min(max((x - axisGutter) / plotWidth(size), 0), 1))
+    }
+
     /// Where a band's handle sits: at the band's own gain.
     ///
     /// Deliberately *not* on the composite curve. The handle is the filter — its
     /// height is the parameter being edited, so it matches the band's slider and
-    /// its readout exactly, and moving one band never shifts another band's
-    /// handle. Because the bands overlap by an octave the summed curve rides
-    /// above the handles, which `drawBandCurve` explains by drawing the
-    /// highlighted band's own bell underneath it.
-    private func handleCenter(at index: Int, _ size: CGSize) -> CGPoint {
+    /// its readout exactly, and moving one filter never shifts another's handle.
+    /// Because the bands overlap by an octave the summed curve rides above the
+    /// handles, which `drawHighlightedFilterCurve` explains by drawing the
+    /// highlighted filter's own response underneath it.
+    private func bandHandleCenter(_ band: EQFilter, _ size: CGSize) -> CGPoint {
+        CGPoint(x: xPosition(band.frequency, size), y: yPosition(band.gain, size))
+    }
+
+    /// Same rule for a free filter, except that a high or low pass has no gain
+    /// and so rides the 0 dB line.
+    private func filterNodeCenter(_ filter: EQFilter, _ size: CGSize) -> CGPoint {
         CGPoint(
-            x: xPosition(bands[index].frequency, size),
-            y: yPosition(bands[index].gain, size)
+            x: xPosition(filter.frequency, size),
+            y: yPosition(filter.kind.usesGain ? filter.gain : 0, size)
         )
     }
 
@@ -244,31 +324,37 @@ struct FrequencyResponseView: View {
         }
     }
 
-    /// The highlighted band's own filter, on its own, under the composite.
+    /// The highlighted point's own filter, on its own, under the composite.
     ///
-    /// This is what makes the handles legible. The bands overlap by an octave,
-    /// so the summed curve sits above any single band's gain and the handles
-    /// appear to float off it. Showing the one bell the handle belongs to —
-    /// peaking exactly at the handle — makes it plain that the bold line is the
-    /// sum of eleven of these, not the thing being dragged.
-    private func drawBandCurve(_ context: GraphicsContext, _ size: CGSize) {
-        guard let index = draggedBandIndex ?? hoveredBandIndex, bands.indices.contains(index) else { return }
-        let filter = PeakingFilter(band: bands[index], sampleRate: sampleRate)
+    /// This is what makes the points legible. Filters overlap, so the summed
+    /// curve sits above any single one's gain and a handle appears to float off
+    /// it. Showing the one response the handle belongs to — peaking exactly at
+    /// the handle — makes it plain that the bold line is the sum of the whole
+    /// chain, not the thing being dragged.
+    private func drawHighlightedFilterCurve(_ context: GraphicsContext, _ size: CGSize) {
+        guard let handle = dragged ?? hovered else { return }
+        let source: EQFilter?
+        switch handle {
+        case .band(let slot): source = bands[safe: slot]
+        case .filter(let id): source = freeFilters.first { $0.id == id }
+        }
+        guard let source else { return }
+        let biquad = Biquad(filter: source, sampleRate: sampleRate)
 
-        var bell = Path()
+        var response = Path()
         for step in 0..<Self.curvePointCount {
             let fraction = Double(step) / Double(Self.curvePointCount - 1)
-            let dB = filter.magnitudeDB(at: frequency(atFraction: fraction), sampleRate: sampleRate)
+            let dB = biquad.magnitudeDB(at: frequency(atFraction: fraction), sampleRate: sampleRate)
             let point = CGPoint(x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
             if step == 0 {
-                bell.move(to: point)
+                response.move(to: point)
             } else {
-                bell.addLine(to: point)
+                response.addLine(to: point)
             }
         }
 
         context.stroke(
-            bell,
+            response,
             with: .color(.coreEQAccent.opacity(0.5)),
             style: StrokeStyle(lineWidth: 1, lineJoin: .round, dash: [3, 3])
         )
@@ -306,15 +392,15 @@ struct FrequencyResponseView: View {
     }
 
     private func drawBandMarkers(_ context: GraphicsContext, _ size: CGSize) {
-        let highlightedIndex = draggedBandIndex ?? hoveredBandIndex
-        for (index, band) in bands.enumerated() {
+        for (slot, band) in bands.enumerated() {
+            let isHighlighted = (dragged ?? hovered) == .band(slot)
             // Bands the processor turns into identity filters (at or above
             // Nyquist for the current sample rate) are shown dimmed.
-            let isActive = PeakingFilter.isActive(
-                frequency: band.frequency, gain: band.gain, sampleRate: sampleRate
-            ) || band.gain == 0
-            let center = handleCenter(at: index, size)
-            let radius: CGFloat = index == highlightedIndex ? 6 : 5
+            let isActive = band.isEnabled && (Biquad.isActive(
+                kind: band.kind, frequency: band.frequency, gain: band.gain, sampleRate: sampleRate
+            ) || band.gain == 0)
+            let center = bandHandleCenter(band, size)
+            let radius: CGFloat = isHighlighted ? 6 : 5
             let dot = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
 
             // Logic Pro's handle: a white core inside an accent ring, which
@@ -323,34 +409,77 @@ struct FrequencyResponseView: View {
             context.stroke(
                 dot,
                 with: .color(.coreEQAccent.opacity(isActive ? 1.0 : 0.35)),
-                lineWidth: index == highlightedIndex ? 2.5 : 2
+                lineWidth: isHighlighted ? 2.5 : 2
             )
         }
 
-        // Gain readout above the handle while dragging.
-        if let index = draggedBandIndex, bands.indices.contains(index) {
-            let band = bands[index]
-            let center = handleCenter(at: index, size)
-            let label = Text(BandFormat.gain(band.gain))
-                .font(.system(size: 11, weight: .medium).monospacedDigit())
-                .foregroundStyle(.primary)
-            let position = CGPoint(
-                x: min(max(center.x, 26), size.width - 26),
-                y: max(center.y - 12, 14)
-            )
-            context.draw(label, at: position, anchor: .bottom)
+        if case .band(let slot)? = dragged, let band = bands[safe: slot] {
+            drawGainLabel(context, size, center: bandHandleCenter(band, size), gain: band.gain)
         }
+    }
+
+    /// Free filters, drawn larger than the band handles and with an outer ring.
+    ///
+    /// The size difference is the visual half of the same distinction the drag
+    /// enforces: these are the points that move in two axes.
+    private func drawFilterNodes(_ context: GraphicsContext, _ size: CGSize) {
+        for (index, filter) in freeFilters.enumerated() {
+            let isHighlighted = (dragged ?? hovered) == .filter(filter.id)
+            let isActive = filter.isEnabled && Biquad.isActive(
+                kind: filter.kind, frequency: filter.frequency, gain: filter.gain, sampleRate: sampleRate
+            )
+            let center = filterNodeCenter(filter, size)
+            let radius: CGFloat = isHighlighted ? 8 : 7
+            let core = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+            let ring = Path(ellipseIn: CGRect(x: center.x - radius - 3, y: center.y - radius - 3, width: (radius + 3) * 2, height: (radius + 3) * 2))
+
+            context.stroke(ring, with: .color(.coreEQAccent.opacity(isActive ? 0.45 : 0.2)), lineWidth: 1)
+            context.fill(core, with: .color(.white.opacity(isActive ? 0.95 : 0.35)))
+            context.stroke(
+                core,
+                with: .color(.coreEQAccent.opacity(isActive ? 1.0 : 0.35)),
+                lineWidth: isHighlighted ? 2.5 : 2
+            )
+
+            let number = Text("\(index + 1)")
+                .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                .foregroundStyle(Color.black.opacity(isActive ? 0.7 : 0.3))
+            context.draw(number, at: center, anchor: .center)
+        }
+
+        if case .filter(let id)? = dragged, let filter = freeFilters.first(where: { $0.id == id }) {
+            let center = filterNodeCenter(filter, size)
+            let text = filter.kind.usesGain
+                ? "\(BandFormat.frequency(filter.frequency)) Hz  \(BandFormat.gain(filter.gain))"
+                : "\(BandFormat.frequency(filter.frequency)) Hz"
+            drawLabel(context, size, center: center, text: text)
+        }
+    }
+
+    private func drawGainLabel(_ context: GraphicsContext, _ size: CGSize, center: CGPoint, gain: Double) {
+        drawLabel(context, size, center: center, text: BandFormat.gain(gain))
+    }
+
+    private func drawLabel(_ context: GraphicsContext, _ size: CGSize, center: CGPoint, text: String) {
+        let label = Text(text)
+            .font(.system(size: 11, weight: .medium).monospacedDigit())
+            .foregroundStyle(.primary)
+        let position = CGPoint(
+            x: min(max(center.x, 60), size.width - 60),
+            y: max(center.y - 14, 14)
+        )
+        context.draw(label, at: position, anchor: .bottom)
     }
 
     // MARK: - Response math (mirrors EQProcessor)
 
     private func responsePoints(_ size: CGSize) -> [CGPoint] {
-        let filters = bands.map { PeakingFilter(band: $0, sampleRate: sampleRate) }
+        let biquads = filters.map { Biquad(filter: $0, sampleRate: sampleRate) }
 
         return (0..<Self.curvePointCount).map { index in
             let fraction = Double(index) / Double(Self.curvePointCount - 1)
             let frequency = frequency(atFraction: fraction)
-            let dB = filters.reduce(0.0) { $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate) }
+            let dB = biquads.reduce(preamp) { $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate) }
             return CGPoint(x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
         }
     }
@@ -382,7 +511,8 @@ struct FrequencyResponseView: View {
         return 1
     }
 
-    /// Inverse of `axisFraction`, used to sweep the curve.
+    /// Inverse of `axisFraction`, used to sweep the curve and to turn a pointer
+    /// position into the frequency a dragged filter should take.
     private func frequency(atFraction t: Double) -> Double {
         let anchors = self.anchors
         let n = anchors.count
@@ -431,5 +561,4 @@ struct FrequencyResponseView: View {
         let usable = half - verticalInset
         return half - usable * CGFloat(clamped / Self.maxDB)
     }
-
 }

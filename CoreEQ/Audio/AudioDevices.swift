@@ -174,6 +174,107 @@ enum AudioDevices {
         return buffers.contains { $0.mNumberChannels > 0 }
     }
 
+    // MARK: - Output volume
+
+    /// Output volume of `deviceID` as 0...1, or nil when the device exposes no
+    /// settable volume — digital outputs commonly don't, and the UI has to say
+    /// so rather than show a slider that does nothing.
+    ///
+    /// Devices differ in where they publish volume: some on the main element,
+    /// some only per channel. Both are tried, in that order, and the same order
+    /// is used when writing, so a read always describes what a write would do.
+    static func volume(of deviceID: AudioDeviceID) -> Float? {
+        for element in volumeElements {
+            var address = outputAddress(kAudioDevicePropertyVolumeScalar, element: element)
+            guard AudioObjectHasProperty(deviceID, &address) else { continue }
+            var value = Float(0)
+            var size = UInt32(MemoryLayout<Float>.size)
+            if AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value) == noErr {
+                return min(max(value, 0), 1)
+            }
+        }
+        return nil
+    }
+
+    @discardableResult
+    static func setVolume(_ volume: Float, of deviceID: AudioDeviceID) -> Bool {
+        var value = min(max(volume, 0), 1)
+        var wrote = false
+        for element in volumeElements {
+            var address = outputAddress(kAudioDevicePropertyVolumeScalar, element: element)
+            var settable = DarwinBoolean(false)
+            guard AudioObjectHasProperty(deviceID, &address),
+                  AudioObjectIsPropertySettable(deviceID, &address, &settable) == noErr,
+                  settable.boolValue else { continue }
+
+            let status = AudioObjectSetPropertyData(
+                deviceID, &address, 0, nil, UInt32(MemoryLayout<Float>.size), &value
+            )
+            if status == noErr {
+                wrote = true
+                // The main element covers every channel at once; per-channel
+                // devices need each one written, so only the main element ends
+                // the loop early.
+                if element == kAudioObjectPropertyElementMain { return true }
+            }
+        }
+        if !wrote {
+            logger.debug("device \(deviceID) refused a volume write")
+        }
+        return wrote
+    }
+
+    static func canSetVolume(of deviceID: AudioDeviceID) -> Bool {
+        volumeElements.contains { element in
+            var address = outputAddress(kAudioDevicePropertyVolumeScalar, element: element)
+            var settable = DarwinBoolean(false)
+            return AudioObjectHasProperty(deviceID, &address)
+                && AudioObjectIsPropertySettable(deviceID, &address, &settable) == noErr
+                && settable.boolValue
+        }
+    }
+
+    static func isMuted(of deviceID: AudioDeviceID) -> Bool {
+        var address = outputAddress(kAudioDevicePropertyMute)
+        guard AudioObjectHasProperty(deviceID, &address) else { return false }
+        var value = UInt32(0)
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value) == noErr else { return false }
+        return value != 0
+    }
+
+    @discardableResult
+    static func setMuted(_ muted: Bool, of deviceID: AudioDeviceID) -> Bool {
+        var address = outputAddress(kAudioDevicePropertyMute)
+        var settable = DarwinBoolean(false)
+        guard AudioObjectHasProperty(deviceID, &address),
+              AudioObjectIsPropertySettable(deviceID, &address, &settable) == noErr,
+              settable.boolValue else { return false }
+        var value: UInt32 = muted ? 1 : 0
+        return AudioObjectSetPropertyData(
+            deviceID, &address, 0, nil, UInt32(MemoryLayout<UInt32>.size), &value
+        ) == noErr
+    }
+
+    /// Main element first, then the stereo pair — the order both the read and
+    /// the write walk.
+    private static let volumeElements: [AudioObjectPropertyElement] = [
+        kAudioObjectPropertyElementMain, 1, 2,
+    ]
+
+    static func outputVolumeAddress() -> AudioObjectPropertyAddress {
+        outputAddress(kAudioDevicePropertyVolumeScalar)
+    }
+
+    private static func outputAddress(
+        _ selector: AudioObjectPropertySelector,
+        element: AudioObjectPropertyElement = kAudioObjectPropertyElementMain
+    ) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: selector, mScope: kAudioObjectPropertyScopeOutput, mElement: element
+        )
+    }
+
     private static func address(
         _ selector: AudioObjectPropertySelector,
         scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal

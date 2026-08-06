@@ -1,16 +1,36 @@
 import Foundation
 
 /// The predefined profiles shipped with CoreEQ — the classic Apple/Spotify
-/// preset set, mapped onto the band layout below. All profiles share the same
-/// fixed center frequencies so switching between them only changes gains.
+/// preset set, mapped onto the band ladder below. Every built-in profile is
+/// eleven ladder filters and nothing else, so selecting one clears any filters
+/// the user added by hand and "Flat" means flat.
 ///
-/// The layout is the professional ISO octave graphic-EQ ladder (32 Hz – 16 kHz)
+/// The ladder is the professional ISO octave graphic-EQ layout (32 Hz – 16 kHz)
 /// extended with 20 kHz to cover the top of the audible range. Q of 1.41 gives
-/// each peaking filter a one-octave bandwidth, matching the spacing.
+/// each band a one-octave bandwidth, matching the spacing.
 enum BuiltInProfiles {
     static let frequencies: [Double] = [32, 64, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000, 20_000]
     static let defaultQ = 1.41
     static let gainRange: ClosedRange<Double> = -12...12
+
+    /// Number of ladder slots, and so the number of sliders. Fixed by design:
+    /// arbitrary centre frequencies live in free filters, not in a reshaped
+    /// ladder.
+    static var bandCount: Int { frequencies.count }
+
+    /// How many filters the user may add on top of the ladder.
+    ///
+    /// A budget rather than a formality: each one is another pass over the
+    /// buffer in `EQProcessor.processChannel`, and a listening application has
+    /// no use for thirty of them.
+    static let maxFreeFilters = 16
+
+    /// Output trim range, matching the band range so the two read as one scale.
+    static let preampRange: ClosedRange<Double> = -12...12
+
+    /// Limits for the free filters' own parameters.
+    static let filterFrequencyRange: ClosedRange<Double> = 20...20_000
+    static let filterQRange: ClosedRange<Double> = 0.1...10
 
     static let all: [EQProfile] = [
         profile("Flat",           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
@@ -39,11 +59,17 @@ enum BuiltInProfiles {
 
     static let defaultProfileName = "Flat"
 
+    /// A chain of eleven ladder filters at 0 dB — the shape every preset starts
+    /// from, and what an untouched equalizer is.
+    static func emptyBandChain() -> [EQFilter] {
+        (0..<bandCount).map { EQFilter.band(slot: $0, gain: 0) }
+    }
+
     private static func profile(_ name: String, _ gains: [Double]) -> EQProfile {
         assert(gains.count == frequencies.count)
         return EQProfile(
             name: name,
-            bands: zip(frequencies, gains).map { EQBand(frequency: $0, gain: $1) },
+            filters: gains.enumerated().map { EQFilter.band(slot: $0, gain: $1) },
             isBuiltIn: true
         )
     }

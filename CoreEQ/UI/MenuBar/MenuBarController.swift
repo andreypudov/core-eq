@@ -140,7 +140,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func quickEQItem() -> NSMenuItem {
         let body = QuickEQBodyView(
-            bands: profileManager.currentBands,
+            filters: profileManager.currentFilters,
             tone: profileManager.tone,
             sampleRate: audioEngine.sampleRate
         ) { [weak self] axis, value in
@@ -340,7 +340,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         case .mid: profileManager.setTone(mid: value)
         case .treble: profileManager.setTone(treble: value)
         }
-        quickEQBody?.refreshGraph(bands: profileManager.currentBands)
+        quickEQBody?.refreshGraph(filters: profileManager.currentFilters)
     }
 
     @objc private func openWindow(_ sender: NSMenuItem) {
