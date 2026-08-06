@@ -22,6 +22,14 @@ enum Theme {
     /// Inset between a content block's border and what it contains.
     static let blockPadding: CGFloat = 12
 
+    /// Width of the output device control on the bottom row. Fixed rather than
+    /// sized to the device name, so the volume slider beside it can be measured
+    /// against something that doesn't change when the device does.
+    static let outputControlWidth: CGFloat = 220
+
+    /// Height of the bottom row, set by the large pop-up button in it.
+    static let outputRowHeight: CGFloat = 32
+
     /// Width of the Preamp column beside the editor: a centred track, plus room
     /// on the right for the scale that hangs off it, and nothing spare.
     static let globalGainWidth: CGFloat = 116

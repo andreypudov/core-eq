@@ -325,42 +325,59 @@ struct EqualizerDetailView: View {
 
     // MARK: - Output
 
-    /// A plain label and the current device, the way Finder and Music name one —
-    /// no card of its own. The device is a native pop-up button while there is
-    /// something to choose between, and plain text when there isn't. An engine
-    /// warning joins it on the rare occasions the audio path isn't healthy.
+    /// Volume on the centreline of the content column, the device it is going to
+    /// on the right. No "Output" label — a pop-up naming a speaker needs no
+    /// caption. An engine warning joins the device on the rare occasions the
+    /// audio path isn't healthy.
     private var outputRow: some View {
-        HStack(spacing: 12) {
-            Text("Output")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
+        GeometryReader { proxy in
+            ZStack {
+                // Centred on the column, not on what's left after the device
+                // control — so it lines up with the plot and the editor above it.
+                volumeControl(sliderWidth: volumeSliderWidth(rowWidth: proxy.size.width))
 
-            if outputs.hasChoice {
-                devicePicker
-            } else {
-                deviceName
-            }
+                HStack(spacing: 12) {
+                    Spacer(minLength: 0)
 
-            Spacer(minLength: 16)
+                    if let warning = engineWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .help(audioEngine.status.description)
+                    }
 
-            volumeControl
-
-            if let warning = engineWarning {
-                Label(warning, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(audioEngine.status.description)
+                    if outputs.hasChoice {
+                        devicePicker
+                    } else {
+                        deviceName
+                    }
+                }
             }
         }
+        .frame(height: Theme.outputRowHeight)
+    }
+
+    /// How wide the volume slider can be before it would collide with the device
+    /// control.
+    ///
+    /// The control is centred, so it grows in both directions at once: every
+    /// point the slider gains on the right it also gains on the left. That is
+    /// why the device control's width counts twice here.
+    private func volumeSliderWidth(rowWidth: CGFloat) -> CGFloat {
+        let chrome: CGFloat = 18 + 8 + 34 + 8   // icon, gap, percentage, gap
+        let available = rowWidth
+            - 2 * (Theme.outputControlWidth + Theme.Spacing.inner)
+            - chrome
+        return max(available, 120)
     }
 
     /// System output volume, on the row that already says where the sound is
     /// going. Not CoreEQ's own gain — this moves the output device itself, the
     /// same value the Sound menu and the volume keys show, and it follows those
     /// when they change it.
-    private var volumeControl: some View {
+    private func volumeControl(sliderWidth: CGFloat) -> some View {
         HStack(spacing: 8) {
             Button {
                 outputs.toggleMuted()
@@ -383,7 +400,7 @@ struct EqualizerDetailView: View {
                 ),
                 in: 0...1
             )
-            .frame(width: 112)
+            .frame(width: sliderWidth)
             .disabled(!outputs.canSetVolume)
             .accessibilityLabel("Output volume")
 
@@ -420,7 +437,7 @@ struct EqualizerDetailView: View {
         // Large is the system's own bigger pop-up metrics — taller, roomier
         // inside — rather than a small button padded out by hand.
         .controlSize(.large)
-        .fixedSize()
+        .frame(width: Theme.outputControlWidth)
         .accessibilityLabel("Output device")
         .accessibilityValue(outputs.defaultDeviceName)
     }
@@ -434,8 +451,9 @@ struct EqualizerDetailView: View {
             .font(.system(size: 13))
             .foregroundStyle(outputs.devices.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
             .labelStyle(.titleAndIcon)
-            .fixedSize()
-            .padding(.leading, 8)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(width: Theme.outputControlWidth, alignment: .trailing)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Output device")
             .accessibilityValue(outputs.defaultDeviceName)
