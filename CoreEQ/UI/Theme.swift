@@ -22,8 +22,9 @@ enum Theme {
     /// Inset between a content block's border and what it contains.
     static let blockPadding: CGFloat = 12
 
-    /// Width of the Global Gain column beside the editor.
-    static let globalGainWidth: CGFloat = 132
+    /// Width of the Preamp column beside the editor: a centred track, plus room
+    /// on the right for the scale that hangs off it, and nothing spare.
+    static let globalGainWidth: CGFloat = 116
 
     /// Fixed height of the editing area, so switching tabs changes the controls
     /// and nothing else — no reflow, no jump in the graph above it.
@@ -39,11 +40,30 @@ enum Theme {
         static let height: CGFloat = 28
     }
 
+    /// The vertical rhythm the Band Levels and Preamp blocks share.
+    ///
+    /// Both are a heading, a strip of reserved space for the gain bubble, a
+    /// track, and a caption. Driving both from these numbers is what keeps the
+    /// preamp track starting and ending exactly level with the band tracks
+    /// beside it.
     enum BandRow {
+        /// Heading row, fixed so the two blocks' headings occupy the same height
+        /// whether or not one of them carries a switch.
+        static let headingHeight: CGFloat = 20
+        /// Caption under a track — a frequency in the strip, the value in the
+        /// preamp column.
+        static let labelHeight: CGFloat = 14
+        /// Everything in the column that isn't the track: the caption and the
+        /// gap above it. Nothing is reserved above the track — the gain readout
+        /// lives in the heading row, so the track starts right under it.
+        static var chromeHeight: CGFloat { 6 + labelHeight }
+        /// Floor for the track when the window is at its shortest.
+        static let minSliderHeight: CGFloat = 96
+
         static let sliderHeight: CGFloat = 146
-        /// Just clears the gain bubble. Any taller and it reads as a gap between
-        /// the "Band Levels" heading and the row it labels.
-        static let readoutHeight: CGFloat = 24
+        /// Height the heading row's gain readout occupies, so the row doesn't
+        /// change height as the readout comes and goes.
+        static let readoutHeight: CGFloat = 18
         static let columnWidth: CGFloat = 26
         static let knobDiameter: CGFloat = 14
         static let trackWidth: CGFloat = 2

@@ -30,6 +30,7 @@
 				UI/MainWindow/EqualizerSidebarView.swift,
 				UI/MainWindow/FilterListView.swift,
 				UI/MainWindow/FrequencyResponseView.swift,
+				UI/MainWindow/GainScale.swift,
 				UI/MainWindow/GlobalGainView.swift,
 				UI/MainWindow/VerticalGainSlider.swift,
 				UI/MainWindow/WindowBackground.swift,

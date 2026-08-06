@@ -398,16 +398,21 @@ final class ProfileManagerTests: XCTestCase {
         XCTAssertEqual(manager.currentPreamp, BuiltInProfiles.preampRange.lowerBound)
     }
 
-    /// The trim shifts the whole curve, so the number under a slider — and the
-    /// tick on its track — has to move with it.
-    func testTotalGainIncludesThePreamp() {
+    /// The trim lifts every frequency equally, so it says nothing about any one
+    /// band. Folding it into the per-band total would put a tick on all eleven
+    /// sliders the moment it left zero.
+    func testTotalGainExcludesThePreamp() {
         let manager = makeManager()
         manager.setActiveProfile(name: "Flat")
         manager.setGain(4, forBandAt: 5)
         manager.setPreamp(-3)
 
-        XCTAssertEqual(manager.totalGain(at: 1_000, sampleRate: 48_000), 1, accuracy: 0.01)
-        XCTAssertEqual(manager.bandFilters[5].gain, 4, "the band still reports only its own gain")
+        XCTAssertEqual(manager.totalGain(at: 1_000, sampleRate: 48_000), 4, accuracy: 0.01)
+
+        // Three octaves up, only the tail of the 1 kHz bell reaches — a few
+        // hundredths of a dB, nowhere near the −3 dB trim. A band nothing
+        // overlaps shows no tick however the trim is set.
+        XCTAssertEqual(manager.totalGain(at: 8_000, sampleRate: 48_000), 0, accuracy: 0.05)
     }
 
     func testPreampIsSavedIntoAndRestoredFromAPreset() {

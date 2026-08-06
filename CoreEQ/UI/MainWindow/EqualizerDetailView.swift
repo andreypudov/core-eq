@@ -162,6 +162,13 @@ struct EqualizerDetailView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .accessibilityAddTraits(.isHeader)
 
+                // The gain readout reads out here rather than in a strip above
+                // the tracks. A strip would push every track down by its own
+                // height whether or not anything was in it; the heading row has
+                // the space already, and more of it than a 26 pt column does.
+                bandReadout
+                    .frame(height: Theme.BandRow.readoutHeight)
+
                 Spacer(minLength: 12)
 
                 Toggle("", isOn: bandsEnabled)
@@ -171,17 +178,26 @@ struct EqualizerDetailView: View {
                     .disabled(!audioEngine.isEnabled)
                     .help("Switch the band levels off to hear the filters on their own")
             }
+            .frame(height: Theme.BandRow.headingHeight)
 
-            HStack(alignment: .top, spacing: 0) {
-                gainAxis
-
-                // Zero spacing keeps each column's center at (i + 0.5) /
-                // bandCount of the remaining width, exactly matching the
-                // response plot's band axis. The breathing room between sliders
-                // comes from each track being far narrower than its column.
+            // The tracks take whatever the heading and captions leave — the same
+            // arithmetic the Preamp column runs, so the two start and end level.
+            GeometryReader { proxy in
+                let trackHeight = max(
+                    proxy.size.height - Theme.BandRow.chromeHeight,
+                    Theme.BandRow.minSliderHeight
+                )
                 HStack(alignment: .top, spacing: 0) {
-                    ForEach(profileManager.bandFilters.indices, id: \.self) { slot in
-                        bandControl(at: slot)
+                    gainAxis(trackHeight: trackHeight)
+
+                    // Zero spacing keeps each column's center at (i + 0.5) /
+                    // bandCount of the remaining width. The breathing room
+                    // between sliders comes from each track being far narrower
+                    // than its column.
+                    HStack(alignment: .top, spacing: 0) {
+                        ForEach(profileManager.bandFilters.indices, id: \.self) { slot in
+                            bandControl(at: slot, trackHeight: trackHeight)
+                        }
                     }
                 }
             }
@@ -218,82 +234,33 @@ struct EqualizerDetailView: View {
         .frame(height: Theme.editorHeight)
     }
 
-    /// dB scale beside the sliders: a value at each extreme and at the
-    /// reference, a dot at every major division. Positioned with the same
-    /// geometry the slider uses, so the marks line up with the knob travel.
-    private var gainAxis: some View {
-        ZStack(alignment: .topTrailing) {
-            Color.clear
-
-            ForEach(Self.axisTicks, id: \.self) { gain in
-                HStack(spacing: 6) {
-                    if Self.labelledTicks.contains(gain) {
-                        Text(BandFormat.axisGain(gain))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-                            .fixedSize()
-                    }
-                    Circle()
-                        .fill(Color.primary.opacity(0.2))
-                        .frame(width: 3, height: 3)
-                }
-                .frame(height: 13)
-                .offset(x: -8, y: VerticalGainSlider.knobCenterY(
-                    for: gain,
-                    in: Theme.BandRow.sliderHeight,
-                    range: BuiltInProfiles.gainRange
-                ) - 6.5)
-            }
-        }
-        .frame(width: Theme.axisGutter, height: Theme.BandRow.sliderHeight)
-        // Clears the readout row above the sliders so the scale starts level
-        // with the top of the knob travel.
-        .padding(.top, Theme.BandRow.readoutHeight + 6)
-        .accessibilityHidden(true)
+    private func gainAxis(trackHeight: CGFloat) -> some View {
+        GainScale(range: BuiltInProfiles.gainRange, trackHeight: trackHeight, side: .leading)
+            .frame(width: Theme.axisGutter, alignment: .trailing)
     }
 
-    private static let axisTicks: [Double] = [12, 6, 0, -6, -12]
-    private static let labelledTicks: Set<Double> = [12, 0, -12]
-
-    private func bandControl(at slot: Int) -> some View {
+    private func bandControl(at slot: Int, trackHeight: CGFloat) -> some View {
         let band = profileManager.bandFilters[slot]
         let isActive = draggingBand == slot || hoveredBand == slot
-        let total = profileManager.totalGain(at: band.frequency, sampleRate: audioEngine.sampleRate)
 
         return VStack(spacing: 6) {
-            // Reserved height and nothing else. The bubble is an overlay so its
-            // width can never widen the column — it varies with the text, and
-            // the two-value form is wider than the one-value form, so in the
-            // layout flow it made the gap between sliders depend on whether the
-            // chain happened to total something different at that band.
-            //
-            // Column width must depend on the band count alone: the graph places
-            // band `i` at (i + 0.5) / bandCount of its plot, and the sliders only
-            // sit under their own points because they divide the same width the
-            // same way.
-            Color.clear
-                .frame(width: Theme.BandRow.columnWidth, height: Theme.BandRow.readoutHeight)
-                .overlay(gainReadout(band: band.gain, total: total, visible: isActive))
-
             VerticalGainSlider(
                 value: gainBinding(at: slot),
                 range: BuiltInProfiles.gainRange,
                 step: 0.5,
                 isEnabled: audioEngine.isEnabled,
                 isActive: isActive,
-                totalGain: total,
                 onDragChange: { isDragging in draggingBand = isDragging ? slot : nil },
                 onReset: { profileManager.resetBand(at: slot) }
             )
-            .frame(width: Theme.BandRow.columnWidth, height: Theme.BandRow.sliderHeight)
+            .frame(width: Theme.BandRow.columnWidth, height: trackHeight)
             .accessibilityLabel("\(BandFormat.frequency(band.frequency)) hertz")
-            .accessibilityValue(
-                String(format: "%+.1f decibels, chain total %+.1f decibels", band.gain, total)
-            )
+            .accessibilityValue(String(format: "%+.1f decibels", band.gain))
 
             Text(BandFormat.frequency(band.frequency))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+                .frame(height: Theme.BandRow.labelHeight)
         }
         .frame(maxWidth: .infinity)
         .onHover { isInside in
@@ -327,21 +294,24 @@ struct EqualizerDetailView: View {
         }
     }
 
-    /// Floating gain value above the slider, shown only while its band is
-    /// hovered or being dragged so an untouched row stays quiet.
+    /// What the hovered or dragged band is doing, shown beside the heading.
     ///
-    /// Two numbers whenever they differ: the band's own gain, which is what this
-    /// slider sets, and what the whole chain totals at this frequency, which is
+    /// Two values whenever they differ: the band's own gain, which is what its
+    /// slider sets, and what the whole chain totals at that frequency, which is
     /// what you hear. The gap between them is always some other filter reaching
     /// this far, and showing it is what keeps the slider honest without letting
     /// it report a value it doesn't control.
-    private func gainReadout(band: Double, total: Double, visible: Bool) -> some View {
-        VStack(spacing: 0) {
+    @ViewBuilder
+    private var bandReadout: some View {
+        let slot = draggingBand ?? hoveredBand
+        if let slot, let band = profileManager.bandFilters[safe: slot] {
+            let total = profileManager.totalGain(at: band.frequency, sampleRate: audioEngine.sampleRate)
             HStack(spacing: 5) {
-                Text(BandFormat.gain(band))
+                Text(BandFormat.frequency(band.frequency))
+                    .foregroundStyle(.secondary)
+                Text(BandFormat.gain(band.gain))
                     .foregroundStyle(Color.coreEQAccent)
-
-                if abs(total - band) > 0.05 {
+                if abs(total - band.gain) > 0.05 {
                     Text("·")
                         .foregroundStyle(.tertiary)
                     Text(BandFormat.gain(total))
@@ -349,21 +319,8 @@ struct EqualizerDetailView: View {
                 }
             }
             .font(.system(size: 11, weight: .medium).monospacedDigit())
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.primary.opacity(0.07))
-                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-            )
-
-            DownwardPointer()
-                .fill(Color.primary.opacity(0.16))
-                .frame(width: 9, height: 5)
+            .transition(.opacity)
         }
-        .fixedSize()
-        .opacity(visible ? 1 : 0)
-        .animation(.easeOut(duration: 0.12), value: visible)
     }
 
     // MARK: - Output
