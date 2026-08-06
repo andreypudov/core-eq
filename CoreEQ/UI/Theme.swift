@@ -21,6 +21,13 @@ enum Theme {
         static let inner: CGFloat = 12
     }
 
+    /// Inset between a content block's border and what it contains.
+    ///
+    /// The plot's own axis gutter and the band strip's trailing inset are both
+    /// derived from it, so the sliders stay under their points on the curve when
+    /// this changes.
+    static let blockPadding: CGFloat = 12
+
     /// Width of the Global Gain column beside the editor.
     ///
     /// The plot spans the full width, but lays its band ladder out across the
@@ -34,7 +41,7 @@ enum Theme {
     /// Sized to the tallest thing that lives there, which is the Global Gain
     /// card, not the band strip. Drop below that and the card clips instead of
     /// the graph giving up a few points.
-    static let editorHeight: CGFloat = 244
+    static let editorHeight: CGFloat = 248
 
     enum FilterRow {
         /// One row plus its spacing. The filter list multiplies this to size its
@@ -50,5 +57,23 @@ enum Theme {
         static let columnWidth: CGFloat = 26
         static let knobDiameter: CGFloat = 14
         static let trackWidth: CGFloat = 2
+    }
+}
+
+
+extension View {
+    /// A block in the content column: a border, and the window's own surface
+    /// showing through.
+    ///
+    /// Deliberately no fill. These group controls; they are not surfaces of
+    /// their own, and tinting each one turns a single canvas into a stack of
+    /// panels. The response plot is the one exception — it *is* a surface, and
+    /// keeps its fill.
+    func contentBlock() -> some View {
+        padding(Theme.blockPadding)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+            )
     }
 }

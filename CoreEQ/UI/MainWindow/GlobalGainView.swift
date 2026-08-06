@@ -62,13 +62,11 @@ struct GlobalGainView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }
-        .padding(10)
-        .frame(width: Theme.globalGainWidth)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.primary.opacity(0.035))
-                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
-        )
+        .frame(width: Theme.globalGainWidth - Theme.blockPadding * 2)
+        // Fills the row so this block and the editor beside it are the same
+        // height; the controls stay at the top of it.
+        .frame(maxHeight: .infinity, alignment: .top)
+        .contentBlock()
         .opacity(isEnabled ? 1.0 : 0.5)
         .help("Output trim applied after the whole chain — use it to give back headroom a boosted preset takes")
     }

@@ -130,7 +130,7 @@ struct EqualizerDetailView: View {
             showsBackground: false,
             // The plot fills the width; only its band ladder stops where the
             // slider strip does, so the sliders stay under their own points.
-            bandAxisTrailingInset: Theme.globalGainWidth + Theme.Spacing.inner
+            bandAxisTrailingInset: Theme.globalGainWidth + Theme.Spacing.inner + Theme.blockPadding
         )
         // Vertical only: horizontal padding would shift the plot's band axis out
         // of line with the sliders underneath, which share `axisGutter`.
@@ -211,7 +211,10 @@ struct EqualizerDetailView: View {
                     )
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            // Both blocks fill the row, so the Graphic and Parametric tabs and
+            // the Global Gain column all read as one band of equal height.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .contentBlock()
 
             GlobalGainView(profileManager: profileManager, isEnabled: audioEngine.isEnabled)
         }

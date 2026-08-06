@@ -88,7 +88,10 @@ struct FrequencyResponseView: View {
     /// plot rather than over the curve. The main window insets its band sliders
     /// by the same amount to keep the two aligned; the minimal menu-bar graph
     /// has no labels and so no gutter.
-    private var axisGutter: CGFloat { minimal ? 0 : Theme.axisGutter }
+    /// The plot sits flush with the blocks below it but has no block padding of
+    /// its own, so it carries that padding inside its gutter. The band columns
+    /// then begin at the same x as the slider columns in the padded block below.
+    private var axisGutter: CGFloat { minimal ? 0 : Theme.axisGutter + Theme.blockPadding }
 
     /// The ladder filters, in slot order.
     private var bands: [EQFilter] {
