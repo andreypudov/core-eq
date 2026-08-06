@@ -84,7 +84,11 @@ struct EqualizerSidebarView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("CoreEQ")
                     .font(.system(size: 14, weight: .semibold))
-                Text("Professional Equalizer")
+                // States what CoreEQ does that Music.app's equalizer doesn't:
+                // it shapes every application's output, not one player's. Better
+                // here than an adjective — "professional" is a claim about the
+                // app, and the window is already making that case on its own.
+                Text("System-wide equalizer")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
