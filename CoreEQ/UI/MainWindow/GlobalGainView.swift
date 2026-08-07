@@ -31,7 +31,7 @@ struct GlobalGainView: View {
         // band tracks beside it.
         VStack(spacing: 2) {
             Text("Preamp")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .frame(height: Theme.BandRow.headingHeight)
                 .accessibilityAddTraits(.isHeader)
 

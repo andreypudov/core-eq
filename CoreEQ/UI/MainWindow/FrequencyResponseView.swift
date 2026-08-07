@@ -376,13 +376,14 @@ struct FrequencyResponseView: View {
         fill.addLine(to: CGPoint(x: points[points.count - 1].x, y: floor))
         fill.addLine(to: CGPoint(x: points[0].x, y: floor))
         fill.closeSubpath()
-        // A gentle fade rather than a flat wash: at a constant opacity the fill
-        // reads as a solid green block, because a boosted curve sits above zero
-        // across the whole range and the area under it is most of the plot.
+        // A tint under the line, not a block of colour. A boosted curve sits
+        // above zero across the whole range, so the area beneath it is most of
+        // the plot — at any real opacity that area, not the curve, becomes the
+        // subject.
         context.fill(
             fill,
             with: .linearGradient(
-                Gradient(colors: [.coreEQAccent.opacity(0.20), .coreEQAccent.opacity(0.02)]),
+                Gradient(colors: [.coreEQAccent.opacity(0.10), .coreEQAccent.opacity(0.0)]),
                 startPoint: CGPoint(x: 0, y: 0),
                 endPoint: CGPoint(x: 0, y: floor)
             )
@@ -400,7 +401,7 @@ struct FrequencyResponseView: View {
                 kind: band.kind, frequency: band.frequency, gain: band.gain, sampleRate: sampleRate
             ) || band.gain == 0)
             let center = bandHandleCenter(band, size)
-            let radius: CGFloat = isHighlighted ? 6 : 5
+            let radius: CGFloat = isHighlighted ? 5 : 4
             let dot = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
 
             // Logic Pro's handle: a white core inside an accent ring, which
@@ -409,7 +410,7 @@ struct FrequencyResponseView: View {
             context.stroke(
                 dot,
                 with: .color(.coreEQAccent.opacity(isActive ? 1.0 : 0.35)),
-                lineWidth: isHighlighted ? 2.5 : 2
+                lineWidth: isHighlighted ? 2 : 1.5
             )
         }
 
@@ -429,7 +430,7 @@ struct FrequencyResponseView: View {
                 kind: filter.kind, frequency: filter.frequency, gain: filter.gain, sampleRate: sampleRate
             )
             let center = filterNodeCenter(filter, size)
-            let radius: CGFloat = isHighlighted ? 8 : 7
+            let radius: CGFloat = isHighlighted ? 7 : 6
             let core = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
             let ring = Path(ellipseIn: CGRect(x: center.x - radius - 3, y: center.y - radius - 3, width: (radius + 3) * 2, height: (radius + 3) * 2))
 

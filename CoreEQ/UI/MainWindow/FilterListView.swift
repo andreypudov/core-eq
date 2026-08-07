@@ -31,7 +31,7 @@ struct FilterListView: View {
     private var header: some View {
         HStack(spacing: 8) {
             Text("Parametric Bands")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .accessibilityAddTraits(.isHeader)
 
             Text(summary)

@@ -69,13 +69,11 @@ struct EqualizerDetailView: View {
     /// Section title on the left, and the two controls that act on the whole
     /// equalizer on the right — the preset in effect, and a way back to it.
     private var header: some View {
-        HStack(spacing: 12) {
-            Text("Equalizer")
-                .font(.system(size: 17, weight: .semibold))
-                .accessibilityAddTraits(.isHeader)
-
-            Spacer(minLength: 16)
-
+        ZStack {
+            // Centred on the content column — the same centreline the plot and
+            // the volume control below it use — rather than on whatever space is
+            // left between the title and the preset controls, which moves as
+            // either of those changes width.
             Picker("Editor", selection: $tab) {
                 Text("Graphic").tag(EditorTab.graphic)
                 Text("Parametric").tag(EditorTab.parametric)
@@ -85,21 +83,27 @@ struct EqualizerDetailView: View {
             .fixedSize()
             .accessibilityLabel("Editor")
 
-            Spacer(minLength: 16)
+            HStack(spacing: 12) {
+                Text("Equalizer")
+                    .font(.system(size: 17, weight: .semibold))
+                    .accessibilityAddTraits(.isHeader)
 
-            Picker("Preset", selection: presetSelection) {
-                ForEach(profileManager.profiles) { profile in
-                    Text(profile.name).tag(profile.name)
+                Spacer(minLength: 16)
+
+                Picker("Preset", selection: presetSelection) {
+                    ForEach(profileManager.profiles) { profile in
+                        Text(profile.name).tag(profile.name)
+                    }
                 }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .frame(width: 168)
-            .accessibilityLabel("Preset")
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(width: 168)
+                .accessibilityLabel("Preset")
 
-            Button("Reset") { profileManager.resetToActiveProfile() }
-                .disabled(!profileManager.isModified)
-                .help("Discard changes and return to the saved preset")
+                Button("Reset") { profileManager.resetToActiveProfile() }
+                    .disabled(!profileManager.isModified)
+                    .help("Discard changes and return to the saved preset")
+            }
         }
     }
 
@@ -144,7 +148,7 @@ struct EqualizerDetailView: View {
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.primary.opacity(0.035))
-                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+                .strokeBorder(Theme.blockBorder, lineWidth: 1)
         )
         .opacity(audioEngine.isEnabled ? 1.0 : 0.5)
         .allowsHitTesting(audioEngine.isEnabled)
@@ -159,7 +163,7 @@ struct EqualizerDetailView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 8) {
                 Text("Band Levels")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .accessibilityAddTraits(.isHeader)
 
                 // The gain readout reads out here rather than in a strip above
@@ -198,6 +202,19 @@ struct EqualizerDetailView: View {
                         ForEach(profileManager.bandFilters.indices, id: \.self) { slot in
                             bandControl(at: slot, trackHeight: trackHeight)
                         }
+                    }
+                    // The one reference the strip is read against, the way the
+                    // plot above has it. Without it a row of knobs says how far
+                    // each band moved but not from what.
+                    .background(alignment: .top) {
+                        Rectangle()
+                            .fill(Theme.blockBorder)
+                            .frame(height: 1)
+                            .offset(
+                                y: VerticalGainSlider.knobCenterY(
+                                    for: 0, in: trackHeight, range: BuiltInProfiles.gainRange
+                                )
+                            )
                     }
                 }
             }

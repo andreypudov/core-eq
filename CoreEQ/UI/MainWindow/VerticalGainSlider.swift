@@ -32,7 +32,10 @@ struct VerticalGainSlider: View {
             let travel = height - Self.knobDiameter
             let span = range.upperBound - range.lowerBound
             let knobY = Self.knobCenterY(for: value, in: height, range: range)
-            let bottomY = Self.knobCenterY(for: range.lowerBound, in: height, range: range)
+            // The neutral point, not the bottom: this is a bipolar control, so
+            // the filled part should say how far from flat the band is and in
+            // which direction.
+            let zeroY = Self.knobCenterY(for: 0, in: height, range: range)
 
             ZStack {
                 Capsule()
@@ -40,14 +43,13 @@ struct VerticalGainSlider: View {
                     .frame(width: Self.trackWidth, height: height - Self.knobDiameter / 2)
                     .position(x: midX, y: height / 2)
 
-                // Travelled portion, from the bottom of the track up to the
-                // knob. Only while active — see `isActive`.
-                if isActive {
-                    Capsule()
-                        .fill(Color.coreEQAccent)
-                        .frame(width: Self.trackWidth, height: max(bottomY - knobY, 0))
-                        .position(x: midX, y: (knobY + bottomY) / 2)
-                }
+                // Deviation from flat, always drawn — quietly at rest so the
+                // strip shows the preset's shape at a glance, in the accent
+                // while the band is hovered or dragged.
+                Capsule()
+                    .fill(isActive ? AnyShapeStyle(Color.coreEQAccent) : AnyShapeStyle(Color.primary.opacity(0.35)))
+                    .frame(width: Self.trackWidth, height: abs(zeroY - knobY))
+                    .position(x: midX, y: (knobY + zeroY) / 2)
 
                 Circle()
                     .fill(colorScheme == .dark ? Color(white: 0.85) : .white)

@@ -3,10 +3,19 @@ import SwiftUI
 /// The app's design tokens, in one place so the sidebar, the graph, and the
 /// band row can't drift apart.
 enum Theme {
-    /// CoreEQ's accent: Apple's System Green rather than the user's accent
-    /// colour, so the curve, the handles, and the selected preset always read as
-    /// the app's own green regardless of the system setting.
+    /// The colour of CoreEQ's *data* — the response curve, its handles, and the
+    /// values those handles carry. Fixed rather than the user's accent, the way
+    /// Activity Monitor's graphs and Battery's charts are fixed: a reading
+    /// shouldn't change meaning because someone picked a different accent.
+    ///
+    /// Controls are deliberately *not* this colour. Switches, sliders, the tab
+    /// switcher, and list selection all take the system accent, so the window
+    /// says "system utility" first and "CoreEQ" second.
     static let accent = Color.green
+
+    /// Border shared by every block and by the plot, so the plot reads as one of
+    /// them rather than as a panel with different rules.
+    static let blockBorder = Color.primary.opacity(0.10)
 
     /// Width reserved at the left of the response plot for its dB labels, and
     /// at the left of the band slider row for its own scale.
@@ -91,7 +100,7 @@ extension View {
         padding(Theme.blockPadding)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+                    .strokeBorder(Theme.blockBorder, lineWidth: 1)
             )
     }
 }

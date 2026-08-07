@@ -132,9 +132,9 @@ struct EqualizerSidebarView: View {
     /// One preset row.
     ///
     /// Hand-built rather than a `List` row because the selected state here is a
-    /// low-opacity green wash, and a `List`'s own selection is a saturated
-    /// accent fill that can't be toned down. Everything a source list row owes
-    /// the user — click to select, context menu, inline rename — is kept.
+    /// low-opacity wash, and a `List`'s own selection is a saturated fill that
+    /// can't be toned down. Everything a source list row owes the user — click
+    /// to select, context menu, inline rename — is kept.
     private func presetRow(_ profile: EQProfile) -> some View {
         let isSelected = profile.name == profileManager.activeProfileName
         let isRenaming = profileManager.profileAwaitingRename == profile.name
@@ -162,10 +162,15 @@ struct EqualizerSidebarView: View {
                 Spacer(minLength: 4)
 
                 if isSelected {
+                    // Unsaved changes as a dot rather than a word: the row
+                    // already carries a checkmark, and two badges on one line is
+                    // more furniture than the state is worth. Same mark
+                    // TextEdit puts in its close button.
                     if profileManager.isModified {
-                        Text("Edited")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
+                        Circle()
+                            .fill(.secondary)
+                            .frame(width: 5, height: 5)
+                            .accessibilityHidden(true)
                     }
                     Image(systemName: "checkmark")
                         .font(.system(size: 11, weight: .semibold))
@@ -197,12 +202,15 @@ struct EqualizerSidebarView: View {
         .id(profile.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(profile.name)
+        .accessibilityValue(isSelected && profileManager.isModified ? "Edited" : "")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
         .contextMenu { presetActions(for: profile.name) }
     }
 
     private func rowFill(isSelected: Bool, isHovered: Bool) -> Color {
-        if isSelected { return .coreEQAccent.opacity(0.18) }
+        // The system accent, not CoreEQ's data colour: a source-list selection
+        // is a control, and on a Mac set to blue this row should be blue.
+        if isSelected { return .accentColor.opacity(0.18) }
         if isHovered { return .primary.opacity(0.06) }
         return .clear
     }
