@@ -24,6 +24,7 @@
 				"Extensions/Color+CoreEQ.swift",
 				"Extensions/NSFont+Bold.swift",
 				UI/BandFormat.swift,
+				UI/ScrollAdjuster.swift,
 				UI/MainWindow/AppMark.swift,
 				UI/MainWindow/DownwardPointer.swift,
 				UI/MainWindow/EqualizerDetailView.swift,

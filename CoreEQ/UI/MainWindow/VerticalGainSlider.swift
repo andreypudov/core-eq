@@ -82,6 +82,12 @@ struct VerticalGainSlider: View {
                     onReset()
                 }
             )
+            // One detent per step, the same 0.5 dB a drag snaps to, so scrolling
+            // and dragging can't land on different values.
+            .scrollAdjustable(isEnabled: isEnabled) { steps in
+                let raw = value + Double(steps) * step
+                value = ((raw / step).rounded() * step).clamped(to: range)
+            }
         }
         .accessibilityRepresentation {
             Slider(value: $value, in: range)

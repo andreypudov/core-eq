@@ -419,6 +419,12 @@ struct EqualizerDetailView: View {
             )
             .frame(width: sliderWidth)
             .disabled(!outputs.canSetVolume)
+            // 2% a step: fifty of them cross the whole range, which is about the
+            // resolution the volume keys give.
+            .scrollAdjustable(isEnabled: outputs.canSetVolume) { steps in
+                let raw = Double(outputs.volume) + Double(steps) * 0.02
+                outputs.setVolume(Float(raw.clamped(to: 0...1)))
+            }
             .accessibilityLabel("Output volume")
 
             Text(outputs.canSetVolume ? "\(Int((outputs.volume * 100).rounded()))%" : "—")
