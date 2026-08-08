@@ -24,7 +24,6 @@
 				"Extensions/Color+CoreEQ.swift",
 				"Extensions/NSFont+Bold.swift",
 				UI/BandFormat.swift,
-				UI/ScrollAdjuster.swift,
 				UI/MainWindow/AppMark.swift,
 				UI/MainWindow/DownwardPointer.swift,
 				UI/MainWindow/EqualizerDetailView.swift,
@@ -43,6 +42,7 @@
 				UI/MenuBar/MenuRowView.swift,
 				UI/MenuBar/QuickEQBodyView.swift,
 				UI/MenuBar/QuickEQMenuMetrics.swift,
+				UI/ScrollAdjuster.swift,
 				UI/Theme.swift,
 			);
 			target = 1A0000000000000000000010 /* CoreEQTests */;

@@ -58,10 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let sidebar = NSSplitViewItem(
                 sidebarWithViewController: NSHostingController(
-                    rootView: EqualizerSidebarView(
-                        profileManager: profileManager,
-                        audioEngine: audioEngine
-                    )
+                    rootView: EqualizerSidebarView(profileManager: profileManager)
                 )
             )
             // The setting that actually runs the sidebar material to the top of
@@ -158,10 +155,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } ?? NSSize(width: 1_120, height: 760)
             window.setContentSize(visible)
             window.center()
+            // Closing this window only orders it out — SwiftUI's `onDisappear`
+            // never fires, so without a delegate the spectrum analyzer would
+            // keep running its 60 Hz timer against a window nobody can see.
+            window.delegate = self
             mainWindow = window
         }
         NSApp.activate(ignoringOtherApps: true)
         mainWindow?.makeKeyAndOrderFront(nil)
+        audioEngine.spectrum.start()
     }
 
     /// Opens the standard SwiftUI Settings scene. As a menu bar (LSUIElement)
@@ -172,6 +174,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `showSettingsWindow:` on macOS 13+, older `showPreferencesWindow:` fallback.
         if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
             NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        }
+    }
+}
+
+/// Analysis follows the window's visibility.
+///
+/// The analyzer drives the plot's backdrop and nothing else, so it should run
+/// only while there is a plot on screen. `orderOut:` doesn't remove the hosting
+/// view from its window, so the view's own appearance callbacks can't be trusted
+/// for this — the window has to say.
+extension AppDelegate: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        audioEngine.spectrum.stop()
+    }
+
+    /// Also covers minimising and being fully covered by another window, where
+    /// the plot is just as invisible as it is when closed.
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        if window.occlusionState.contains(.visible) {
+            audioEngine.spectrum.start()
+        } else {
+            audioEngine.spectrum.stop()
         }
     }
 }

@@ -12,7 +12,11 @@ import SwiftUI
 struct EqualizerDetailView: View {
     @ObservedObject var profileManager: ProfileManager
     @ObservedObject var audioEngine: AudioEngine
-    @ObservedObject var spectrum: SpectrumAnalyzer
+    /// Deliberately *not* observed here. The analyzer publishes at frame rate,
+    /// and observing it at this level rebuilt the header, the editor, the band
+    /// strip, and the output row on every tick. Only `SpectrumBackdrop`, inside
+    /// the plot, subscribes to it.
+    let spectrum: SpectrumAnalyzer
     @StateObject private var outputs = AudioDeviceList()
 
     /// Band the pointer is over, and the band being dragged. Either one shows
@@ -66,44 +70,66 @@ struct EqualizerDetailView: View {
 
     // MARK: - Header
 
-    /// Section title on the left, and the two controls that act on the whole
-    /// equalizer on the right — the preset in effect, and a way back to it.
+    /// The editor switcher, where the sound is going, a way back to the saved
+    /// preset, and the master switch.
+    ///
+    /// No "Equalizer" title and no preset pop-up: the window is the equalizer,
+    /// and the sidebar already lists every preset with the active one ticked.
+    /// Naming both again here was furniture.
     private var header: some View {
         ZStack {
             // Centred on the content column — the same centreline the plot and
-            // the volume control below it use — rather than on whatever space is
-            // left between the title and the preset controls, which moves as
-            // either of those changes width.
-            Picker("Editor", selection: $tab) {
-                Text("Graphic").tag(EditorTab.graphic)
-                Text("Parametric").tag(EditorTab.parametric)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .accessibilityLabel("Editor")
+            // the volume control below it use.
+            deviceControl
 
             HStack(spacing: 12) {
-                Text("Equalizer")
-                    .font(.system(size: 17, weight: .semibold))
-                    .accessibilityAddTraits(.isHeader)
+                Picker("Editor", selection: $tab) {
+                    Text("Graphic").tag(EditorTab.graphic)
+                    Text("Parametric").tag(EditorTab.parametric)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityLabel("Editor")
 
                 Spacer(minLength: 16)
 
-                Picker("Preset", selection: presetSelection) {
-                    ForEach(profileManager.profiles) { profile in
-                        Text(profile.name).tag(profile.name)
-                    }
+                if let warning = engineWarning {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(audioEngine.status.description)
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(width: 168)
-                .accessibilityLabel("Preset")
 
                 Button("Reset") { profileManager.resetToActiveProfile() }
                     .disabled(!profileManager.isModified)
                     .help("Discard changes and return to the saved preset")
+
+                // Furthest right, and unlabelled: it governs everything in the
+                // window, so it belongs at the end of the row rather than inside
+                // any one section. Deliberately not dimmed with the rest when
+                // off — it is the way back on.
+                Toggle("", isOn: $audioEngine.isEnabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .labelsHidden()
+                    .accessibilityLabel("Equalizer")
+                    .help(audioEngine.isEnabled ? "Turn the equalizer off" : "Turn the equalizer on")
             }
+        }
+        .frame(height: Theme.outputRowHeight)
+    }
+
+    /// The device, as a pop-up while there is something to choose between and
+    /// plain text when there isn't.
+    @ViewBuilder
+    private var deviceControl: some View {
+        if outputs.hasChoice {
+            devicePicker
+        } else {
+            deviceName
         }
     }
 
@@ -116,7 +142,7 @@ struct EqualizerDetailView: View {
             filters: profileManager.currentFilters,
             sampleRate: audioEngine.sampleRate,
             preamp: profileManager.currentPreamp,
-            spectrum: spectrum.points,
+            spectrum: spectrum,
             onBandGainChange: { slot, gain in profileManager.setGain(gain, forBandAt: slot) },
             onBandReset: { slot in profileManager.resetBand(at: slot) },
             onFilterMove: { id, frequency, gain in
@@ -342,58 +368,22 @@ struct EqualizerDetailView: View {
 
     // MARK: - Output
 
-    /// Volume on the centreline of the content column, the device it is going to
-    /// on the right. No "Output" label — a pop-up naming a speaker needs no
-    /// caption. An engine warning joins the device on the rare occasions the
-    /// audio path isn't healthy.
+    /// Volume, and nothing else — the device it goes to moved up to the header,
+    /// so the slider has the whole column and no neighbour to measure against.
     private var outputRow: some View {
         GeometryReader { proxy in
-            ZStack {
-                // Centred on the column, not on what's left after the device
-                // control — so it lines up with the plot and the editor above it.
-                volumeControl(sliderWidth: volumeSliderWidth(rowWidth: proxy.size.width))
-
-                HStack(spacing: 12) {
-                    Spacer(minLength: 0)
-
-                    if let warning = engineWarning {
-                        Label(warning, systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .help(audioEngine.status.description)
-                    }
-
-                    if outputs.hasChoice {
-                        devicePicker
-                    } else {
-                        deviceName
-                    }
-                }
-            }
+            volumeControl(sliderWidth: max(proxy.size.width - Self.volumeChrome, 120))
         }
         .frame(height: Theme.outputRowHeight)
     }
 
-    /// How wide the volume slider can be before it would collide with the device
-    /// control.
-    ///
-    /// The control is centred, so it grows in both directions at once: every
-    /// point the slider gains on the right it also gains on the left. That is
-    /// why the device control's width counts twice here.
-    private func volumeSliderWidth(rowWidth: CGFloat) -> CGFloat {
-        let chrome: CGFloat = 18 + 8 + 34 + 8   // icon, gap, percentage, gap
-        let available = rowWidth
-            - 2 * (Theme.outputControlWidth + Theme.Spacing.inner)
-            - chrome
-        return max(available, 120)
-    }
+    /// Everything in the volume control that isn't the slider: the mute button,
+    /// the percentage, and the gaps around them.
+    private static let volumeChrome: CGFloat = 18 + 8 + 34 + 8
 
-    /// System output volume, on the row that already says where the sound is
-    /// going. Not CoreEQ's own gain — this moves the output device itself, the
-    /// same value the Sound menu and the volume keys show, and it follows those
-    /// when they change it.
+    /// System output volume. Not CoreEQ's own gain — this moves the output
+    /// device itself, the same value the Sound menu and the volume keys show,
+    /// and it follows those when they change it.
     private func volumeControl(sliderWidth: CGFloat) -> some View {
         HStack(spacing: 8) {
             Button {
@@ -476,7 +466,7 @@ struct EqualizerDetailView: View {
             .labelStyle(.titleAndIcon)
             .lineLimit(1)
             .truncationMode(.middle)
-            .frame(width: Theme.outputControlWidth, alignment: .trailing)
+            .frame(width: Theme.outputControlWidth, alignment: .center)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Output device")
             .accessibilityValue(outputs.defaultDeviceName)
@@ -493,13 +483,6 @@ struct EqualizerDetailView: View {
     }
 
     // MARK: - Bindings
-
-    private var presetSelection: Binding<String> {
-        Binding(
-            get: { profileManager.activeProfileName },
-            set: { profileManager.setActiveProfile(name: $0) }
-        )
-    }
 
     private var outputSelection: Binding<AudioDeviceID?> {
         Binding(

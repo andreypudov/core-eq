@@ -85,16 +85,19 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(headerItem())
         menu.addItem(.separator())
 
+        // Where the sound is going comes first, right under the switch that
+        // decides whether it is being shaped at all. Both are questions about
+        // the audio path; everything below them is about how it sounds.
+        menu.addItem(.sectionHeader(title: "Output"))
+        menu.addItem(outputItem())
+        menu.addItem(.separator())
+
         menu.addItem(.sectionHeader(title: "Preset"))
         menu.addItem(presetItem())
         menu.addItem(.separator())
 
         menu.addItem(.sectionHeader(title: "Quick EQ"))
         menu.addItem(quickEQItem())
-        menu.addItem(.separator())
-
-        menu.addItem(.sectionHeader(title: "Output"))
-        menu.addItem(outputItem())
         menu.addItem(.separator())
 
         let openItem = NSMenuItem(title: "Open Equalizer…", action: #selector(openWindow(_:)), keyEquivalent: "")

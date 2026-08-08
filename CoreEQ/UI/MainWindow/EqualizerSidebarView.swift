@@ -1,9 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Sidebar column of the main window: the app mark with the global on/off
-/// switch, the preset list, and the add / remove / more actions along the
-/// bottom.
+/// Sidebar column of the main window: the app mark, the preset list, and the
+/// add / remove / more actions along the bottom.
 ///
 /// Hosted inside an `NSSplitViewItem(sidebarWithViewController:)`, which
 /// supplies the sidebar material and the full-height layout that runs it up
@@ -11,7 +10,6 @@ import SwiftUI
 /// window controls, so the view itself draws no background of its own.
 struct EqualizerSidebarView: View {
     @ObservedObject var profileManager: ProfileManager
-    @ObservedObject var audioEngine: AudioEngine
 
     @State private var renameText = ""
     @FocusState private var renameFieldFocused: Bool
@@ -29,8 +27,6 @@ struct EqualizerSidebarView: View {
         // Stacking gives each piece its own region.
         VStack(alignment: .leading, spacing: 0) {
             appHeader
-
-            enabledRow
 
             Divider()
                 .padding(.horizontal, 16)
@@ -97,26 +93,8 @@ struct EqualizerSidebarView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
-        .padding(.bottom, 20)
-    }
-
-    /// The global bypass, on its own row where it reads as the one switch that
-    /// governs everything below it.
-    private var enabledRow: some View {
-        HStack(spacing: 8) {
-            Text("Enabled")
-                .font(.system(size: 13))
-
-            Spacer(minLength: 8)
-
-            Toggle("Enabled", isOn: $audioEngine.isEnabled)
-                .toggleStyle(.switch)
-                .labelsHidden()
-                .controlSize(.small)
-                .accessibilityLabel("Equalizer")
-                .help("Turn the equalizer on or off")
-        }
-        .padding(.horizontal, 16)
+        // Closer to the divider than it was: the switch that used to sit between
+        // the two is in the window header now.
         .padding(.bottom, 12)
     }
 

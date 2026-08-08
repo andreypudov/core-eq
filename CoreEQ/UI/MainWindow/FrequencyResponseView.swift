@@ -30,9 +30,11 @@ struct FrequencyResponseView: View {
     /// so it moves with the trim just as the audio does.
     var preamp: Double = 0
 
-    /// Log-spaced spectrum points (ascending frequency, level 0...1) drawn as a
-    /// backdrop behind the grid and curve. Empty hides the backdrop.
-    var spectrum: [SpectrumAnalyzer.Point] = []
+    /// The analyzer whose output is drawn behind the grid and curve, or nil for
+    /// no backdrop. Deliberately the object rather than its points: it is
+    /// observed by `SpectrumBackdrop` alone, so its sixty-a-second updates
+    /// invalidate that layer and leave this view untouched.
+    var spectrum: SpectrumAnalyzer?
 
     var onBandGainChange: ((_ slot: Int, _ gain: Double) -> Void)?
     var onBandReset: ((_ slot: Int) -> Void)?
@@ -92,10 +94,17 @@ struct FrequencyResponseView: View {
 
     /// Band centre frequencies, ascending — the anchors of the x-axis.
     ///
+    /// The ladder itself rather than the chain's band filters, which are always
+    /// the same values: `ProfileManager.normalized` guarantees one filter per
+    /// slot carrying that slot's frequency. Deriving it instead cost a `filter`
+    /// and a `sorted` *per call*, and this is called once per curve point, once
+    /// per spectrum point, and once per handle — several hundred times a frame,
+    /// sixty times a second.
+    ///
     /// Deliberately the ladder alone: a free filter must never shift the grid or
     /// the frequency labels, or adding one would move every other point on the
     /// plot sideways.
-    private var anchors: [Double] { bands.map(\.frequency).sorted() }
+    private var anchors: [Double] { BuiltInProfiles.frequencies }
 
     var body: some View {
         GeometryReader { geometry in
@@ -106,13 +115,22 @@ struct FrequencyResponseView: View {
                     drawCurve(context, size)
                 }
             } else {
-                Canvas { context, _ in
-                    drawSpectrum(context, size)
-                    drawGrid(context, size)
-                    drawHighlightedFilterCurve(context, size)
-                    drawCurve(context, size)
-                    drawBandMarkers(context, size)
-                    drawFilterNodes(context, size)
+                ZStack {
+                    if let spectrum {
+                        SpectrumBackdrop(
+                            spectrum: spectrum,
+                            axis: axis(size),
+                            plotHeight: plotHeight(size)
+                        )
+                    }
+
+                    Canvas { context, _ in
+                        drawGrid(context, size)
+                        drawHighlightedFilterCurve(context, size)
+                        drawCurve(context, size)
+                        drawBandMarkers(context, size)
+                        drawFilterNodes(context, size)
+                    }
                 }
                 .gesture(dragGesture(size))
                 .simultaneousGesture(doubleClickGesture(size))
@@ -241,38 +259,6 @@ struct FrequencyResponseView: View {
 
     // MARK: - Drawing
 
-    /// Live analyzer spectrum, drawn as a filled backdrop on the same
-    /// band-aligned x-axis as the curve so peaks line up with the bands. It
-    /// uses its own vertical scale (0...1 over the full height), independent of
-    /// the ±dB gain axis, since it represents signal level rather than gain.
-    private func drawSpectrum(_ context: GraphicsContext, _ size: CGSize) {
-        // Silence would otherwise stroke a flat line along the floor of the
-        // plot, which reads as a stray rule under the frequency labels.
-        guard spectrum.count > 1, spectrum.contains(where: { $0.level > 0.02 }) else { return }
-
-        let bottom = plotHeight(size)
-        var line = Path()
-        for (index, point) in spectrum.enumerated() {
-            let x = xPosition(point.frequency, size)
-            let y = bottom * (1 - CGFloat(point.level))
-            if index == 0 {
-                line.move(to: CGPoint(x: x, y: y))
-            } else {
-                line.addLine(to: CGPoint(x: x, y: y))
-            }
-        }
-
-        var fill = line
-        fill.addLine(to: CGPoint(x: xPosition(spectrum[spectrum.count - 1].frequency, size), y: bottom))
-        fill.addLine(to: CGPoint(x: xPosition(spectrum[0].frequency, size), y: bottom))
-        fill.closeSubpath()
-
-        // Deliberately faint: the analyzer is context for the curve, not a
-        // second subject.
-        context.fill(fill, with: .color(.primary.opacity(0.05)))
-        context.stroke(line, with: .color(.primary.opacity(0.13)), lineWidth: 1)
-    }
-
     /// Single faint 0 dB reference line for the minimal presentation, so the
     /// curve reads as a deviation from flat without a full grid.
     private func drawBaseline(_ context: GraphicsContext, _ size: CGSize) {
@@ -340,11 +326,12 @@ struct FrequencyResponseView: View {
         }
         guard let source else { return }
         let biquad = Biquad(filter: source, sampleRate: sampleRate)
+        let axis = axis(size)
 
         var response = Path()
         for step in 0..<Self.curvePointCount {
             let fraction = Double(step) / Double(Self.curvePointCount - 1)
-            let dB = biquad.magnitudeDB(at: frequency(atFraction: fraction), sampleRate: sampleRate)
+            let dB = biquad.magnitudeDB(at: axis.frequency(atFraction: fraction), sampleRate: sampleRate)
             let point = CGPoint(x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
             if step == 0 {
                 response.move(to: point)
@@ -476,10 +463,11 @@ struct FrequencyResponseView: View {
 
     private func responsePoints(_ size: CGSize) -> [CGPoint] {
         let biquads = filters.map { Biquad(filter: $0, sampleRate: sampleRate) }
+        let axis = axis(size)
 
         return (0..<Self.curvePointCount).map { index in
             let fraction = Double(index) / Double(Self.curvePointCount - 1)
-            let frequency = frequency(atFraction: fraction)
+            let frequency = axis.frequency(atFraction: fraction)
             let dB = biquads.reduce(preamp) { $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate) }
             return CGPoint(x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
         }
@@ -487,48 +475,15 @@ struct FrequencyResponseView: View {
 
     // MARK: - Coordinate mapping
 
-    /// X-axis aligned with the slider columns underneath the plot: band `i`
-    /// sits at fraction `(i + 0.5) / bandCount`, and frequencies between
-    /// bands interpolate logarithmically. Beyond the outermost bands the axis
-    /// extrapolates using the neighboring octave ratio.
-    private func axisFraction(of frequency: Double) -> Double {
-        let anchors = self.anchors
-        let n = anchors.count
-        guard n >= 2, frequency > 0 else { return 0.5 }
-        let slot = 1.0 / Double(n)
-        func center(_ i: Int) -> Double { (Double(i) + 0.5) * slot }
-
-        if frequency <= anchors[0] {
-            let ratio = anchors[1] / anchors[0]
-            return center(0) + slot * log(frequency / anchors[0]) / log(ratio)
-        }
-        if frequency >= anchors[n - 1] {
-            let ratio = anchors[n - 1] / anchors[n - 2]
-            return center(n - 1) + slot * log(frequency / anchors[n - 1]) / log(ratio)
-        }
-        for i in 0..<(n - 1) where frequency <= anchors[i + 1] {
-            return center(i) + slot * log(frequency / anchors[i]) / log(anchors[i + 1] / anchors[i])
-        }
-        return 1
+    /// The mapping this plot draws against, rebuilt per layout pass.
+    private func axis(_ size: CGSize) -> ResponseAxis {
+        ResponseAxis(anchors: anchors, gutter: axisGutter, width: size.width)
     }
 
-    /// Inverse of `axisFraction`, used to sweep the curve and to turn a pointer
-    /// position into the frequency a dragged filter should take.
+    /// Only the drag path needs this outside a loop; everywhere else builds the
+    /// axis once and asks it directly.
     private func frequency(atFraction t: Double) -> Double {
-        let anchors = self.anchors
-        let n = anchors.count
-        guard n >= 2 else { return 1_000 }
-        // Position in band-index units, measured from the first band's center.
-        let position = t * Double(n) - 0.5
-
-        if position <= 0 {
-            return anchors[0] * pow(anchors[1] / anchors[0], position)
-        }
-        if position >= Double(n - 1) {
-            return anchors[n - 1] * pow(anchors[n - 1] / anchors[n - 2], position - Double(n - 1))
-        }
-        let i = min(Int(position), n - 2)
-        return anchors[i] * pow(anchors[i + 1] / anchors[i], position - Double(i))
+        ResponseAxis(anchors: anchors, gutter: axisGutter, width: 0).frequency(atFraction: t)
     }
 
     /// Horizontal extent of the plot, to the right of the dB-label gutter.
@@ -537,7 +492,7 @@ struct FrequencyResponseView: View {
     }
 
     private func xPosition(_ frequency: Double, _ size: CGSize) -> CGFloat {
-        axisGutter + CGFloat(min(max(axisFraction(of: frequency), 0), 1)) * plotWidth(size)
+        axis(size).x(frequency)
     }
 
     /// The minimal menu graph reserves only half the stroke width at the top and
@@ -561,5 +516,108 @@ struct FrequencyResponseView: View {
         let half = plotHeight(size) / 2
         let usable = half - verticalInset
         return half - usable * CGFloat(clamped / Self.maxDB)
+    }
+}
+
+
+/// Frequency-to-x mapping for the response plot.
+///
+/// Pulled out of the view so the live backdrop and the static plot can share
+/// one definition of where a frequency sits. Two copies would be two chances
+/// for the spectrum to drift sideways from the curve it sits behind.
+struct ResponseAxis: Equatable {
+    /// Band centre frequencies, ascending.
+    let anchors: [Double]
+    /// Width reserved at the left for the dB labels.
+    let gutter: CGFloat
+    let width: CGFloat
+
+    var plotWidth: CGFloat { max(width - gutter, 1) }
+
+    /// X-axis aligned with the slider columns underneath the plot: band `i`
+    /// sits at fraction `(i + 0.5) / bandCount`, and frequencies between bands
+    /// interpolate logarithmically. Beyond the outermost bands the axis
+    /// extrapolates using the neighbouring octave ratio.
+    func fraction(of frequency: Double) -> Double {
+        let n = anchors.count
+        guard n >= 2, frequency > 0 else { return 0.5 }
+        let slot = 1.0 / Double(n)
+        func center(_ i: Int) -> Double { (Double(i) + 0.5) * slot }
+
+        if frequency <= anchors[0] {
+            return center(0) + slot * log(frequency / anchors[0]) / log(anchors[1] / anchors[0])
+        }
+        if frequency >= anchors[n - 1] {
+            return center(n - 1) + slot * log(frequency / anchors[n - 1]) / log(anchors[n - 1] / anchors[n - 2])
+        }
+        for i in 0..<(n - 1) where frequency <= anchors[i + 1] {
+            return center(i) + slot * log(frequency / anchors[i]) / log(anchors[i + 1] / anchors[i])
+        }
+        return 1
+    }
+
+    /// Inverse of `fraction(of:)`, used to sweep the curve and to turn a pointer
+    /// position into the frequency a dragged filter should take.
+    func frequency(atFraction t: Double) -> Double {
+        let n = anchors.count
+        guard n >= 2 else { return 1_000 }
+        // Position in band-index units, measured from the first band's centre.
+        let position = t * Double(n) - 0.5
+
+        if position <= 0 {
+            return anchors[0] * pow(anchors[1] / anchors[0], position)
+        }
+        if position >= Double(n - 1) {
+            return anchors[n - 1] * pow(anchors[n - 1] / anchors[n - 2], position - Double(n - 1))
+        }
+        let i = min(Int(position), n - 2)
+        return anchors[i] * pow(anchors[i + 1] / anchors[i], position - Double(i))
+    }
+
+    func x(_ frequency: Double) -> CGFloat {
+        gutter + CGFloat(min(max(fraction(of: frequency), 0), 1)) * plotWidth
+    }
+}
+
+/// The analyzer backdrop, on its own layer.
+///
+/// This is the only part of the plot that changes at frame rate, and it is the
+/// only view that observes the analyzer — so a spectrum tick invalidates this
+/// and nothing else. Folded into the main canvas it took the grid's fourteen
+/// text labels, the curve's biquad sweep, and the whole enclosing window's body
+/// down with it, sixty times a second.
+struct SpectrumBackdrop: View {
+    @ObservedObject var spectrum: SpectrumAnalyzer
+    let axis: ResponseAxis
+    let plotHeight: CGFloat
+
+    var body: some View {
+        Canvas { context, _ in
+            let points = spectrum.points
+            // Silence would otherwise stroke a flat line along the floor of the
+            // plot, which reads as a stray rule under the frequency labels.
+            guard points.count > 1, points.contains(where: { $0.level > 0.02 }) else { return }
+
+            var line = Path()
+            for (index, point) in points.enumerated() {
+                let position = CGPoint(x: axis.x(point.frequency), y: plotHeight * (1 - CGFloat(point.level)))
+                if index == 0 {
+                    line.move(to: position)
+                } else {
+                    line.addLine(to: position)
+                }
+            }
+
+            var fill = line
+            fill.addLine(to: CGPoint(x: axis.x(points[points.count - 1].frequency), y: plotHeight))
+            fill.addLine(to: CGPoint(x: axis.x(points[0].frequency), y: plotHeight))
+            fill.closeSubpath()
+
+            // Deliberately faint: the analyzer is context for the curve, not a
+            // second subject.
+            context.fill(fill, with: .color(.primary.opacity(0.05)))
+            context.stroke(line, with: .color(.primary.opacity(0.13)), lineWidth: 1)
+        }
+        .allowsHitTesting(false)
     }
 }
