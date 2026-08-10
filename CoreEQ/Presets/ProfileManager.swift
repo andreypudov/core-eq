@@ -53,8 +53,14 @@ final class ProfileManager: ObservableObject {
 
     private let settings: SettingsStore
 
-    init(settings: SettingsStore) {
+    /// Persistent UID of the output device whose state is currently loaded, or
+    /// nil before one is known. Everything the user changes is written to this
+    /// device's slot.
+    private(set) var outputDeviceUID: String?
+
+    init(settings: SettingsStore, outputDeviceUID: String? = nil) {
         self.settings = settings
+        self.outputDeviceUID = outputDeviceUID
 
         let builtIns = BuiltInProfiles.all
         self.builtInProfiles = builtIns
@@ -68,14 +74,17 @@ final class ProfileManager: ObservableObject {
         self.userProfiles = userProfiles
 
         let profiles = builtIns + userProfiles
-        let savedName = settings.activeProfileName
-        let active = profiles.first { $0.name == savedName }
+        let state = Self.migratedStateIfNeeded(settings: settings, deviceUID: outputDeviceUID)
+            ?? settings.deviceStates[Self.slot(for: outputDeviceUID)]
+            ?? DeviceEQState(profileName: BuiltInProfiles.defaultProfileName)
+
+        let active = profiles.first { $0.name == state.profileName }
             ?? profiles.first { $0.name == BuiltInProfiles.defaultProfileName }
             ?? profiles[0]
         self.activeProfileName = active.name
 
         var restoredTone = ToneControls()
-        if let saved = settings.tone, saved.count == 3 {
+        if let saved = state.tone, saved.count == 3 {
             restoredTone = ToneControls(
                 bass: saved[0].clamped(to: QuickTone.range),
                 mid: saved[1].clamped(to: QuickTone.range),
@@ -88,24 +97,89 @@ final class ProfileManager: ObservableObject {
             // Tone positions take precedence: derive the chain from them so the
             // popover and engine agree on launch.
             self.currentFilters = Self.applyingTone(restoredTone, to: active.filters)
-        } else if let stored = settings.workingFilters {
+        } else if let stored = state.filters {
             self.currentFilters = Self.normalized(stored)
-        } else if let legacy = settings.legacyCustomGains, legacy.count == BuiltInProfiles.bandCount {
-            // Slider tweaks saved by CoreEQ 1.x, carried over once so an update
-            // doesn't silently discard what the user was listening to.
-            var chain = active.filters
-            for slot in 0..<BuiltInProfiles.bandCount {
-                chain[slot].gain = legacy[slot].clamped(to: BuiltInProfiles.gainRange)
-            }
-            self.currentFilters = chain
-            settings.workingFilters = chain
-            settings.legacyCustomGains = nil
         } else {
             self.currentFilters = active.filters
         }
 
-        self.currentPreamp = (settings.workingPreamp ?? active.preamp)
-            .clamped(to: BuiltInProfiles.preampRange)
+        self.currentPreamp = state.preamp.clamped(to: BuiltInProfiles.preampRange)
+    }
+
+    // MARK: - Output device
+
+    /// Points the manager at a different output device: the state on screen is
+    /// filed under the device it was made for, and whatever that device last
+    /// had is loaded in its place.
+    ///
+    /// A device never seen before starts at the default preset, as a device
+    /// never seen before starts at a default volume — inheriting whatever
+    /// happened to be playing would make the first switch stick in a way the
+    /// user never asked for.
+    func setOutputDevice(uid: String?) {
+        guard uid != outputDeviceUID else { return }
+        persistDeviceState()
+        outputDeviceUID = uid
+
+        let state = settings.deviceStates[Self.slot(for: uid)]
+            ?? DeviceEQState(profileName: BuiltInProfiles.defaultProfileName)
+        apply(state)
+    }
+
+    private func apply(_ state: DeviceEQState) {
+        let profile = profile(named: state.profileName)
+            ?? profile(named: BuiltInProfiles.defaultProfileName)
+            ?? builtInProfiles[0]
+        activeProfileName = profile.name
+
+        if let saved = state.tone, saved.count == 3 {
+            tone = ToneControls(
+                bass: saved[0].clamped(to: QuickTone.range),
+                mid: saved[1].clamped(to: QuickTone.range),
+                treble: saved[2].clamped(to: QuickTone.range)
+            )
+            currentFilters = Self.applyingTone(tone, to: profile.filters)
+        } else {
+            tone = ToneControls()
+            currentFilters = state.filters.map(Self.normalized) ?? profile.filters
+        }
+        currentPreamp = state.preamp.clamped(to: BuiltInProfiles.preampRange)
+    }
+
+    /// Key for a device's slot. The empty string stands for "no output device",
+    /// which no real UID can collide with.
+    private static func slot(for uid: String?) -> String { uid ?? "" }
+
+    /// Moves state written before the per-device model into the current
+    /// device's slot, so an update doesn't read as having lost the user's EQ.
+    /// Runs once: the legacy keys are cleared as they are consumed.
+    private static func migratedStateIfNeeded(
+        settings: SettingsStore,
+        deviceUID: String?
+    ) -> DeviceEQState? {
+        guard settings.deviceStates.isEmpty, let name = settings.activeProfileName else { return nil }
+
+        var state = DeviceEQState(profileName: name)
+        state.filters = settings.workingFilters
+        state.preamp = settings.workingPreamp ?? 0
+        state.tone = settings.tone
+
+        if state.filters == nil, let legacy = settings.legacyCustomGains,
+           legacy.count == BuiltInProfiles.bandCount {
+            var chain = BuiltInProfiles.emptyBandChain()
+            for slot in 0..<BuiltInProfiles.bandCount {
+                chain[slot].gain = legacy[slot].clamped(to: BuiltInProfiles.gainRange)
+            }
+            state.filters = chain
+        }
+
+        settings.deviceStates = [slot(for: deviceUID): state]
+        settings.activeProfileName = nil
+        settings.workingFilters = nil
+        settings.workingPreamp = nil
+        settings.tone = nil
+        settings.legacyCustomGains = nil
+        return state
     }
 
     /// Built-in profiles first, then the user's own — the order the sidebar and
@@ -172,10 +246,7 @@ final class ProfileManager: ObservableObject {
         tone = ToneControls()
         currentFilters = profile.filters
         currentPreamp = profile.preamp
-        settings.activeProfileName = profile.name
-        settings.workingFilters = nil
-        settings.workingPreamp = nil
-        settings.tone = nil
+        persistDeviceState()
     }
 
     /// Creates a user preset from `filters` (the working chain by default) and
@@ -229,8 +300,9 @@ final class ProfileManager: ObservableObject {
         persistUserProfiles()
         if activeProfileName == name {
             activeProfileName = unique
-            settings.activeProfileName = unique
+            persistDeviceState()
         }
+        renameInDeviceStates(from: name, to: unique)
         return unique
     }
 
@@ -258,9 +330,7 @@ final class ProfileManager: ObservableObject {
         userProfiles[index].preamp = currentPreamp
         persistUserProfiles()
         tone = ToneControls()
-        settings.workingFilters = nil
-        settings.workingPreamp = nil
-        settings.tone = nil
+        persistDeviceState()
     }
 
     func canEditProfile(named name: String) -> Bool {
@@ -272,7 +342,7 @@ final class ProfileManager: ObservableObject {
     func setGain(_ gain: Double, forBandAt slot: Int) {
         guard slot < BuiltInProfiles.bandCount, currentFilters.indices.contains(slot) else { return }
         currentFilters[slot].gain = gain.clamped(to: BuiltInProfiles.gainRange)
-        persistWorkingChain()
+        persistDeviceState()
     }
 
     /// Restores a single band to the active profile's original value
@@ -283,7 +353,7 @@ final class ProfileManager: ObservableObject {
               currentFilters.indices.contains(slot),
               profileBands.indices.contains(slot) else { return }
         currentFilters[slot].gain = profileBands[slot].gain
-        persistWorkingChain()
+        persistDeviceState()
     }
 
     /// Switches the whole ladder on or off, for hearing what it contributes on
@@ -292,7 +362,7 @@ final class ProfileManager: ObservableObject {
         for slot in 0..<min(BuiltInProfiles.bandCount, currentFilters.count) {
             currentFilters[slot].isEnabled = isEnabled
         }
-        persistWorkingChain()
+        persistDeviceState()
     }
 
     var areBandsEnabled: Bool {
@@ -318,14 +388,14 @@ final class ProfileManager: ObservableObject {
             q: q.clamped(to: BuiltInProfiles.filterQRange)
         )
         currentFilters.append(filter)
-        persistWorkingChain()
+        persistDeviceState()
         return filter.id
     }
 
     func removeFilter(id: UUID) {
         guard let index = indexOfFreeFilter(id: id) else { return }
         currentFilters.remove(at: index)
-        persistWorkingChain()
+        persistDeviceState()
     }
 
     func setFilterKind(_ kind: EQFilter.Kind, id: UUID) {
@@ -362,7 +432,7 @@ final class ProfileManager: ObservableObject {
         for index in BuiltInProfiles.bandCount..<currentFilters.count {
             currentFilters[index].isEnabled = isEnabled
         }
-        persistWorkingChain()
+        persistDeviceState()
     }
 
     var areFreeFiltersEnabled: Bool {
@@ -387,7 +457,7 @@ final class ProfileManager: ObservableObject {
         currentFilters[slot].gain = 0
         currentFilters[slot].isEnabled = true
         currentFilters.append(lifted)
-        persistWorkingChain()
+        persistDeviceState()
         return lifted.id
     }
 
@@ -408,8 +478,7 @@ final class ProfileManager: ObservableObject {
             let base = profileBands[safe: slot]?.gain ?? 0
             currentFilters[slot].gain = (base + offsets[slot]).clamped(to: BuiltInProfiles.gainRange)
         }
-        settings.tone = tone.isNeutral ? nil : [tone.bass, tone.mid, tone.treble]
-        persistWorkingChain()
+        persistDeviceState()
     }
 
     /// Restores the active profile's chain and re-centres the Quick EQ tone
@@ -419,16 +488,14 @@ final class ProfileManager: ObservableObject {
         let profile = getActiveProfile()
         currentFilters = profile.filters
         currentPreamp = profile.preamp
-        settings.workingFilters = nil
-        settings.workingPreamp = nil
-        settings.tone = nil
+        persistDeviceState()
     }
 
     // MARK: - Output trim
 
     func setPreamp(_ dB: Double) {
         currentPreamp = dB.clamped(to: BuiltInProfiles.preampRange)
-        settings.workingPreamp = isModified ? currentPreamp : nil
+        persistDeviceState()
     }
 
     var isModified: Bool {
@@ -446,13 +513,33 @@ final class ProfileManager: ObservableObject {
     private func updateFreeFilter(id: UUID, _ change: (inout EQFilter) -> Void) {
         guard let index = indexOfFreeFilter(id: id) else { return }
         change(&currentFilters[index])
-        persistWorkingChain()
+        persistDeviceState()
     }
 
-    private func persistWorkingChain() {
-        let modified = isModified
-        settings.workingFilters = modified ? currentFilters : nil
-        settings.workingPreamp = modified ? currentPreamp : nil
+    /// Files everything on screen under the current output device.
+    ///
+    /// One writer for the whole working state, so a new control can't be added
+    /// that changes the sound without being remembered alongside the rest.
+    private func persistDeviceState() {
+        var states = settings.deviceStates
+        states[Self.slot(for: outputDeviceUID)] = DeviceEQState(
+            profileName: activeProfileName,
+            filters: isModified ? currentFilters : nil,
+            preamp: currentPreamp,
+            tone: tone.isNeutral ? nil : [tone.bass, tone.mid, tone.treble]
+        )
+        settings.deviceStates = states
+    }
+
+    /// Follows a preset rename into every device that had it selected, so the
+    /// other devices don't silently fall back to Flat next time they're used.
+    private func renameInDeviceStates(from name: String, to newName: String) {
+        var states = settings.deviceStates
+        for (key, var state) in states where state.profileName == name {
+            state.profileName = newName
+            states[key] = state
+        }
+        settings.deviceStates = states
     }
 
     private func persistUserProfiles() {

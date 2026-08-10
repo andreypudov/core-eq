@@ -67,6 +67,15 @@ enum AudioDevices {
         return name?.takeRetainedValue() as String?
     }
 
+    /// Persistent identifier for a device.
+    ///
+    /// `AudioDeviceID` is assigned per boot and reused, so it can't key anything
+    /// that outlives a session. The UID survives reboots and reconnections,
+    /// which is what makes "the EQ I set for these headphones" stick.
+    static func persistentID(of deviceID: AudioDeviceID) -> String? {
+        uid(of: deviceID)
+    }
+
     // MARK: - Private
 
     private static func allDeviceIDs() -> [AudioDeviceID] {
@@ -175,6 +184,15 @@ enum AudioDevices {
     }
 
     // MARK: - Output volume
+    //
+    // Currently unused: the volume control was removed from the window because
+    // it duplicated a system function macOS already offers in three places, and
+    // because a slider that isn't CoreEQ's sitting beside one that is made two
+    // gain controls with different owners look alike.
+    //
+    // Kept because it is the awkward part to get right — the per-element
+    // fallback and the settability checks are what a re-add would otherwise have
+    // to rediscover. Delete it if the decision settles.
 
     /// Output volume of `deviceID` as 0...1, or nil when the device exposes no
     /// settable volume — digital outputs commonly don't, and the UI has to say

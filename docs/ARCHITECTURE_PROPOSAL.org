@@ -318,15 +318,45 @@ costs width from neither, and it stays visible in both tabs.
 
 Automatic trim from the computed peak is not implemented; the control is manual.
 
-* Output volume
+* Per-device state
 
-The row that names the output device also carries the system output volume: a
-mute button, a slider, and a percentage. This is the device's own volume, not
-CoreEQ's gain — it reads and writes =kAudioDevicePropertyVolumeScalar= on the
-default output and follows changes made from the Sound menu or the volume keys.
+macOS keeps a volume per output device: switch to headphones and you get the
+level you last set for headphones. Equalization has the same shape, and more
+strongly — the curve that suits headphones is not the one that suits laptop
+speakers, which is most of why anyone runs an equalizer at all.
 
-Outputs that expose no settable volume, which is common for digital ones, keep
-the control in place but disabled, so switching devices never reflows the row.
+So =DeviceEQState= — the preset in effect, any unsaved edits to it, the output
+trim, and the Quick EQ tone positions — is stored per device, keyed by the
+device's persistent UID rather than its =AudioDeviceID=, which is reassigned
+every boot.
+
+The preset *library* is deliberately not per device. Presets are a shared
+collection; only which one is playing, and what has been changed about it,
+follows the hardware. A rename therefore has to follow every device that had
+that preset selected, or the others fall back to =Flat= the next time they are
+used.
+
+A device never seen before starts at the default preset, exactly as a device
+never seen before starts at a default volume. Inheriting whatever happened to be
+playing would make the first switch stick in a way the user never asked for.
+
+=AudioDeviceList= is owned by the app delegate rather than by the window, so the
+equalizer follows the hardware whether or not anything is on screen — CoreEQ
+spends most of its life as a menu bar icon.
+
+* Output device
+
+The header names the device the equalized signal is going to, and lets it be
+changed. This is status before it is a control: CoreEQ taps the system output
+and re-renders it through whatever the default device is, so which device is
+active changes what the application is doing. It is also the one piece of system
+state genuinely related to the sound being shaped — the curve that suits
+headphones is not the one that suits laptop speakers.
+
+Output *volume* is deliberately absent. macOS offers it in Control Center, the
+menu bar, and the volume keys, and a slider that belongs to the system sitting
+beside the preamp — which belongs to the preset — made two gain controls with
+different owners and different lifetimes look alike.
 
 * Deferred
 

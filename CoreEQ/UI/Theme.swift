@@ -36,9 +36,8 @@ enum Theme {
     /// of shifting every time the device changes.
     static let outputControlWidth: CGFloat = 220
 
-    /// Height of the header and of the volume row, both set by the large pop-up
-    /// button in the header.
-    static let outputRowHeight: CGFloat = 32
+    /// Height of the header row, set by the large pop-up button in it.
+    static let headerHeight: CGFloat = 32
 
     /// Width of the Preamp column beside the editor: a centred track, plus room
     /// on the right for the scale that hangs off it, and nothing spare.

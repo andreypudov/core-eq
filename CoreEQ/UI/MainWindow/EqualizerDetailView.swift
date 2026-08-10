@@ -17,7 +17,9 @@ struct EqualizerDetailView: View {
     /// strip, and the output row on every tick. Only `SpectrumBackdrop`, inside
     /// the plot, subscribes to it.
     let spectrum: SpectrumAnalyzer
-    @StateObject private var outputs = AudioDeviceList()
+    /// Owned by the app delegate, not by this view: it has to keep following
+    /// the default device while the window is closed.
+    @ObservedObject var outputs: AudioDeviceList
 
     /// Band the pointer is over, and the band being dragged. Either one shows
     /// that band's gain readout; the rest of the row stays quiet.
@@ -46,11 +48,6 @@ struct EqualizerDetailView: View {
             graph
 
             editor
-
-            // Sits apart from the sections above it: it selects where the sound
-            // goes, not how it's shaped.
-            outputRow
-                .padding(.top, 8)
         }
         .padding(.horizontal, Theme.Spacing.window)
         // The same gap the header has to the graph below it. The header sits
@@ -119,7 +116,7 @@ struct EqualizerDetailView: View {
                     .help(audioEngine.isEnabled ? "Turn the equalizer off" : "Turn the equalizer on")
             }
         }
-        .frame(height: Theme.outputRowHeight)
+        .frame(height: Theme.headerHeight)
     }
 
     /// The device, as a pop-up while there is something to choose between and
@@ -367,77 +364,6 @@ struct EqualizerDetailView: View {
     }
 
     // MARK: - Output
-
-    /// Volume, and nothing else — the device it goes to moved up to the header,
-    /// so the slider has the whole column and no neighbour to measure against.
-    private var outputRow: some View {
-        GeometryReader { proxy in
-            volumeControl(sliderWidth: max(proxy.size.width - Self.volumeChrome, 120))
-        }
-        .frame(height: Theme.outputRowHeight)
-    }
-
-    /// Everything in the volume control that isn't the slider: the mute button,
-    /// the percentage, and the gaps around them.
-    private static let volumeChrome: CGFloat = 18 + 8 + 34 + 8
-
-    /// System output volume. Not CoreEQ's own gain — this moves the output
-    /// device itself, the same value the Sound menu and the volume keys show,
-    /// and it follows those when they change it.
-    private func volumeControl(sliderWidth: CGFloat) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                outputs.toggleMuted()
-            } label: {
-                Image(systemName: volumeSymbol)
-                    .font(.system(size: 13))
-                    .frame(width: 18)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .disabled(!outputs.canSetVolume)
-            .help(outputs.isMuted ? "Unmute" : "Mute")
-            .accessibilityLabel(outputs.isMuted ? "Unmute" : "Mute")
-
-            Slider(
-                value: Binding(
-                    get: { Double(outputs.volume) },
-                    set: { outputs.setVolume(Float($0)) }
-                ),
-                in: 0...1
-            )
-            .frame(width: sliderWidth)
-            .disabled(!outputs.canSetVolume)
-            // 2% a step: fifty of them cross the whole range, which is about the
-            // resolution the volume keys give.
-            .scrollAdjustable(isEnabled: outputs.canSetVolume) { steps in
-                let raw = Double(outputs.volume) + Double(steps) * 0.02
-                outputs.setVolume(Float(raw.clamped(to: 0...1)))
-            }
-            .accessibilityLabel("Output volume")
-
-            Text(outputs.canSetVolume ? "\(Int((outputs.volume * 100).rounded()))%" : "—")
-                .font(.system(size: 12).monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 34, alignment: .leading)
-        }
-        // A device with no settable volume — many digital outputs — keeps the
-        // row's shape rather than removing the control, so switching devices
-        // doesn't reflow the row.
-        .opacity(outputs.canSetVolume ? 1.0 : 0.4)
-        .help(outputs.canSetVolume ? "System output volume" : "This output has no adjustable volume")
-    }
-
-    private var volumeSymbol: String {
-        guard outputs.canSetVolume, !outputs.isMuted else { return "speaker.slash.fill" }
-        switch outputs.volume {
-        case ..<0.01: return "speaker.fill"
-        case ..<0.34: return "speaker.wave.1.fill"
-        case ..<0.67: return "speaker.wave.2.fill"
-        default: return "speaker.wave.3.fill"
-        }
-    }
 
     private var devicePicker: some View {
         Picker("Output Device", selection: outputSelection) {

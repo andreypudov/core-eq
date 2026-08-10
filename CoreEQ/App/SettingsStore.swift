@@ -12,6 +12,7 @@ final class SettingsStore {
         static let workingPreamp = "workingPreamp"
         static let tone = "quickToneControls"
         static let userProfiles = "userProfiles"
+        static let deviceStates = "deviceStates"
     }
 
     private let defaults: UserDefaults
@@ -87,6 +88,25 @@ final class SettingsStore {
                 defaults.set(newValue, forKey: Key.tone)
             } else {
                 defaults.removeObject(forKey: Key.tone)
+            }
+        }
+    }
+
+    /// What was playing on each output device, keyed by its persistent UID.
+    ///
+    /// Replaces the single active-preset / working-chain / trim / tone keys,
+    /// which are now read once at launch to seed the current device's slot and
+    /// never written again.
+    var deviceStates: [String: DeviceEQState] {
+        get {
+            guard let data = defaults.data(forKey: Key.deviceStates) else { return [:] }
+            return (try? JSONDecoder().decode([String: DeviceEQState].self, from: data)) ?? [:]
+        }
+        set {
+            if newValue.isEmpty {
+                defaults.removeObject(forKey: Key.deviceStates)
+            } else if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: Key.deviceStates)
             }
         }
     }

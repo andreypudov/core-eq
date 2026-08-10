@@ -5,7 +5,16 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SettingsStore()
-    private lazy var profileManager = ProfileManager(settings: settings)
+
+    /// Owned here rather than by the window, so device changes are followed
+    /// whether or not anything is on screen — the EQ has to follow the hardware
+    /// even when CoreEQ is only a menu bar icon.
+    private let outputs = AudioDeviceList()
+
+    private lazy var profileManager = ProfileManager(
+        settings: settings,
+        outputDeviceUID: outputs.defaultDevicePersistentID
+    )
     private lazy var audioEngine = AudioEngine(settings: settings)
     private var menuBarController: MenuBarController?
     private var mainWindow: NSWindow?
@@ -26,6 +35,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         profileManager.$currentPreamp
             .sink { audioEngine.apply(preamp: $0) }
+            .store(in: &cancellables)
+
+        // Each output device keeps its own preset, edits, trim, and tone — the
+        // way macOS keeps a volume per device. Switching outputs loads that
+        // device's sound.
+        let profileManager = self.profileManager
+        let outputs = self.outputs
+        outputs.$defaultDeviceID
+            .removeDuplicates()
+            .sink { _ in
+                profileManager.setOutputDevice(uid: outputs.defaultDevicePersistentID)
+            }
             .store(in: &cancellables)
 
         audioEngine.start()
@@ -75,7 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 rootView: EqualizerDetailView(
                     profileManager: profileManager,
                     audioEngine: audioEngine,
-                    spectrum: audioEngine.spectrum
+                    spectrum: audioEngine.spectrum,
+                    outputs: outputs
                 )
             )
             // The window must never size itself from its content. By default a
@@ -146,10 +168,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // window. The opening size is capped to the visible frame so the
             // window always arrives fully on screen, including on a laptop
             // display.
-            // The editing area is a fixed height and the graph floor is 120 pt,
-            // so the fixed sections come to ~525 pt. The extra width covers the
-            // Global Gain column the graph is now inset by.
-            window.contentMinSize = NSSize(width: 960, height: 600)
+            // Header, editing area, and padding come to ~380 pt; the rest is the
+            // graph, which has a 120 pt floor.
+            window.contentMinSize = NSSize(width: 960, height: 540)
             let visible = (NSScreen.main?.visibleFrame.size).map {
                 NSSize(width: min(1_120, $0.width - 80), height: min(760, $0.height - 80))
             } ?? NSSize(width: 1_120, height: 760)

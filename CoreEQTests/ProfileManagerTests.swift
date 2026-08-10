@@ -21,8 +21,17 @@ final class ProfileManagerTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeManager() -> ProfileManager {
-        ProfileManager(settings: settings)
+    private func makeManager(device: String? = nil) -> ProfileManager {
+        ProfileManager(settings: settings, outputDeviceUID: device)
+    }
+
+    /// What was filed for a device, or for the no-device slot.
+    private func storedState(device: String? = nil) -> DeviceEQState? {
+        settings.deviceStates[device ?? ""]
+    }
+
+    private func seed(_ state: DeviceEQState, device: String? = nil) {
+        settings.deviceStates[device ?? ""] = state
     }
 
     /// Total response of a chain at `frequency`, the way the graph and the
@@ -42,12 +51,12 @@ final class ProfileManagerTests: XCTestCase {
     }
 
     func testRestoresTheSavedSelection() {
-        settings.activeProfileName = "Jazz"
+        seed(DeviceEQState(profileName: "Jazz"))
         XCTAssertEqual(makeManager().activeProfileName, "Jazz")
     }
 
     func testFallsBackWhenTheSavedSelectionIsGone() {
-        settings.activeProfileName = "A Preset That Was Deleted"
+        seed(DeviceEQState(profileName: "A Preset That Was Deleted"))
         XCTAssertEqual(makeManager().activeProfileName, BuiltInProfiles.defaultProfileName)
     }
 
@@ -61,11 +70,10 @@ final class ProfileManagerTests: XCTestCase {
     }
 
     func testRestoresTheWorkingChain() {
-        settings.activeProfileName = "Flat"
         var chain = BuiltInProfiles.emptyBandChain()
         for slot in chain.indices { chain[slot].gain = 3 }
         chain.append(EQFilter(kind: .lowShelf, frequency: 180, gain: -4, q: 0.8))
-        settings.workingFilters = chain
+        seed(DeviceEQState(profileName: "Flat", filters: chain))
 
         let manager = makeManager()
         XCTAssertTrue(manager.bandFilters.allSatisfy { $0.gain == 3 })
@@ -84,7 +92,7 @@ final class ProfileManagerTests: XCTestCase {
         XCTAssertTrue(manager.bandFilters.allSatisfy { $0.gain == 3.0 })
         XCTAssertTrue(manager.isModified)
         XCTAssertNil(settings.legacyCustomGains, "the legacy key is consumed, not left to fight the new one")
-        XCTAssertNotNil(settings.workingFilters)
+        XCTAssertNotNil(storedState()?.filters, "the migrated chain lands in the device's slot")
     }
 
     func testIgnoresLegacyCustomGainsOfTheWrongLength() {
@@ -286,7 +294,7 @@ final class ProfileManagerTests: XCTestCase {
         manager.resetToActiveProfile()
         XCTAssertFalse(manager.isModified)
         XCTAssertTrue(manager.freeFilters.isEmpty)
-        XCTAssertNil(settings.workingFilters)
+        XCTAssertNil(storedState()?.filters)
     }
 
     // MARK: - Free filters
@@ -449,7 +457,7 @@ final class ProfileManagerTests: XCTestCase {
         manager.resetToActiveProfile()
         XCTAssertEqual(manager.currentPreamp, 0)
         XCTAssertFalse(manager.isModified)
-        XCTAssertNil(settings.workingPreamp)
+        XCTAssertEqual(storedState()?.preamp, 0)
     }
 
     // MARK: - Edit as filter
@@ -567,7 +575,7 @@ final class ProfileManagerTests: XCTestCase {
         let manager = makeManager()
         manager.setTone(bass: 999)
         XCTAssertEqual(manager.tone.bass, QuickTone.range.upperBound)
-        XCTAssertNotNil(settings.tone)
+        XCTAssertNotNil(storedState()?.tone)
     }
 
     func testSelectingAProfileRecentresTone() {
@@ -577,7 +585,7 @@ final class ProfileManagerTests: XCTestCase {
 
         manager.setActiveProfile(name: "Rock")
         XCTAssertTrue(manager.tone.isNeutral)
-        XCTAssertNil(settings.tone)
+        XCTAssertNil(storedState()?.tone)
     }
 
     func testToneSurvivesRelaunch() {
@@ -587,6 +595,96 @@ final class ProfileManagerTests: XCTestCase {
         let expected = first.currentFilters
 
         XCTAssertEqual(makeManager().currentFilters, expected)
+    }
+
+    // MARK: - Per-device state
+
+    /// The point of the feature: what you set for headphones stays with the
+    /// headphones, and the speakers keep their own.
+    func testEachDeviceKeepsItsOwnSound() {
+        let manager = makeManager(device: "headphones")
+        manager.setActiveProfile(name: "Rock")
+        manager.setGain(6, forBandAt: 0)
+        manager.setPreamp(-3)
+
+        manager.setOutputDevice(uid: "speakers")
+        XCTAssertEqual(manager.activeProfileName, BuiltInProfiles.defaultProfileName,
+                       "a device never seen before starts at the default, not at whatever was playing")
+        XCTAssertEqual(manager.currentPreamp, 0)
+        XCTAssertFalse(manager.isModified)
+
+        manager.setActiveProfile(name: "Jazz")
+
+        manager.setOutputDevice(uid: "headphones")
+        XCTAssertEqual(manager.activeProfileName, "Rock")
+        XCTAssertEqual(manager.bandFilters[0].gain, 6)
+        XCTAssertEqual(manager.currentPreamp, -3)
+
+        manager.setOutputDevice(uid: "speakers")
+        XCTAssertEqual(manager.activeProfileName, "Jazz")
+    }
+
+    func testDeviceStateSurvivesRelaunch() {
+        let first = makeManager(device: "headphones")
+        first.setActiveProfile(name: "Rock")
+        first.setPreamp(-2.5)
+        first.setTone(bass: 4)
+
+        let second = makeManager(device: "headphones")
+        XCTAssertEqual(second.activeProfileName, "Rock")
+        XCTAssertEqual(second.currentPreamp, -2.5)
+        XCTAssertEqual(second.tone.bass, 4)
+
+        XCTAssertEqual(makeManager(device: "speakers").activeProfileName,
+                       BuiltInProfiles.defaultProfileName)
+    }
+
+    func testSwitchingToTheSameDeviceChangesNothing() {
+        let manager = makeManager(device: "headphones")
+        manager.setGain(5, forBandAt: 2)
+        let before = manager.currentFilters
+
+        manager.setOutputDevice(uid: "headphones")
+        XCTAssertEqual(manager.currentFilters, before, "a redundant switch must not reload and discard edits")
+    }
+
+    /// Presets are a shared library; only the selection follows the hardware.
+    func testPresetsAreSharedAcrossDevices() {
+        let manager = makeManager(device: "headphones")
+        let name = manager.addProfile(named: "Mine")
+
+        manager.setOutputDevice(uid: "speakers")
+        XCTAssertNotNil(manager.profile(named: name))
+        manager.setActiveProfile(name: name)
+        XCTAssertEqual(manager.activeProfileName, name)
+    }
+
+    /// A rename has to follow every device that had that preset selected, or
+    /// the others silently fall back to Flat the next time they are used.
+    func testRenamingAPresetFollowsEveryDeviceUsingIt() {
+        let manager = makeManager(device: "headphones")
+        let name = manager.addProfile(named: "Mine")
+        manager.setOutputDevice(uid: "speakers")
+        manager.setActiveProfile(name: name)
+        manager.setOutputDevice(uid: "headphones")
+
+        XCTAssertEqual(manager.renameProfile(named: name, to: "Renamed"), "Renamed")
+
+        manager.setOutputDevice(uid: "speakers")
+        XCTAssertEqual(manager.activeProfileName, "Renamed")
+    }
+
+    /// State written before the per-device model lands in the current device's
+    /// slot, so an update doesn't read as having lost the user's EQ.
+    func testLegacyStateMigratesIntoTheCurrentDevice() {
+        settings.activeProfileName = "Rock"
+        settings.workingPreamp = -4
+
+        let manager = makeManager(device: "headphones")
+        XCTAssertEqual(manager.activeProfileName, "Rock")
+        XCTAssertEqual(manager.currentPreamp, -4)
+        XCTAssertNil(settings.activeProfileName, "the legacy keys are consumed once")
+        XCTAssertEqual(storedState(device: "headphones")?.profileName, "Rock")
     }
 
     // MARK: - Persistence
@@ -617,10 +715,10 @@ final class ProfileManagerTests: XCTestCase {
     func testAnUnmodifiedChainStoresNothing() {
         let manager = makeManager()
         guard let id = manager.addFilter(frequency: 180, gain: 4) else { return XCTFail("filter not added") }
-        XCTAssertNotNil(settings.workingFilters)
+        XCTAssertNotNil(storedState()?.filters)
 
         manager.removeFilter(id: id)
-        XCTAssertNil(settings.workingFilters, "back to the preset means nothing to remember")
+        XCTAssertNil(storedState()?.filters, "back to the preset means nothing to remember")
     }
 
     func testProfilesListsBuiltInsBeforeUserPresets() {
