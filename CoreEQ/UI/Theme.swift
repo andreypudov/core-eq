@@ -53,8 +53,39 @@ enum Theme {
 
     enum FilterRow {
         /// One row plus its spacing. The filter list multiplies this to size its
-        /// scroll box, so the two must not drift apart.
-        static let height: CGFloat = 28
+        /// scroll box, so the two must not drift apart. Set by the knobs, which
+        /// are the tallest thing in a row.
+        static let height: CGFloat = 36
+
+        static let knobDiameter: CGFloat = 24
+
+        /// Height of the column-title row above the list.
+        static let headerHeight: CGFloat = 18
+
+        /// Gap between columns. Small on purpose: at the window's minimum width
+        /// the editor block is about 536 points wide, and the columns below,
+        /// their gaps, and the row's own padding claim 522 of it. Widen any of
+        /// them and the table starts clipping on a 960-point window.
+        static let columnSpacing: CGFloat = 8
+
+        /// Fixed column widths, shared by the title row and every band row so
+        /// the two line up without a `Grid` spanning the scroll view between
+        /// them.
+        ///
+        /// Each is sized to its widest content, not to its title: "20000 Hz",
+        /// "+12.0 dB", "10.00", and "High Shelf" are what these have to hold.
+        enum Column {
+            /// Colour swatch and band number, up to two digits.
+            static let index: CGFloat = 34
+            static let enable: CGFloat = 30
+            static let type: CGFloat = 100
+            static let frequency: CGFloat = 94
+            static let gain: CGFloat = 92
+            static let q: CGFloat = 76
+            /// Just the delete button: there is no power icon, because the
+            /// Enable switch two columns back is already that control.
+            static let actions: CGFloat = 24
+        }
     }
 
     /// The vertical rhythm the Band Levels and Preamp blocks share.

@@ -385,7 +385,8 @@ final class ProfileManager: ObservableObject {
             kind: kind,
             frequency: frequency.clamped(to: BuiltInProfiles.filterFrequencyRange),
             gain: gain.clamped(to: BuiltInProfiles.gainRange),
-            q: q.clamped(to: BuiltInProfiles.filterQRange)
+            q: q.clamped(to: BuiltInProfiles.filterQRange),
+            colorIndex: nextColorIndex
         )
         currentFilters.append(filter)
         persistDeviceState()
@@ -418,6 +419,21 @@ final class ProfileManager: ObservableObject {
 
     func setFilterEnabled(_ isEnabled: Bool, id: UUID) {
         updateFreeFilter(id: id) { $0.isEnabled = isEnabled }
+    }
+
+    /// Tags a filter with a palette colour. See `BandColor`.
+    func setFilterColor(_ colorIndex: Int, id: UUID) {
+        updateFreeFilter(id: id) { $0.colorIndex = colorIndex }
+    }
+
+    /// The first palette colour no free filter is wearing, so bands added one
+    /// after another are told apart at a glance. Once the palette is used up it
+    /// cycles, which is the point at which the number beside the swatch is
+    /// doing the work anyway.
+    private var nextColorIndex: Int {
+        let used = Set(freeFilters.map(\.colorIndex))
+        return (0..<EQFilter.colorCount).first { !used.contains($0) }
+            ?? (freeFilters.count % EQFilter.colorCount)
     }
 
     /// Double-click on a filter's node: back to 0 dB, matching what a
@@ -453,7 +469,10 @@ final class ProfileManager: ObservableObject {
         guard canAddFilter,
               slot < BuiltInProfiles.bandCount,
               currentFilters.indices.contains(slot) else { return nil }
-        let lifted = currentFilters[slot].unbound()
+        var lifted = currentFilters[slot].unbound()
+        // A band carries the ladder's default colour; as a free filter it needs
+        // one of its own, or every lifted band would arrive green.
+        lifted.colorIndex = nextColorIndex
         currentFilters[slot].gain = 0
         currentFilters[slot].isEnabled = true
         currentFilters.append(lifted)

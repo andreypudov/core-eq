@@ -343,6 +343,52 @@ final class ProfileManagerTests: XCTestCase {
         XCTAssertEqual(manager.freeFilters[0].gain, BuiltInProfiles.gainRange.upperBound)
     }
 
+    /// Colours are what tell one band's row and one node on the graph from
+    /// another's, so bands added one after another must not arrive matching.
+    func testAddedFiltersTakeDistinctColours() {
+        let manager = makeManager()
+        for _ in 0..<EQFilter.colorCount {
+            XCTAssertNotNil(manager.addFilter())
+        }
+
+        let colors = manager.freeFilters.map(\.colorIndex)
+        XCTAssertEqual(Set(colors).count, EQFilter.colorCount, "the palette is used up before any of it repeats")
+    }
+
+    /// A colour freed by a removal is the next one handed out, rather than the
+    /// palette marching on and leaving gaps.
+    func testAFreedColourIsReused() {
+        let manager = makeManager()
+        guard let first = manager.addFilter(), manager.addFilter() != nil else {
+            return XCTFail("filters not added")
+        }
+        let freed = manager.freeFilters[0].colorIndex
+
+        manager.removeFilter(id: first)
+        XCTAssertNotNil(manager.addFilter())
+        XCTAssertTrue(manager.freeFilters.contains { $0.colorIndex == freed })
+    }
+
+    /// Colour is presentation, but it is presentation the user chose, so it has
+    /// to survive the round trip through the device's stored state.
+    func testFilterColourSurvivesRelaunch() {
+        let manager = makeManager()
+        guard let id = manager.addFilter() else { return XCTFail("filter not added") }
+        manager.setFilterColor(5, id: id)
+
+        XCTAssertEqual(makeManager().freeFilters.first?.colorIndex, 5)
+    }
+
+    /// A band lifted out of the ladder joins bands that already have colours,
+    /// so it needs one that isn't taken rather than the ladder's default.
+    func testLiftedBandTakesAnUnusedColour() {
+        let manager = makeManager()
+        manager.addFilter()
+        XCTAssertNotNil(manager.editBandAsFilter(slot: 4))
+
+        XCTAssertEqual(Set(manager.freeFilters.map(\.colorIndex)).count, 2)
+    }
+
     func testRemovingAFilterLeavesTheLadderIntact() {
         let manager = makeManager()
         guard let id = manager.addFilter(frequency: 180, gain: 4) else { return XCTFail("filter not added") }

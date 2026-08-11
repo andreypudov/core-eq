@@ -128,8 +128,9 @@ height so nothing above it moves when you switch.
  [ Graphic | Parametric ]                    Classical ▾   Reset
 
  Parametric Bands — 2 bands                                        ⏻
-   ● Bell         180 Hz    −3.0 dB    Q 1.20
-   ● High Shelf     8 kHz   −2.0 dB    Q 0.70
+   #  Enable  Type          Frequency     Gain         Q       Actions
+   ●1   ( )   Bell      ▾   ◔ 180 Hz    ◔ −3.0 dB    ◔ 1.20        🗑
+   ●2   ( )   High Shelf ▾  ◔ 8000 Hz   ◔ −2.0 dB    ◔ 0.70        🗑
  + Add Band
 
  Output [MacBook Pro Speakers]   Preamp ──▪── +2.0 dB   🔈 ──▪── 70%
@@ -139,6 +140,14 @@ The Graphic tab is the default and is what a user who knows the Apple Music or
 Spotify equalizer already knows how to operate. Each tab keeps its own power
 switch over its half of the chain, so either half can be heard on its own —
 which is what teaches that both feed the one curve above.
+
+A band is a row in a table, because six parameters across several bands is a
+grid of values and a grid is read down a column. Each parameter has both a knob
+and a number: the knob is how a value is found while listening — dragged,
+scrolled, or nudged — and the number is how a value already known is entered.
+Each band also carries a colour it can be given, which its knobs and its node on
+the graph both take, so the row and the point are visibly the same band. The
+colour is never the only marker; every band carries its number too.
 
 Choosing the Parametric tab is opting in, so the controls there use the
 standard vocabulary — Bell, Low Shelf, High Shelf, High Pass, Low Pass, and
@@ -160,9 +169,9 @@ enabled filter, band and free alike. That curve is what reaches the speakers.
 
 Band handles sit at the eleven ladder positions and move vertically only. Free
 filter nodes move in both axes — horizontally for frequency, vertically for
-gain. Q is set numerically in the list rather than by dragging: the graph is
-where a filter is dialled in by feel, the list is where it is set exactly, and
-one of the two has to be the precise one.
+gain. Q is set in the list rather than by dragging the graph: the graph is where
+a filter is placed by feel, the list is where every one of its parameters can be
+reached, and one of the two has to be the precise one.
 
 The constraint is the explanation: a band handle physically cannot be dragged
 sideways, so the difference between a locked band and a free filter is learned

@@ -410,8 +410,14 @@ struct FrequencyResponseView: View {
     ///
     /// The size difference is the visual half of the same distinction the drag
     /// enforces: these are the points that move in two axes.
+    ///
+    /// Each node takes its band's own colour rather than the curve's green, so
+    /// the row in the parametric list and the point on the graph are visibly
+    /// the same band. The curve itself stays green: it is the output, and the
+    /// output belongs to no single band.
     private func drawFilterNodes(_ context: GraphicsContext, _ size: CGSize) {
         for (index, filter) in freeFilters.enumerated() {
+            let tint = BandColor.at(filter.colorIndex).color
             let isHighlighted = (dragged ?? hovered) == .filter(filter.id)
             let isActive = filter.isEnabled && Biquad.isActive(
                 kind: filter.kind, frequency: filter.frequency, gain: filter.gain, sampleRate: sampleRate
@@ -421,11 +427,11 @@ struct FrequencyResponseView: View {
             let core = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
             let ring = Path(ellipseIn: CGRect(x: center.x - radius - 3, y: center.y - radius - 3, width: (radius + 3) * 2, height: (radius + 3) * 2))
 
-            context.stroke(ring, with: .color(.coreEQAccent.opacity(isActive ? 0.45 : 0.2)), lineWidth: 1)
+            context.stroke(ring, with: .color(tint.opacity(isActive ? 0.45 : 0.2)), lineWidth: 1)
             context.fill(core, with: .color(.white.opacity(isActive ? 0.95 : 0.35)))
             context.stroke(
                 core,
-                with: .color(.coreEQAccent.opacity(isActive ? 1.0 : 0.35)),
+                with: .color(tint.opacity(isActive ? 1.0 : 0.35)),
                 lineWidth: isHighlighted ? 2.5 : 2
             )
 

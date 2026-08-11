@@ -38,11 +38,22 @@ struct EQFilter: Codable, Equatable, Identifiable {
         }
     }
 
+    /// How many distinct colours a free filter can be tagged with, so the
+    /// manager can hand a new one a colour nothing else is using. The palette
+    /// itself is `BandColor`, which is UI; this is only its size.
+    static let colorCount = 8
+
     var kind: Kind
     var frequency: Double
     var gain: Double
     var q: Double
     var isEnabled: Bool
+
+    /// Index into `BandColor`. Presentation, not sound — it identifies this
+    /// filter in the list and on the graph. Stored rather than derived from the
+    /// filter's position so a band keeps its colour when the ones above it are
+    /// removed.
+    var colorIndex: Int
 
     /// Ladder slot, or nil for a free filter. This — not the frequency — is a
     /// band's identity, so the fixed slider strip has a stable mapping into a
@@ -64,7 +75,8 @@ struct EQFilter: Codable, Equatable, Identifiable {
         gain: Double,
         q: Double = BuiltInProfiles.defaultQ,
         isEnabled: Bool = true,
-        band: Int? = nil
+        band: Int? = nil,
+        colorIndex: Int = 0
     ) {
         self.kind = kind
         self.frequency = frequency
@@ -72,6 +84,7 @@ struct EQFilter: Codable, Equatable, Identifiable {
         self.q = q
         self.isEnabled = isEnabled
         self.band = band
+        self.colorIndex = colorIndex
     }
 
     /// A filter occupying ladder slot `slot`, taking its frequency and Q from
@@ -93,11 +106,19 @@ struct EQFilter: Codable, Equatable, Identifiable {
     /// leaves the sound identical. That is what makes it a move rather than a
     /// conversion.
     func unbound() -> EQFilter {
-        EQFilter(kind: kind, frequency: frequency, gain: gain, q: q, isEnabled: isEnabled, band: nil)
+        EQFilter(
+            kind: kind,
+            frequency: frequency,
+            gain: gain,
+            q: q,
+            isEnabled: isEnabled,
+            band: nil,
+            colorIndex: colorIndex
+        )
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, frequency, gain, q, isEnabled, band
+        case kind, frequency, gain, q, isEnabled, band, colorIndex
     }
 
     /// Every stored key is optional with a sensible default, so a preset written
@@ -110,6 +131,7 @@ struct EQFilter: Codable, Equatable, Identifiable {
         q = try container.decodeIfPresent(Double.self, forKey: .q) ?? BuiltInProfiles.defaultQ
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         band = try container.decodeIfPresent(Int.self, forKey: .band)
+        colorIndex = try container.decodeIfPresent(Int.self, forKey: .colorIndex) ?? 0
     }
 
     static func == (lhs: EQFilter, rhs: EQFilter) -> Bool {
@@ -119,5 +141,9 @@ struct EQFilter: Codable, Equatable, Identifiable {
             && lhs.q == rhs.q
             && lhs.isEnabled == rhs.isEnabled
             && lhs.band == rhs.band
+            // Colour counts as an edit: the working chain is only written to
+            // disk while it differs from the preset, so a recoloured band that
+            // compared equal would lose its colour on the next launch.
+            && lhs.colorIndex == rhs.colorIndex
     }
 }
