@@ -184,6 +184,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         mainWindow?.makeKeyAndOrderFront(nil)
+        // Nothing starts out focused.
+        //
+        // This window is closed by ordering out and reopened by ordering back
+        // in, and AppKit restores the first responder it had — which, once a
+        // parametric band exists, is a text field holding a number, arriving
+        // selected and ready to be typed over by anyone who reopens the window
+        // and presses a key. Clearing it twice: once now, and once after the
+        // window has finished becoming key, since the key-view loop is settled
+        // by then and can otherwise hand the focus straight back.
+        mainWindow?.makeFirstResponder(nil)
+        DispatchQueue.main.async { [weak self] in
+            self?.mainWindow?.makeFirstResponder(nil)
+        }
         audioEngine.spectrum.start()
     }
 

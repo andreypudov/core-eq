@@ -37,14 +37,26 @@ struct Biquad: Equatable {
     /// The lowest centre frequency worth filtering at all.
     static let minimumFrequency = 10.0
 
+    /// Whether a filter at `frequency` can be realised at all at `sampleRate`.
+    ///
+    /// Deliberately says nothing about gain. A band sitting at 0 dB is
+    /// realisable and inaudible at the same time: the processor is right to
+    /// skip it, and the plot is right to draw its point at full strength,
+    /// because a band that has just been created and not yet moved is not a
+    /// band that has been switched off.
+    static func isRealisable(frequency: Double, sampleRate: Double) -> Bool {
+        frequency > minimumFrequency && frequency < sampleRate * nyquistCeiling
+    }
+
     /// Whether a filter of `kind` does anything at `sampleRate`.
     ///
     /// Both call sites need this test on its own, independently of the
-    /// coefficients — the processor to skip work, the plot to dim the handle.
-    /// High and low pass have no gain parameter, so for them only the frequency
-    /// matters: a 0 dB high pass is still very much doing something.
+    /// coefficients — the processor to skip work, the plot to dim the handles
+    /// it cannot render. High and low pass have no gain parameter, so for them
+    /// only the frequency matters: a 0 dB high pass is still very much doing
+    /// something.
     static func isActive(kind: EQFilter.Kind, frequency: Double, gain: Double, sampleRate: Double) -> Bool {
-        guard frequency > minimumFrequency, frequency < sampleRate * nyquistCeiling else { return false }
+        guard isRealisable(frequency: frequency, sampleRate: sampleRate) else { return false }
         return kind.usesGain ? abs(gain) > negligibleGainDB : true
     }
 

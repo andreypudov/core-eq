@@ -17,6 +17,9 @@ import SwiftUI
 /// - *Band handles* are locked to the ladder, so they move vertically only.
 /// - *Filter nodes* are free, so they move in both axes.
 ///
+/// Clicking a filter node selects it, which is the same selection the
+/// parametric table's rows carry: one band, pointed at from either side.
+///
 /// Double-click resets a point's gain to 0 dB. With `allowsFilterCreation` set —
 /// which the main window ties to the Filters section being open — double-
 /// clicking empty space creates a filter there instead, so a user who never
@@ -36,11 +39,19 @@ struct FrequencyResponseView: View {
     /// invalidate that layer and leave this view untouched.
     var spectrum: SpectrumAnalyzer?
 
+    /// The filter whose node is drawn as chosen, and whose row is highlighted in
+    /// the parametric table. One selection, shown in both places.
+    var selectedFilterID: UUID?
+
     var onBandGainChange: ((_ slot: Int, _ gain: Double) -> Void)?
     var onBandReset: ((_ slot: Int) -> Void)?
     var onFilterMove: ((_ id: UUID, _ frequency: Double, _ gain: Double) -> Void)?
     var onFilterReset: ((_ id: UUID) -> Void)?
     var onFilterCreate: ((_ frequency: Double, _ gain: Double) -> Void)?
+    /// A click landed on a filter node, or on nothing. Nil clears the
+    /// selection, so clicking the empty plot puts the table back to no row
+    /// chosen rather than leaving a stale one behind.
+    var onFilterSelect: ((_ id: UUID?) -> Void)?
 
     /// Whether double-clicking empty space creates a filter. Off unless the
     /// user has opened the Filters section.
@@ -70,7 +81,9 @@ struct FrequencyResponseView: View {
     /// overlapping filters can sum a few dB past a single one's maximum.
     private static let maxDB = 14.0
     private static let curvePointCount = 160
-    private static let handleHitRadius: CGFloat = 14
+    /// Grabbing distance, a little wider than the largest node so a click just
+    /// off one still lands on it.
+    private static let handleHitRadius: CGFloat = 16
 
     /// Only the extremes and the reference are marked. The ±6 dB rules were
     /// noise: the curve is read against 0 dB, and the frequency divisions
@@ -134,6 +147,7 @@ struct FrequencyResponseView: View {
                 }
                 .gesture(dragGesture(size))
                 .simultaneousGesture(doubleClickGesture(size))
+                .simultaneousGesture(selectionGesture(size))
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let location):
@@ -177,6 +191,24 @@ struct FrequencyResponseView: View {
             }
             .onEnded { _ in
                 dragged = nil
+            }
+    }
+
+    /// A plain click chooses the point it lands on, which is what puts the
+    /// matching row in the parametric table into selection — and, coming the
+    /// other way, a row chosen there is what draws this node as chosen. There
+    /// is one selection; these are two ways of pointing at it.
+    ///
+    /// A band handle clears it rather than selecting anything: the ladder's
+    /// eleven filters have no row in that table to select.
+    private func selectionGesture(_ size: CGSize) -> some Gesture {
+        SpatialTapGesture(count: 1)
+            .onEnded { value in
+                if case .filter(let id)? = handle(near: value.location, size) {
+                    onFilterSelect?(id)
+                } else {
+                    onFilterSelect?(nil)
+                }
             }
     }
 
@@ -317,14 +349,19 @@ struct FrequencyResponseView: View {
     /// it. Showing the one response the handle belongs to — peaking exactly at
     /// the handle — makes it plain that the bold line is the sum of the whole
     /// chain, not the thing being dragged.
+    ///
+    /// The selected filter gets the same treatment while nothing is being
+    /// pointed at, so choosing a row in the parametric table shows what that
+    /// row is doing to the sound and not only which node it owns.
     private func drawHighlightedFilterCurve(_ context: GraphicsContext, _ size: CGSize) {
-        guard let handle = dragged ?? hovered else { return }
+        guard let handle = dragged ?? hovered ?? selectedFilterID.map(Handle.filter) else { return }
         let source: EQFilter?
         switch handle {
         case .band(let slot): source = bands[safe: slot]
         case .filter(let id): source = freeFilters.first { $0.id == id }
         }
         guard let source else { return }
+        let tint = source.isBand ? Color.coreEQAccent : BandColor.at(source.colorIndex).color
         let biquad = Biquad(filter: source, sampleRate: sampleRate)
         let axis = axis(size)
 
@@ -342,7 +379,7 @@ struct FrequencyResponseView: View {
 
         context.stroke(
             response,
-            with: .color(.coreEQAccent.opacity(0.5)),
+            with: .color(tint.opacity(0.5)),
             style: StrokeStyle(lineWidth: 1, lineJoin: .round, dash: [3, 3])
         )
     }
@@ -382,14 +419,15 @@ struct FrequencyResponseView: View {
     private func drawBandMarkers(_ context: GraphicsContext, _ size: CGSize) {
         for (slot, band) in bands.enumerated() {
             let isHighlighted = (dragged ?? hovered) == .band(slot)
-            // Bands the processor turns into identity filters (at or above
-            // Nyquist for the current sample rate) are shown dimmed.
-            let isActive = band.isEnabled && (Biquad.isActive(
-                kind: band.kind, frequency: band.frequency, gain: band.gain, sampleRate: sampleRate
-            ) || band.gain == 0)
+            // Bands the processor cannot render (at or above Nyquist for the
+            // current sample rate) are shown dimmed. A band at 0 dB is not one
+            // of them — it is flat, which is a value like any other.
+            let isActive = band.isEnabled && Biquad.isRealisable(
+                frequency: band.frequency, sampleRate: sampleRate
+            )
             let center = bandHandleCenter(band, size)
             let radius: CGFloat = isHighlighted ? 5 : 4
-            let dot = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+            let dot = circle(at: center, radius: radius)
 
             // Logic Pro's handle: a white core inside an accent ring, which
             // stays legible over both the fill and the grid.
@@ -406,7 +444,7 @@ struct FrequencyResponseView: View {
         }
     }
 
-    /// Free filters, drawn larger than the band handles and with an outer ring.
+    /// Free filters, drawn larger than the band handles and numbered.
     ///
     /// The size difference is the visual half of the same distinction the drag
     /// enforces: these are the points that move in two axes.
@@ -419,25 +457,35 @@ struct FrequencyResponseView: View {
         for (index, filter) in freeFilters.enumerated() {
             let tint = BandColor.at(filter.colorIndex).color
             let isHighlighted = (dragged ?? hovered) == .filter(filter.id)
-            let isActive = filter.isEnabled && Biquad.isActive(
-                kind: filter.kind, frequency: filter.frequency, gain: filter.gain, sampleRate: sampleRate
+            let isSelected = selectedFilterID == filter.id
+            // Dimmed only when the band is switched off or its frequency can't
+            // be rendered at this sample rate. Not when its gain is 0: a band
+            // that was just added sits at 0 dB, and dimming it there says it is
+            // inactive when it is simply flat.
+            let isActive = filter.isEnabled && Biquad.isRealisable(
+                frequency: filter.frequency, sampleRate: sampleRate
             )
             let center = filterNodeCenter(filter, size)
-            let radius: CGFloat = isHighlighted ? 7 : 6
-            let core = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-            let ring = Path(ellipseIn: CGRect(x: center.x - radius - 3, y: center.y - radius - 3, width: (radius + 3) * 2, height: (radius + 3) * 2))
+            // Large enough for the number inside to be read rather than
+            // guessed at, which is the whole point of putting it there: the
+            // number is how a node is matched to its row in the table.
+            let radius: CGFloat = isHighlighted ? 10 : 9
+            let core = circle(at: center, radius: radius)
 
-            context.stroke(ring, with: .color(tint.opacity(isActive ? 0.45 : 0.2)), lineWidth: 1)
+            // Selection is a heavier outline, exactly as it is on a band
+            // slider's knob — no ring drawn around the point. The selected
+            // filter's own response is already on the plot as a dashed line,
+            // and that says which band is chosen better than a halo does.
             context.fill(core, with: .color(.white.opacity(isActive ? 0.95 : 0.35)))
             context.stroke(
                 core,
                 with: .color(tint.opacity(isActive ? 1.0 : 0.35)),
-                lineWidth: isHighlighted ? 2.5 : 2
+                lineWidth: isHighlighted || isSelected ? 3 : 2
             )
 
             let number = Text("\(index + 1)")
-                .font(.system(size: 9, weight: .semibold).monospacedDigit())
-                .foregroundStyle(Color.black.opacity(isActive ? 0.7 : 0.3))
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .foregroundStyle(Color.black.opacity(isActive ? 0.75 : 0.3))
             context.draw(number, at: center, anchor: .center)
         }
 
@@ -448,6 +496,15 @@ struct FrequencyResponseView: View {
                 : "\(BandFormat.frequency(filter.frequency)) Hz"
             drawLabel(context, size, center: center, text: text)
         }
+    }
+
+    private func circle(at center: CGPoint, radius: CGFloat) -> Path {
+        Path(ellipseIn: CGRect(
+            x: center.x - radius,
+            y: center.y - radius,
+            width: radius * 2,
+            height: radius * 2
+        ))
     }
 
     private func drawGainLabel(_ context: GraphicsContext, _ size: CGSize, center: CGPoint, gain: Double) {

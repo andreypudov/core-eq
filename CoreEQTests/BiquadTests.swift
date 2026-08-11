@@ -111,6 +111,22 @@ final class BiquadTests: XCTestCase {
         )
     }
 
+    /// The plot asks a different question from the processor: not "is this
+    /// audible" but "can this be rendered at all". A band added a moment ago
+    /// sits at 0 dB, and drawing it dimmed would say it is off when it is only
+    /// flat.
+    func testFlatBandIsRealisableEvenThoughItIsNotActive() {
+        XCTAssertTrue(Biquad.isRealisable(frequency: 1_000, sampleRate: sampleRate))
+        XCTAssertFalse(Biquad.isActive(kind: .bell, frequency: 1_000, gain: 0, sampleRate: sampleRate))
+    }
+
+    func testFrequenciesOutsideTheRenderableRangeAreNotRealisable() {
+        // 0.47 × 48 000 = 22 560 Hz.
+        XCTAssertFalse(Biquad.isRealisable(frequency: 23_000, sampleRate: sampleRate))
+        XCTAssertFalse(Biquad.isRealisable(frequency: 5, sampleRate: sampleRate))
+        XCTAssertTrue(Biquad.isRealisable(frequency: 20_000, sampleRate: 44_100))
+    }
+
     // MARK: - Identity guards
 
     func testNegligibleGainIsIdentity() {

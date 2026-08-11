@@ -8,10 +8,10 @@ import SwiftUI
 /// column without a careful drag. It adds no chrome and costs nothing to anyone
 /// who never tries it.
 ///
-/// The parametric band knobs carry it too, even though their rows live in a
-/// `ScrollView`. A knob is a small, deliberate target: a scroll that starts
-/// over one is aimed at that value, and every other point in the row still
-/// scrolls the list.
+/// The parametric band knobs and their number fields carry it too, even though
+/// their rows live in a `ScrollView`. Both are small, deliberate targets: a
+/// scroll that starts over one is aimed at that value, and every other point in
+/// the row still scrolls the list.
 struct ScrollAdjuster: NSViewRepresentable {
     let isEnabled: Bool
     /// Scroll distance that makes one step.

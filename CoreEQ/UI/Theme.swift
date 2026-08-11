@@ -62,6 +62,10 @@ enum Theme {
         /// Height of the column-title row above the list.
         static let headerHeight: CGFloat = 18
 
+        /// Hairline between two rows. Part of a row's pitch, so the list can
+        /// size itself to whole rows.
+        static let separator: CGFloat = 1
+
         /// Gap between columns. Small on purpose: at the window's minimum width
         /// the editor block is about 536 points wide, and the columns below,
         /// their gaps, and the row's own padding claim 522 of it. Widen any of

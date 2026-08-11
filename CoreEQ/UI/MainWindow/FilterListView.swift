@@ -20,12 +20,16 @@ struct FilterListView: View {
     @Binding var selectedFilterID: UUID?
 
     var body: some View {
+        // The table takes every point the block has, and Add Band sits on the
+        // bottom edge under it. Before, the list stopped at three rows and the
+        // leftover height sat empty below the section — so a fourth band had to
+        // be scrolled to while the space to show it was right there.
         VStack(alignment: .leading, spacing: 0) {
             header
             content
                 .padding(.top, 8)
+                .frame(maxHeight: .infinity, alignment: .top)
             addRow
-            Spacer(minLength: 0)
         }
         .opacity(isEnabled ? 1.0 : 0.5)
         .animation(.easeInOut(duration: 0.18), value: profileManager.freeFilters.count)
@@ -48,14 +52,26 @@ struct FilterListView: View {
             // The same switch the Graphic tab has over its sliders: hearing one
             // half of the chain on its own is what teaches that both halves feed
             // the one curve above.
+            //
+            // With no bands there is nothing for it to switch, so it is faded
+            // well past what `disabled` alone does — a switch that merely looks
+            // a little grey still looks like a switch you should be able to
+            // flick, and being unable to is then a fault rather than a fact.
             Toggle("", isOn: freeFiltersEnabled)
                 .toggleStyle(.switch)
                 .controlSize(.mini)
                 .labelsHidden()
-                .disabled(!isEnabled || profileManager.freeFilters.isEmpty)
-                .help("Switch every parametric band off to hear the band levels on their own")
+                .disabled(!isEnabled || !hasBands)
+                .opacity(hasBands ? 1 : 0.35)
+                .help(
+                    hasBands
+                        ? "Switch every parametric band off to hear the band levels on their own"
+                        : "Add a band to switch the parametric section on and off"
+                )
         }
     }
+
+    private var hasBands: Bool { !profileManager.freeFilters.isEmpty }
 
     private var summary: String {
         let count = profileManager.freeFilters.count
@@ -90,7 +106,10 @@ struct FilterListView: View {
     /// arrive as "Ac…".
     private func title(_ text: String, width: CGFloat, alignment: Alignment = .center) -> some View {
         Text(text)
-            .font(.system(size: 10, weight: .medium))
+            // The size the Preamp readout and the band captions use, so the
+            // window has one voice for the small print rather than a different
+            // one per section.
+            .font(.system(size: 11, weight: .medium))
             .foregroundStyle(.tertiary)
             .fixedSize()
             .frame(width: width, alignment: alignment)
@@ -129,13 +148,15 @@ struct FilterListView: View {
 
     // MARK: - Content
 
-    /// The list scrolls inside a fixed height rather than growing the section.
+    /// The list scrolls inside whatever height the editing area has, rather
+    /// than growing the section.
     ///
-    /// Without the cap the column's intrinsic height grows with every filter
+    /// Without the bound the column's intrinsic height grows with every band
     /// added, and because the window sizes itself from its content, a full list
     /// pushes the window taller than the screen. The graph is the element that
-    /// deserves the leftover height; this one gets a bounded box and a
-    /// scrollbar.
+    /// deserves the leftover height; this one gets the editing area's fixed
+    /// height and a scrollbar — but all of it, so nothing has to be scrolled to
+    /// while empty space sits below the section.
     @ViewBuilder
     private var content: some View {
         if profileManager.freeFilters.isEmpty {
@@ -146,60 +167,84 @@ struct FilterListView: View {
             // laid out in what the scroll bar leaves — and on a Mac with a
             // mouse plugged in, that is fifteen points of drift between every
             // title and the column under it.
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                        ForEach(Array(profileManager.freeFilters.enumerated()), id: \.element.id) { index, filter in
-                            FilterRowView(
-                                index: index + 1,
-                                filter: filter,
-                                isSelected: selectedFilterID == filter.id,
-                                isEnabled: isEnabled,
-                                profileManager: profileManager
-                            )
-                            .onTapGesture { selectedFilterID = filter.id }
+            GeometryReader { geometry in
+              ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        Section {
+                            ForEach(Array(profileManager.freeFilters.enumerated()), id: \.element.id) { index, filter in
+                                FilterRowView(
+                                    index: index + 1,
+                                    filter: filter,
+                                    isSelected: selectedFilterID == filter.id,
+                                    isEnabled: isEnabled,
+                                    profileManager: profileManager
+                                )
+                                .onTapGesture { selectedFilterID = filter.id }
 
-                            if filter.id != profileManager.freeFilters.last?.id {
-                                Rectangle()
-                                    .fill(Theme.blockBorder)
-                                    .frame(height: 1)
-                                    .padding(.leading, 8)
+                                if filter.id != profileManager.freeFilters.last?.id {
+                                    Rectangle()
+                                        .fill(Theme.blockBorder)
+                                        .frame(height: Theme.FilterRow.separator)
+                                        .padding(.leading, 8)
+                                }
                             }
+                        } header: {
+                            // The window's own material, so rows pass behind the
+                            // titles instead of through them, and the strip still
+                            // reads as part of the one canvas.
+                            columnTitles.background(WindowBackground())
                         }
-                    } header: {
-                        // The window's own material, so rows pass behind the
-                        // titles instead of through them, and the strip still
-                        // reads as part of the one canvas.
-                        columnTitles.background(WindowBackground())
                     }
                 }
+                // A whole number of rows, never a sliced one. The leftover is
+                // at most a row's height and sits below the table as padding,
+                // where it reads as space rather than as a band cut in half.
+                .frame(height: visibleHeight(in: geometry.size.height))
+                .scrollBounceBehavior(.basedOnSize)
+                // Only a few rows are visible at a time, so a band chosen by
+                // clicking its node on the graph is often one the table isn't
+                // showing. Bringing it into view is what makes the two halves
+                // of the selection one thing rather than two.
+                .onChange(of: selectedFilterID) { _, id in
+                    guard let id else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                }
+              }
             }
-            .frame(height: listHeight)
-            .scrollBounceBehavior(.basedOnSize)
         }
     }
 
-    /// Grows with the list up to three rows, then stops and scrolls — so one
-    /// filter doesn't reserve the space of eight, and eight don't take over the
-    /// window. The pinned title row is inside this box, so its height is part
-    /// of the sum.
-    private var listHeight: CGFloat {
-        let rows = min(profileManager.freeFilters.count, 3)
-        return CGFloat(rows) * Theme.FilterRow.height + Theme.FilterRow.headerHeight + 4
+    /// The tallest whole number of rows that fits in `available`, plus the
+    /// pinned title row above them.
+    ///
+    /// A row and the hairline under it are one pitch; the last row has no
+    /// hairline, hence the odd point back. Never less than one row, so a very
+    /// short window shows a band rather than a sliver of one.
+    private func visibleHeight(in available: CGFloat) -> CGFloat {
+        let pitch = Theme.FilterRow.height + Theme.FilterRow.separator
+        let forRows = available - Theme.FilterRow.headerHeight
+        let rows = max(1, ((forRows + Theme.FilterRow.separator) / pitch).rounded(.down))
+        return min(rows * pitch - Theme.FilterRow.separator + Theme.FilterRow.headerHeight, available)
     }
 
-    /// The moment the mental model is either formed or lost, so it states the
-    /// relationship rather than leaving the user to infer it from an empty box.
+    /// Says what a band is for and how to make one, and stops.
+    ///
+    /// Two short lines rather than a paragraph explaining the architecture:
+    /// someone who has chosen this tab knows what a filter is, and someone who
+    /// hasn't is not reading an empty box.
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Parametric bands add to the band levels in the Graphic tab. Both are part of one equalizer, and the graph always shows the result.")
+        VStack(alignment: .leading, spacing: 6) {
+            Text("No bands yet.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
 
-            Text("Add one below, or double-click the graph where you want it.")
+            Text("A band boosts or cuts one frequency, on top of the Graphic sliders. Add one below, or double-click the graph where you want it.")
                 .font(.system(size: 12))
                 .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
@@ -262,10 +307,23 @@ struct FilterRowView: View {
         }
         .frame(height: Theme.FilterRow.height)
         .padding(.horizontal, 8)
+        // A neutral wash, with the band's colour only in the outline.
+        //
+        // A coloured fill behind the row tints every control standing on it —
+        // the fields are translucent, so their text lost contrast and the whole
+        // row read as dimmed, as though selecting it had switched it off. The
+        // colour still belongs here, saying which node on the graph this row
+        // is, but it belongs at the edge of the row rather than under the
+        // values.
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.primary.opacity(isSelected ? 0.07 : 0.0))
+                .fill(Color.primary.opacity(isSelected ? 0.06 : 0.0))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(color.opacity(isSelected ? 0.7 : 0.0), lineWidth: 1.5)
+                )
         )
+        .animation(.easeOut(duration: 0.15), value: isSelected)
         .contentShape(Rectangle())
         .contextMenu {
             Button("Reset Gain") { profileManager.resetFilter(id: filter.id) }
@@ -332,61 +390,39 @@ struct FilterRowView: View {
     }
 
     private var frequencyCell: some View {
-        parameterCell(width: Theme.FilterRow.Column.frequency) {
-            KnobControl(
-                value: Binding(
-                    get: { filter.frequency },
-                    set: { profileManager.setFilterFrequency($0, id: filter.id) }
-                ),
-                scale: .frequency(BuiltInProfiles.filterFrequencyRange),
-                tint: color,
-                isEnabled: isEnabled,
-                onReset: { profileManager.setFilterFrequency(1_000, id: filter.id) }
-            )
-            .accessibilityLabel("Band \(index) frequency")
-            .help("Drag, scroll, or double-click to return to 1 kHz")
-        } field: {
-            ValueField(
-                value: filter.frequency,
-                unit: "Hz",
-                // No thousands separator: this is a frequency, and "8,000 Hz"
-                // is not how anyone writes one.
-                format: .number.precision(.fractionLength(0)).grouping(.never),
-                isEnabled: isEnabled,
-                accessibilityLabel: "Band \(index) frequency"
-            ) { profileManager.setFilterFrequency($0, id: filter.id) }
-        }
+        parameterCell(
+            width: Theme.FilterRow.Column.frequency,
+            scale: .filterFrequency,
+            value: \.frequency,
+            unit: "Hz",
+            // No thousands separator: this is a frequency, and "8,000 Hz" is
+            // not how anyone writes one.
+            format: .number.precision(.fractionLength(0)).grouping(.never),
+            label: "Band \(index) frequency",
+            help: "Drag or scroll to set; double-click the knob to return to 1 kHz",
+            reset: { profileManager.setFilterFrequency(1_000, id: filter.id) },
+            commit: { profileManager.setFilterFrequency($0, id: filter.id) }
+        )
     }
 
     @ViewBuilder
     private var gainCell: some View {
         if filter.kind.usesGain {
-            parameterCell(width: Theme.FilterRow.Column.gain) {
-                KnobControl(
-                    value: Binding(
-                        get: { filter.gain },
-                        set: { profileManager.setFilterGain($0, id: filter.id) }
-                    ),
-                    scale: .linear(BuiltInProfiles.gainRange, step: 0.5),
-                    tint: color,
-                    isEnabled: isEnabled,
-                    // Gain is the one parameter with a meaningful centre, so its
-                    // arc grows out of the middle the way the sliders' fill does.
-                    isBipolar: true,
-                    onReset: { profileManager.resetFilter(id: filter.id) }
-                )
-                .accessibilityLabel("Band \(index) gain")
-                .help("Drag, scroll, or double-click to return to 0 dB")
-            } field: {
-                ValueField(
-                    value: filter.gain,
-                    unit: "dB",
-                    format: .number.precision(.fractionLength(1))
-                        .sign(strategy: .always(includingZero: false)),
-                    isEnabled: isEnabled,
-                    accessibilityLabel: "Band \(index) gain"
-                ) { profileManager.setFilterGain($0, id: filter.id) }
-            }
+            parameterCell(
+                width: Theme.FilterRow.Column.gain,
+                scale: .filterGain,
+                value: \.gain,
+                unit: "dB",
+                format: .number.precision(.fractionLength(1))
+                    .sign(strategy: .always(includingZero: false)),
+                // Gain is the one parameter with a meaningful centre, so its arc
+                // grows out of the middle the way the sliders' fill does.
+                isBipolar: true,
+                label: "Band \(index) gain",
+                help: "Drag or scroll to set; double-click the knob to return to 0 dB",
+                reset: { profileManager.resetFilter(id: filter.id) },
+                commit: { profileManager.setFilterGain($0, id: filter.id) }
+            )
         } else {
             // High and low pass cut by slope alone, so there is no gain to show
             // and nothing is greyed out in its place.
@@ -396,28 +432,17 @@ struct FilterRowView: View {
     }
 
     private var qCell: some View {
-        parameterCell(width: Theme.FilterRow.Column.q) {
-            KnobControl(
-                value: Binding(
-                    get: { filter.q },
-                    set: { profileManager.setFilterQ($0, id: filter.id) }
-                ),
-                scale: .q(BuiltInProfiles.filterQRange),
-                tint: color,
-                isEnabled: isEnabled,
-                onReset: { profileManager.setFilterQ(BuiltInProfiles.defaultQ, id: filter.id) }
-            )
-            .accessibilityLabel("Band \(index) Q")
-            .help("Drag, scroll, or double-click to return to the default width")
-        } field: {
-            ValueField(
-                value: filter.q,
-                unit: nil,
-                format: .number.precision(.fractionLength(2)),
-                isEnabled: isEnabled,
-                accessibilityLabel: "Band \(index) Q"
-            ) { profileManager.setFilterQ($0, id: filter.id) }
-        }
+        parameterCell(
+            width: Theme.FilterRow.Column.q,
+            scale: .filterQ,
+            value: \.q,
+            unit: nil,
+            format: .number.precision(.fractionLength(2)),
+            label: "Band \(index) Q",
+            help: "Drag or scroll to set; double-click the knob to return to the default width",
+            reset: { profileManager.setFilterQ(BuiltInProfiles.defaultQ, id: filter.id) },
+            commit: { profileManager.setFilterQ($0, id: filter.id) }
+        )
     }
 
     /// No power button here. The Enable switch is already this band's on/off,
@@ -438,23 +463,77 @@ struct FilterRowView: View {
         .frame(width: Theme.FilterRow.Column.actions)
     }
 
-    /// A knob and its number, sized to the column they share.
+    /// One parameter: a knob and the number it is holding, sized to the column
+    /// they share.
     ///
-    /// Both dim while the band is switched off — they still work, because
+    /// Both are built from a single `KnobScale`, so the two halves of a cell
+    /// cannot disagree about the parameter's range, its detents, or what values
+    /// it may land on — including under a scroll, which either half answers.
+    ///
+    /// Both dim while the band is switched off. They still work, because
     /// dialling a band in before letting it through is a reasonable way to
     /// work, but they are not describing anything anyone is hearing.
-    private func parameterCell<Knob: View, Field: View>(
+    private func parameterCell(
         width: CGFloat,
-        @ViewBuilder knob: () -> Knob,
-        @ViewBuilder field: () -> Field
+        scale: KnobScale,
+        value: KeyPath<EQFilter, Double>,
+        unit: String?,
+        format: FloatingPointFormatStyle<Double>,
+        isBipolar: Bool = false,
+        label: String,
+        help: String,
+        reset: @escaping () -> Void,
+        commit: @escaping (Double) -> Void
     ) -> some View {
-        HStack(spacing: 6) {
-            knob()
-                .frame(width: Theme.FilterRow.knobDiameter, height: Theme.FilterRow.knobDiameter)
-            field()
+        let binding = live(value, commit: commit)
+
+        return HStack(spacing: 6) {
+            KnobControl(
+                value: binding,
+                scale: scale,
+                tint: color,
+                isEnabled: isEnabled,
+                isBipolar: isBipolar,
+                onReset: reset
+            )
+            .frame(width: Theme.FilterRow.knobDiameter, height: Theme.FilterRow.knobDiameter)
+            .accessibilityLabel(label)
+            .help(help)
+
+            ValueField(
+                value: binding,
+                unit: unit,
+                format: format,
+                scale: scale,
+                isEnabled: isEnabled,
+                accessibilityLabel: label
+            )
+            .help(help)
         }
         .opacity(isLive ? 1.0 : 0.55)
         .frame(width: width)
+    }
+
+    /// A binding that reads the parameter from the chain at the moment it is
+    /// asked, rather than from the copy this row was built with.
+    ///
+    /// Scroll events arrive faster than SwiftUI rebuilds the row — a single
+    /// flick delivers several inside one frame. Reading the captured copy would
+    /// step all of them from the same starting value, so a flick of five would
+    /// move one detent, and a scroll back the other way would land a detent
+    /// short of where it began. That is exactly the drift this pass set out to
+    /// remove; the ladder alone does not fix it.
+    private func live(
+        _ parameter: KeyPath<EQFilter, Double>,
+        commit: @escaping (Double) -> Void
+    ) -> Binding<Double> {
+        Binding(
+            get: {
+                profileManager.freeFilters.first { $0.id == filter.id }?[keyPath: parameter]
+                    ?? filter[keyPath: parameter]
+            },
+            set: commit
+        )
     }
 
     private var enabledBinding: Binding<Bool> {

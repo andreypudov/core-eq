@@ -140,6 +140,7 @@ struct EqualizerDetailView: View {
             sampleRate: audioEngine.sampleRate,
             preamp: profileManager.currentPreamp,
             spectrum: spectrum,
+            selectedFilterID: selectedFilterID,
             onBandGainChange: { slot, gain in profileManager.setGain(gain, forBandAt: slot) },
             onBandReset: { slot in profileManager.resetBand(at: slot) },
             onFilterMove: { id, frequency, gain in
@@ -151,6 +152,9 @@ struct EqualizerDetailView: View {
             onFilterCreate: { frequency, gain in
                 selectedFilterID = profileManager.addFilter(frequency: frequency, gain: gain)
             },
+            // The graph and the parametric table share one selection: clicking
+            // a node highlights its row, choosing a row rings its node.
+            onFilterSelect: { id in selectedFilterID = id },
             // Only while the Parametric tab is showing, so a stray double-click
             // on the graph can never conjure a band the user cannot see.
             allowsFilterCreation: tab == .parametric,
@@ -175,7 +179,7 @@ struct EqualizerDetailView: View {
         )
         .opacity(audioEngine.isEnabled ? 1.0 : 0.5)
         .allowsHitTesting(audioEngine.isEnabled)
-        .help("Drag a point up or down to adjust its band; double-click a point to reset it")
+        .help("Click a point to select its band; drag it to adjust; double-click to reset it")
     }
 
     // MARK: - Band levels
