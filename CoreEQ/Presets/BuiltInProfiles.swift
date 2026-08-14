@@ -5,8 +5,7 @@ import Foundation
 /// whole chain, so it clears any filters the user added by hand and "Flat"
 /// means flat.
 ///
-/// Most are eleven ladder filters and nothing else. A few carry a filter as
-/// well, under one rule:
+/// Most carry a shelf or two alongside the ladder, under one rule:
 ///
 /// > **The ladder carries the preset. A filter only does what the ladder
 /// > cannot: hold a shape past its ends, place energy between rungs, or use a
@@ -33,10 +32,20 @@ import Foundation
 ///
 /// The ladder is the professional ISO octave graphic-EQ layout (32 Hz – 16 kHz)
 /// extended with 20 kHz to cover the top of the audible range. Q of 1.41 gives
-/// each band a one-octave bandwidth, matching the spacing.
+/// each band a one-octave bandwidth, matching the spacing. Every rung is a
+/// bell, the ends included — `EQFilter.band(slot:gain:isEnabled:)` records what
+/// happened when they were tried as shelves.
 enum BuiltInProfiles {
     static let frequencies: [Double] = [32, 64, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000, 20_000]
+
+    /// Q of the ladder's bells: one octave of bandwidth, matching the spacing.
     static let defaultQ = 1.41
+
+    /// Q of the shelves the presets reach for. For a shelf this is the knee,
+    /// and 0.7 is the gentle slope that arrives at its plateau without a bump
+    /// at the corner.
+    static let shelfQ = 0.7
+
     static let gainRange: ClosedRange<Double> = -12...12
 
     /// Number of ladder slots, and so the number of sliders. Fixed by design:
@@ -60,34 +69,58 @@ enum BuiltInProfiles {
 
     static let all: [EQProfile] = [
         profile("Flat",           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-        // A presence lift at 2.8 kHz, which is where an acoustic guitar's
-        // pick and body live — and which falls between the 2 k and 4 k rungs,
-        // so the ladder could only get at it by lifting both and sagging in
-        // the middle. The two rungs come down to make room; the curve at every
-        // other frequency is within a tenth of a dB of what it was.
-        profile("Acoustic",       [5, 5, 4, 1, 2, 1.5, 2.5, 3, 3.5, 2, 2],
-                [EQFilter(kind: .bell, frequency: 2_800, gain: 2, q: 1.2)]),
+        // Two things the rungs cannot do. A presence lift at 2.8 kHz, where an
+        // acoustic guitar's pick and body live — it falls between the 2 k and
+        // 4 k rungs, which could only reach it by lifting both and sagging in
+        // between. And the shelf every bass-lifting preset here carries, which
+        // holds the low end through the bottom octave: 39% of the 45 Hz level
+        // survived to 20 Hz before, 76% now.
+        profile("Acoustic",       [1.75, 1.75, 4, 1, 2, 1.5, 2.5, 3, 3.5, 2, 2],
+                [EQFilter(kind: .bell, frequency: 2_800, gain: 2, q: 1.2, colorIndex: 0),
+                 EQFilter(kind: .lowShelf, frequency: 120, gain: 3.25, q: BuiltInProfiles.shelfQ, colorIndex: 1)]),
         // The shelf holds the boost through the bottom octave instead of
         // rolling off below the lowest rung: +5.2 dB at 20 Hz where the ladder
         // alone managed +2.25. The rungs come down so the preset is not louder
         // than it was where it already worked.
         profile("Bass Booster",   [3, 2.5, 2, 1.5, 0.75, 0, 0, 0, 0, 0, 0],
-                [EQFilter(kind: .lowShelf, frequency: 120, gain: 4, q: 0.7)]),
-        profile("Bass Reducer",   [-5.5, -4.5, -3.5, -2.5, -1.25, 0, 0, 0, 0, 0, 0]),
-        profile("Classical",      [4.5, 3.5, 3, 2.5, -1.5, -1.5, 0, 2, 3, 3.5, 3.5]),
-        profile("Dance",          [3.5, 6.5, 5, 0, 2, 3.5, 5, 4.5, 3.5, 0, 0]),
-        profile("Deep",           [5, 3.5, 1.5, 1, 3, 2.5, 1.5, -2, -3.5, -4.5, -4.5]),
-        profile("Electronic",     [4.5, 4, 1.5, 0, -2, 2, 1, 1.5, 4, 4.5, 4.5]),
-        profile("Hip-Hop",        [5, 4, 1.5, 3, -1, -1, 1.5, -0.5, 2, 3, 3]),
-        profile("Jazz",           [4, 3, 1.5, 2, -1.5, -1.5, 0, 1.5, 3, 3.5, 3.5]),
-        profile("Latin",          [4.5, 3, 0, 0, -1.5, -1.5, -1.5, 0, 3, 4.5, 4.5]),
-        profile("Loudness",       [6, 4, 0, 0, -2, 0, -1, -4.5, 5, 1, 1]),
+                [EQFilter(kind: .lowShelf, frequency: 120, gain: 4, q: BuiltInProfiles.shelfQ, colorIndex: 0)]),
+        profile("Bass Reducer",   [-2.75, -2.25, -3.5, -2.5, -1.25, 0, 0, 0, 0, 0, 0],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: -3.25, q: BuiltInProfiles.shelfQ, colorIndex: 0)]),
+        profile("Classical",      [1.75, 1.5, 3, 2.5, -1.5, -1.5, 0, 2, 3, 1.5, 1.5],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 3, q: BuiltInProfiles.shelfQ, colorIndex: 0),
+                 EQFilter(kind: .highShelf, frequency: 10_000, gain: 2, q: BuiltInProfiles.shelfQ, colorIndex: 1)]),
+        profile("Dance",          [1.75, 3.25, 5, 0, 2, 3.5, 5, 4.5, 3.5, 0, 0],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 3.75, q: BuiltInProfiles.shelfQ, colorIndex: 0)]),
+        profile("Deep",           [3, 2, 1.5, 1, 3, 2.5, 1.5, -2, -3.5, -1.75, -1.75],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 2.5, q: BuiltInProfiles.shelfQ, colorIndex: 0),
+                 EQFilter(kind: .highShelf, frequency: 10_000, gain: -2.25, q: BuiltInProfiles.shelfQ, colorIndex: 1)]),
+        profile("Electronic",     [2.25, 2, 1.5, 0, -2, 2, 1, 1.5, 4, 1.75, 1.75],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 2.5, q: BuiltInProfiles.shelfQ, colorIndex: 0),
+                 EQFilter(kind: .highShelf, frequency: 10_000, gain: 3, q: BuiltInProfiles.shelfQ, colorIndex: 1)]),
+        profile("Hip-Hop",        [2.5, 2, 1.5, 3, -1, -1, 1.5, -0.5, 2, 1, 1],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 3, q: BuiltInProfiles.shelfQ, colorIndex: 0),
+                 EQFilter(kind: .highShelf, frequency: 9_000, gain: 1.25, q: BuiltInProfiles.shelfQ, colorIndex: 1)]),
+        profile("Jazz",           [1.5, 1.25, 1.5, 2, -1.5, -1.5, 0, 1.5, 3, 1.5, 1.5],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 2.5, q: BuiltInProfiles.shelfQ, colorIndex: 0),
+                 EQFilter(kind: .highShelf, frequency: 10_000, gain: 2, q: BuiltInProfiles.shelfQ, colorIndex: 1)]),
+        profile("Latin",          [2.25, 1.5, 0, 0, -1.5, -1.5, -1.5, 0, 3, 1.25, 1.25],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 2.25, q: BuiltInProfiles.shelfQ, colorIndex: 0),
+                 EQFilter(kind: .highShelf, frequency: 10_000, gain: 2, q: BuiltInProfiles.shelfQ, colorIndex: 1)]),
+        profile("Loudness",       [3.5, 2.5, 0, 0, -2, 0, -1, -4.5, 5, 1, 1],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 2.25, q: BuiltInProfiles.shelfQ, colorIndex: 0)]),
         profile("Lounge",         [-3, -1.5, -0.5, 1.5, 4, 2.5, 0, -1.5, 2, 1, 1]),
-        profile("Piano",          [3, 2, 0, 2.5, 3, 1.5, 3.5, 4.5, 3, 3.5, 3.5]),
+        profile("Piano",          [3, 2, 0, 2.5, 3, 1.5, 3.5, 4.5, 3, 1.5, 1.5],
+                [EQFilter(kind: .highShelf, frequency: 10_000, gain: 2.5, q: BuiltInProfiles.shelfQ, colorIndex: 0)]),
         profile("Pop",            [-1.5, -1, 0, 2, 4, 4, 2, 0, -1, -1.5, -1.5]),
-        profile("R&B",            [3, 7, 5.5, 1.5, -3, -1.5, 2, 2.5, 3, 3.5, 3.5]),
-        profile("Rock",           [5, 4, 3, 1.5, -0.5, -1, 0.5, 2.5, 3.5, 4.5, 4.5]),
-        profile("Small Speakers", [5.5, 4.5, 3.5, 2.5, 1.25, 0, -1.25, -2.5, -3.5, -4.5, -4.5]),
+        profile("R&B",            [1.75, 3.75, 5.5, 1.5, -3, -1.5, 2, 2.5, 3, 1.5, 1.5],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 4, q: BuiltInProfiles.shelfQ, colorIndex: 0),
+                 EQFilter(kind: .highShelf, frequency: 10_000, gain: 2.25, q: BuiltInProfiles.shelfQ, colorIndex: 1)]),
+        profile("Rock",           [2, 1.5, 3, 1.5, -0.5, -1, 0.5, 2.5, 3.5, 1.75, 1.75],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 3.5, q: BuiltInProfiles.shelfQ, colorIndex: 0),
+                 EQFilter(kind: .highShelf, frequency: 10_000, gain: 2.5, q: BuiltInProfiles.shelfQ, colorIndex: 1)]),
+        profile("Small Speakers", [2.75, 2.25, 3.5, 2.5, 1.25, 0, -1.25, -2.5, -3.5, -1.75, -1.75],
+                [EQFilter(kind: .lowShelf, frequency: 90, gain: 3.5, q: BuiltInProfiles.shelfQ, colorIndex: 0),
+                 EQFilter(kind: .highShelf, frequency: 10_000, gain: -2.5, q: BuiltInProfiles.shelfQ, colorIndex: 1)]),
         profile("Spoken Word",    [-3.5, -0.5, 0, 0.5, 3.5, 4.5, 5, 4.5, 2.5, 0, 0]),
         // The shelf takes over the top octave, where the rungs are least
         // trustworthy: the 12 kHz sag between them halves, and the difference
@@ -95,8 +128,9 @@ enum BuiltInProfiles {
         // 1.0. The sliders still rise through the treble and taper at the very
         // top — which is the truth about those two rungs.
         profile("Treble Booster", [0, 0, 0, 0, 0, 1.25, 2.5, 3.5, 4.5, 3.5, 2],
-                [EQFilter(kind: .highShelf, frequency: 9_000, gain: 2, q: 0.7)]),
-        profile("Treble Reducer", [0, 0, 0, 0, 0, -1.25, -2.5, -3.5, -4.5, -5.5, -5.5]),
+                [EQFilter(kind: .highShelf, frequency: 9_000, gain: 2, q: BuiltInProfiles.shelfQ, colorIndex: 0)]),
+        profile("Treble Reducer", [0, 0, 0, 0, 0, -1.25, -2.5, -3.5, -4.5, -2.25, -2.25],
+                [EQFilter(kind: .highShelf, frequency: 10_000, gain: -3.25, q: BuiltInProfiles.shelfQ, colorIndex: 0)]),
         profile("Vocal Booster",  [-1.5, -3, -3, 1.5, 3.5, 3.5, 3, 1.5, 0, -1.5, -1.5]),
     ]
 

@@ -89,6 +89,21 @@ struct EQFilter: Codable, Equatable, Identifiable {
 
     /// A filter occupying ladder slot `slot`, taking its frequency and Q from
     /// the ladder itself.
+    ///
+    /// Every rung is a bell, including the two ends — which was measured rather
+    /// than assumed. Turning the ends into shelves looks like the obvious cure
+    /// for the bottom slider's roll-off, and it is not: a shelf's corner is the
+    /// half-gain point, so a shelf cornered on the 32 Hz rung gives only half
+    /// its gain there and leaves a 2 dB scoop across 32-40 Hz, which is where
+    /// the kick lives, in exchange for holding 20-25 Hz, which is mostly
+    /// rumble. A steeper knee deepens the scoop rather than filling it. At the
+    /// top it is worse: a shelf cornered on the 20 kHz rung spends its whole
+    /// plateau above hearing, so it delivers *less* than the bell everywhere
+    /// anyone can hear.
+    ///
+    /// Holding the bottom octave is a real need, but it is a preset's job, not
+    /// the ladder's: a preset can put a shelf where it actually works — see
+    /// `BuiltInProfiles`, where Bass Booster corners one at 120 Hz.
     static func band(slot: Int, gain: Double, isEnabled: Bool = true) -> EQFilter {
         EQFilter(
             kind: .bell,

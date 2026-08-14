@@ -555,8 +555,16 @@ final class ProfileManagerTests: XCTestCase {
 
         manager.setActiveProfile(name: "Rock")
         XCTAssertFalse(manager.isModified)
-        XCTAssertTrue(manager.freeFilters.isEmpty, "a preset carries its own filters, and Rock has none")
         XCTAssertEqual(manager.currentFilters, manager.profile(named: "Rock")?.filters)
+        // Rock ships with filters of its own, so "cleared" means the user's are
+        // gone and only the preset's remain — not that there are none.
+        XCTAssertFalse(
+            manager.freeFilters.contains { $0.frequency == 180 },
+            "the filter the user added survived the preset switch"
+        )
+        XCTAssertEqual(
+            manager.freeFilters.count, manager.profile(named: "Rock")?.freeFilters.count
+        )
     }
 
     func testFlatIsFlat() {
