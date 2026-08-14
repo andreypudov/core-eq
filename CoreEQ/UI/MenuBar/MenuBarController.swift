@@ -45,6 +45,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private var sectionItems: [ListSection: NSMenuItem] = [:]
     private var listItem: NSMenuItem?
 
+    /// A list that is fading out and has still to be taken out of the menu.
+    /// Held so nothing can be inserted around it while it is on its way out.
+    private var foldingItem: NSMenuItem?
+    private var foldTimer: Timer?
+
     init(
         profileManager: ProfileManager,
         audioEngine: AudioEngine,
@@ -114,6 +119,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// Every open starts with both sections folded, so nothing is left holding
     /// on to rows from a menu that no longer exists.
     func menuDidClose(_ menu: NSMenu) {
+        foldTimer?.invalidate()
+        foldTimer = nil
+        foldingItem = nil
         expandedSection = nil
         listItem = nil
         disclosureRows.removeAll()
@@ -132,11 +140,18 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     /// The active preset, with a chevron that unfolds the others below it.
+    ///
+    /// Its badge is drawn from the working chain rather than from the preset as
+    /// saved, so the thumbnail is the sound in the room right now — including
+    /// any edits, which the dot after the name reports.
     private func presetItem() -> NSMenuItem {
         disclosureItem(
             for: .preset,
             title: profileManager.activeProfileName,
+            image: presetBadge(for: profileManager.currentFilters, selected: true),
+            gutter: MenuListMetrics.badgeGutter,
             height: MenuListMetrics.rowHeight,
+            marker: profileManager.isModified,
             canExpand: profileManager.listProfiles().count > 1
         )
     }
@@ -177,7 +192,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             title: current.name,
             image: Self.deviceIcon(current.symbolName, selected: true),
             gutter: MenuListMetrics.badgeGutter,
-            height: MenuListMetrics.deviceRowHeight,
+            height: MenuListMetrics.rowHeight,
             canExpand: devices.count > 1
         )
     }
@@ -191,6 +206,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         image: NSImage? = nil,
         gutter: CGFloat = 0,
         height: CGFloat,
+        marker: Bool = false,
         canExpand: Bool
     ) -> NSMenuItem {
         let item = NSMenuItem()
@@ -199,6 +215,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             image: image,
             gutter: gutter,
             height: height,
+            marker: marker,
             accessory: canExpand ? .disclosure(expanded: false) : .none
         ) { [weak self] in
             guard canExpand else { return }
@@ -219,15 +236,43 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func toggle(_ section: ListSection) {
         guard let menu = statusItem.menu else { return }
         let wasOpen = expandedSection == section
-        collapse(in: menu)
+        // Folding a list away is worth watching; swapping one list for another
+        // is not, and letting the old one linger while the new one is inserted
+        // would put two lists in the menu at once.
+        collapse(in: menu, animated: wasOpen)
         guard !wasOpen else { return }
         expand(section, in: menu)
     }
 
-    /// Removes the open list and turns its chevron back to `>`.
-    private func collapse(in menu: NSMenu) {
+    /// Takes the open list back out and turns its chevron back to `>`.
+    ///
+    /// Animated, the item stays in the menu for the length of the fade and is
+    /// removed by a timer rather than by an animation completion block: a menu
+    /// tracks in its own modal loop, where a block posted to the main queue may
+    /// not run until the menu closes. The timer is added to `.common`, which
+    /// includes the tracking mode, so it fires while the menu is still up.
+    private func collapse(in menu: NSMenu, animated: Bool = false) {
         if let listItem, menu.index(of: listItem) >= 0 {
-            menu.removeItem(listItem)
+            if animated, let list = listItem.view as? MenuListView {
+                let item = listItem
+                list.playFold()
+                foldingItem = item
+                foldTimer?.invalidate()
+                // Target / action rather than a closure: the item and the menu
+                // are reached from `self` when it fires, so nothing non-sendable
+                // has to be carried across.
+                let timer = Timer(
+                    timeInterval: MenuListMetrics.foldDuration,
+                    target: self,
+                    selector: #selector(foldTimerFired),
+                    userInfo: nil,
+                    repeats: false
+                )
+                RunLoop.main.add(timer, forMode: .common)
+                foldTimer = timer
+            } else {
+                menu.removeItem(listItem)
+            }
         }
         listItem = nil
         if let expandedSection {
@@ -236,29 +281,44 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         expandedSection = nil
     }
 
+    @objc private func foldTimerFired() {
+        guard let menu = statusItem.menu else { return }
+        finishFold(in: menu)
+    }
+
+    /// Takes out a list that is still fading, before anything is inserted
+    /// around it — otherwise a fast second click would leave the outgoing list
+    /// in the menu, one row away from where its own removal expects it.
+    private func finishFold(in menu: NSMenu) {
+        foldTimer?.invalidate()
+        foldTimer = nil
+        if let foldingItem, menu.index(of: foldingItem) >= 0 {
+            menu.removeItem(foldingItem)
+        }
+        foldingItem = nil
+    }
+
     /// Inserts the section's other options directly under its row. The menu is
     /// open while this runs: AppKit re-lays it out around the new item, which is
     /// what makes the list appear in place rather than in a submenu.
     private func expand(_ section: ListSection, in menu: NSMenu) {
+        finishFold(in: menu)
         guard let rowItem = sectionItems[section] else { return }
         let index = menu.index(of: rowItem)
         guard index >= 0 else { return }
 
-        let rowHeight: CGFloat
         let rows: [MenuRowView]
         switch section {
-        case .preset:
-            rowHeight = MenuListMetrics.rowHeight
-            rows = presetRows()
-        case .output:
-            rowHeight = MenuListMetrics.deviceRowHeight
-            rows = outputRows()
+        case .preset: rows = presetRows()
+        case .output: rows = outputRows()
         }
         guard !rows.isEmpty else { return }
 
+        let list = MenuListView(rows: rows, rowHeight: MenuListMetrics.rowHeight)
         let item = NSMenuItem()
-        item.view = MenuListView(rows: rows, rowHeight: rowHeight)
+        item.view = list
         menu.insertItem(item, at: index + 1)
+        list.playUnfold()
 
         listItem = item
         expandedSection = section
@@ -266,13 +326,20 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     /// Every preset except the active one — that one is the row above, and
-    /// repeating it here would only offer a choice that changes nothing.
+    /// repeating it here would only offer a choice that changes nothing. Its
+    /// accent-filled badge stays up there too, so this list is all plain
+    /// badges: what else there is, and what each one would sound like.
     private func presetRows() -> [MenuRowView] {
         let active = profileManager.activeProfileName
         return profileManager.listProfiles()
             .filter { $0.name != active }
             .map { profile in
-                MenuRowView(title: profile.name, height: MenuListMetrics.rowHeight) { [weak self] in
+                MenuRowView(
+                    title: profile.name,
+                    image: presetBadge(for: profile.filters, selected: false),
+                    gutter: MenuListMetrics.badgeGutter,
+                    height: MenuListMetrics.rowHeight
+                ) { [weak self] in
                     self?.profileManager.setActiveProfile(name: profile.name)
                     self?.dismissMenu()
                 }
@@ -290,7 +357,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                     title: device.name,
                     image: Self.deviceIcon(device.symbolName, selected: false),
                     gutter: MenuListMetrics.badgeGutter,
-                    height: MenuListMetrics.deviceRowHeight
+                    height: MenuListMetrics.rowHeight
                 ) { [weak self] in
                     AudioDevices.setDefaultOutputDevice(device.id)
                     self?.dismissMenu()
@@ -301,6 +368,62 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// Picking an option closes the menu, as picking one in a submenu did.
     private func dismissMenu() {
         statusItem.menu?.cancelTracking()
+    }
+
+    /// A preset's own response curve, in the same circular badge the devices
+    /// wear.
+    ///
+    /// The two choosers are one control used twice, so they are drawn to one
+    /// shape — same row height, same gutter, same badge, same accent fill on
+    /// the one in use. What goes *in* the preset's badge is the thing that
+    /// makes the badge worth its space: a repeated generic glyph on every row
+    /// would be decoration, but a thumbnail of the curve says which preset is
+    /// which before the name is read, and it is the same shape the big plot
+    /// shows when the preset is chosen.
+    ///
+    /// The magnitudes are computed here, outside the drawing handler, so the
+    /// handler captures numbers rather than the filter chain and the engine.
+    private func presetBadge(for filters: [EQFilter], selected: Bool) -> NSImage? {
+        let sampleRate = audioEngine.sampleRate
+        let biquads = filters.map { Biquad(filter: $0, sampleRate: sampleRate) }
+
+        // A couple of dozen points across the span the ear does its listening
+        // in — enough for the shape, cheap enough to redraw for every preset
+        // each time the menu opens.
+        let steps = 24
+        let low = log(32.0)
+        let span = log(16_000.0) - low
+        let curve: [Double] = (0..<steps).map { step in
+            let frequency = exp(low + span * Double(step) / Double(steps - 1))
+            return biquads.reduce(0.0) { $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate) }
+        }
+
+        let side = MenuListMetrics.badgeSide
+        return NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            (selected ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.12)).setFill()
+            NSBezierPath(ovalIn: rect).fill()
+
+            // The full slider range fills the box, so a preset that uses all of
+            // it reaches the edges and a flat one is a line through the middle.
+            let box = rect.insetBy(dx: 5, dy: 7)
+            let limit = BuiltInProfiles.gainRange.upperBound
+            let path = NSBezierPath()
+            for (step, dB) in curve.enumerated() {
+                let x = box.minX + box.width * CGFloat(step) / CGFloat(steps - 1)
+                let y = box.midY + box.height / 2 * CGFloat(dB.clamped(to: -limit...limit) / limit)
+                if step == 0 {
+                    path.move(to: NSPoint(x: x, y: y))
+                } else {
+                    path.line(to: NSPoint(x: x, y: y))
+                }
+            }
+            path.lineWidth = 1.5
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            (selected ? NSColor.white : NSColor.labelColor).setStroke()
+            path.stroke()
+            return true
+        }
     }
 
     /// Renders a device SF Symbol inside a circular badge, Control-Center
@@ -344,6 +467,20 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         case .treble: profileManager.setTone(treble: value)
         }
         quickEQBody?.refreshGraph(filters: profileManager.currentFilters)
+        refreshPresetRow()
+    }
+
+    /// Brings the preset row up to date without rebuilding the menu.
+    ///
+    /// The tone sliders edit the chain from inside the open menu, so the row
+    /// three above them goes stale the moment they are touched: its dot said
+    /// "saved" while the sliders were changing the sound, and its badge drew a
+    /// curve that was no longer the one playing. Both are answers to "what is
+    /// happening right now", so both follow the sliders.
+    private func refreshPresetRow() {
+        guard let row = disclosureRows[.preset] else { return }
+        row.setMarker(profileManager.isModified)
+        row.setImage(presetBadge(for: profileManager.currentFilters, selected: true))
     }
 
     @objc private func openWindow(_ sender: NSMenuItem) {

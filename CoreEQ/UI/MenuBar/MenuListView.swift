@@ -60,6 +60,52 @@ final class MenuListView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    // MARK: - Unfolding
+
+    /// Fades and slides the list in, from just under the row that opened it.
+    ///
+    /// The list's *height* is deliberately not animated. A menu measures a
+    /// view-based item once, when the item goes in, and the item is inserted at
+    /// its full height so the menu is the right size from the first frame —
+    /// animating the height would need the menu to re-measure itself mid-track,
+    /// which it does not promise to do. What moves is the content inside that
+    /// space, which nothing else has to agree to.
+    ///
+    /// Both animations are layer-driven on purpose: a menu runs its own modal
+    /// tracking loop, and anything driven by main-queue timers or completion
+    /// blocks can be held until the menu closes. Layer animations run on the
+    /// render server and play regardless.
+    func playUnfold() {
+        wantsLayer = true
+        alphaValue = 0
+
+        let slide = CABasicAnimation(keyPath: "transform.translation.y")
+        slide.fromValue = MenuListMetrics.unfoldSlide
+        slide.toValue = 0
+        slide.duration = MenuListMetrics.unfoldDuration
+        slide.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer?.add(slide, forKey: "unfold")
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = MenuListMetrics.unfoldDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            // The animator sets the model value straight away and animates the
+            // presentation, so the list ends up visible even if the animation
+            // itself never gets to play.
+            animator().alphaValue = 1
+        }
+    }
+
+    /// Fades the list out. The caller removes the item when this has had its
+    /// `foldDuration` to run.
+    func playFold() {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = MenuListMetrics.foldDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            animator().alphaValue = 0
+        }
+    }
+
     @objc private func clipViewDidScroll() {
         updateHighlightUnderPointer()
     }

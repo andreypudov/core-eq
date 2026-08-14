@@ -17,6 +17,7 @@ final class MenuRowView: NSView {
     private let highlight = NSVisualEffectView()
     private let titleLabel: NSTextField
     private let iconView = NSImageView()
+    private let markerView = NSView()
     private let chevronView = NSImageView()
     private let onClick: () -> Void
 
@@ -26,6 +27,16 @@ final class MenuRowView: NSView {
     /// lit and a fast scroll would leave a trail of them.
     weak var listOwner: MenuListView?
 
+    /// Diameter of the unsaved-changes dot, matching the one the window draws.
+    private static let markerSide: CGFloat = 5
+
+    /// Held so the dot can come and go while the menu is open — the tone
+    /// sliders can edit the chain from inside the menu, and a row that only
+    /// learns about it the next time the menu is built is a row that reports
+    /// the state before last.
+    private var markerWidth: NSLayoutConstraint?
+    private var markerLeading: NSLayoutConstraint?
+
     private var accessory: Accessory
     private var isHighlighted = false {
         didSet {
@@ -33,6 +44,9 @@ final class MenuRowView: NSView {
             highlight.isHidden = !isHighlighted
             titleLabel.textColor = isHighlighted ? .selectedMenuItemTextColor : .labelColor
             chevronView.contentTintColor = isHighlighted ? .selectedMenuItemTextColor : .secondaryLabelColor
+            markerView.layer?.backgroundColor = (
+                isHighlighted ? NSColor.selectedMenuItemTextColor : .secondaryLabelColor
+            ).cgColor
         }
     }
 
@@ -43,13 +57,16 @@ final class MenuRowView: NSView {
     }
 
     /// - Parameters:
-    ///   - image: drawn in the leading gutter — a device badge, or nothing.
+    ///   - image: drawn in the leading gutter — a badge, or nothing.
     ///   - gutter: width of that leading gutter; zero for a text-only row.
+    ///   - marker: a small dot after the title. Unsaved changes, and the same
+    ///     mark the window's sidebar and header use for the same fact.
     init(
         title: String,
         image: NSImage? = nil,
         gutter: CGFloat = 0,
         height: CGFloat,
+        marker: Bool = false,
         accessory: Accessory = .none,
         onClick: @escaping () -> Void
     ) {
@@ -79,12 +96,28 @@ final class MenuRowView: NSView {
         chevronView.contentTintColor = .secondaryLabelColor
         chevronView.translatesAutoresizingMaskIntoConstraints = false
 
+        markerView.wantsLayer = true
+        markerView.layer?.backgroundColor = NSColor.secondaryLabelColor.cgColor
+        markerView.layer?.cornerRadius = Self.markerSide / 2
+        markerView.isHidden = !marker
+        markerView.translatesAutoresizingMaskIntoConstraints = false
+
         addSubview(highlight)
         addSubview(iconView)
         addSubview(titleLabel)
+        addSubview(markerView)
         addSubview(chevronView)
 
         let inset = QuickEQMenuMetrics.horizontalInset
+        let markerWidth = markerView.widthAnchor.constraint(
+            equalToConstant: marker ? Self.markerSide : 0
+        )
+        let markerLeading = markerView.leadingAnchor.constraint(
+            equalTo: titleLabel.trailingAnchor, constant: marker ? 6 : 0
+        )
+        self.markerWidth = markerWidth
+        self.markerLeading = markerLeading
+
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: QuickEQMenuMetrics.contentWidth),
             heightAnchor.constraint(equalToConstant: height),
@@ -102,7 +135,12 @@ final class MenuRowView: NSView {
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset + gutter),
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            chevronView.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 8),
+            markerLeading,
+            markerWidth,
+            markerView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            markerView.heightAnchor.constraint(equalTo: markerView.widthAnchor),
+
+            chevronView.leadingAnchor.constraint(greaterThanOrEqualTo: markerView.trailingAnchor, constant: 8),
             chevronView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
             chevronView.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
@@ -115,6 +153,21 @@ final class MenuRowView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// Shows or hides the unsaved-changes dot while the menu is open.
+    func setMarker(_ shows: Bool) {
+        guard markerView.isHidden == shows else { return }
+        markerView.isHidden = !shows
+        markerWidth?.constant = shows ? Self.markerSide : 0
+        markerLeading?.constant = shows ? 6 : 0
+    }
+
+    /// Replaces the leading badge while the menu is open — the active preset's
+    /// curve is a picture of the working chain, and the tone sliders change
+    /// that chain from three rows below.
+    func setImage(_ image: NSImage?) {
+        iconView.image = image
+    }
 
     /// Flips the chevron between `>` and `v` without rebuilding the menu, so the
     /// row can answer a click while the menu stays open.

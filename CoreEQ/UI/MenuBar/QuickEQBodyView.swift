@@ -72,9 +72,12 @@ final class QuickEQBodyView: NSView {
         name.translatesAutoresizingMaskIntoConstraints = false
         name.widthAnchor.constraint(equalToConstant: 48).isActive = true
 
-        let slider = NSSlider(value: value, minValue: QuickTone.range.lowerBound, maxValue: QuickTone.range.upperBound, target: self, action: #selector(sliderChanged(_:)))
+        let slider = ToneSlider(value: value, minValue: QuickTone.range.lowerBound, maxValue: QuickTone.range.upperBound, target: self, action: #selector(sliderChanged(_:)))
         slider.isContinuous = true
         slider.tag = axis.rawValue
+        // The same gesture the band sliders and the graph's points answer to,
+        // so "put it back" is one habit across the app rather than three.
+        slider.onDoubleClick = { [weak self] in self?.reset(axis) }
         slider.translatesAutoresizingMaskIntoConstraints = false
         slider.setContentHuggingPriority(.defaultLow, for: .horizontal)
         slider.setAccessibilityLabel("\(axis.title) gain")
@@ -87,6 +90,14 @@ final class QuickEQBodyView: NSView {
         row.alignment = .centerY
         row.spacing = 8
         return row
+    }
+
+    /// Back to the middle — which for a tone control is not "the saved value"
+    /// but "no tilt at all", since these three are offsets laid over whatever
+    /// preset is loaded.
+    private func reset(_ axis: Axis) {
+        sliders[axis]?.doubleValue = 0
+        onToneChange(axis, 0)
     }
 
     @objc private func sliderChanged(_ sender: NSSlider) {
@@ -103,5 +114,28 @@ final class QuickEQBodyView: NSView {
         case .mid: return tone.mid
         case .treble: return tone.treble
         }
+    }
+}
+
+/// A tone slider that answers a double-click by centring itself.
+///
+/// The second click is taken before `NSSlider` sees it, because the slider's
+/// own `mouseDown` runs a tracking loop until the button comes up: handing it
+/// the click would set the value from wherever the pointer happens to be, and
+/// only then would the reset land — a visible flick on the way to the middle.
+///
+/// The *first* click of the pair still reaches the slider, so a double-click on
+/// the track moves the knob there and then centres it. That is what a slider
+/// does with a click; the pair still ends where it should.
+@MainActor
+private final class ToneSlider: NSSlider {
+    var onDoubleClick: (() -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        guard event.clickCount < 2 else {
+            onDoubleClick?()
+            return
+        }
+        super.mouseDown(with: event)
     }
 }
