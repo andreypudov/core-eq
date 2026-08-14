@@ -62,7 +62,14 @@ Preset
 #+end_src
 
 That is the whole preset. A built-in preset is eleven band filters carrying
-that preset's gains. =Flat= is eleven band filters at 0 dB, which is to say
+that preset's gains, and — where the ladder cannot express what the preset
+needs — a filter or two alongside them. The rule is that the ladder carries the
+preset: a filter only holds a shape past the ladder's ends, places energy
+between its rungs, or uses a bandwidth other than one octave. Strip the filters
+and the curve must still be recognisably that preset, or the Graphic tab's
+eleven sliders would sit flat under a curve that is anything but.
+
+=Flat= is eleven band filters at 0 dB, which is to say
 nothing at all — a 0 dB filter is already identity in =Biquad= and costs no
 processing.
 
