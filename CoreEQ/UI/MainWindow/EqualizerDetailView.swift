@@ -141,6 +141,10 @@ struct EqualizerDetailView: View {
             preamp: profileManager.currentPreamp,
             spectrum: spectrum,
             selectedFilterID: selectedFilterID,
+            // Dragging a slider is dragging its handle on the curve — the plot
+            // lights that handle up and puts the value beside it.
+            stripHoveredBand: hoveredBand,
+            stripDraggedBand: draggingBand,
             onBandGainChange: { slot, gain in profileManager.setGain(gain, forBandAt: slot) },
             onBandReset: { slot in profileManager.resetBand(at: slot) },
             onFilterMove: { id, frequency, gain in
@@ -192,13 +196,6 @@ struct EqualizerDetailView: View {
                 Text("Band Levels")
                     .font(.system(size: 13, weight: .semibold))
                     .accessibilityAddTraits(.isHeader)
-
-                // The gain readout reads out here rather than in a strip above
-                // the tracks. A strip would push every track down by its own
-                // height whether or not anything was in it; the heading row has
-                // the space already, and more of it than a 26 pt column does.
-                bandReadout
-                    .frame(height: Theme.BandRow.readoutHeight)
 
                 Spacer(minLength: 12)
 
@@ -346,26 +343,6 @@ struct EqualizerDetailView: View {
     /// this far, and showing it is what keeps the slider honest without letting
     /// it report a value it doesn't control.
     @ViewBuilder
-    private var bandReadout: some View {
-        let slot = draggingBand ?? hoveredBand
-        if let slot, let band = profileManager.bandFilters[safe: slot] {
-            let total = profileManager.totalGain(at: band.frequency, sampleRate: audioEngine.sampleRate)
-            HStack(spacing: 5) {
-                Text(BandFormat.frequency(band.frequency))
-                    .foregroundStyle(.secondary)
-                Text(BandFormat.gain(band.gain))
-                    .foregroundStyle(Color.coreEQAccent)
-                if abs(total - band.gain) > 0.05 {
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-                    Text(BandFormat.gain(total))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .font(.system(size: 11, weight: .medium).monospacedDigit())
-            .transition(.opacity)
-        }
-    }
 
     // MARK: - Output
 

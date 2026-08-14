@@ -139,19 +139,19 @@ struct EqualizerSidebarView: View {
 
                 Spacer(minLength: 4)
 
-                if isSelected {
-                    // Unsaved changes as a dot rather than a word: the row
-                    // already carries a checkmark, and two badges on one line is
-                    // more furniture than the state is worth. Same mark
-                    // TextEdit puts in its close button.
-                    if profileManager.isModified {
-                        Circle()
-                            .fill(.secondary)
-                            .frame(width: 5, height: 5)
-                            .accessibilityHidden(true)
-                    }
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .semibold))
+                // Unsaved changes as a dot rather than a word — the same mark
+                // TextEdit puts in its close button.
+                //
+                // The only badge on the row. Which preset is active is said by
+                // the selected row's fill, the way every source list on the Mac
+                // says it; a checkmark beside it was the same fact told twice,
+                // in the vocabulary of menus, which need a glyph only because
+                // they have no selected row to tint. Leaving the trailing edge
+                // to the dot is what makes the dot readable.
+                if isSelected, profileManager.isModified {
+                    Circle()
+                        .fill(.secondary)
+                        .frame(width: 5, height: 5)
                         .accessibilityHidden(true)
                 }
             }

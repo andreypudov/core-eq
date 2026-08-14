@@ -106,16 +106,13 @@ enum Theme {
         /// preamp column.
         static let labelHeight: CGFloat = 14
         /// Everything in the column that isn't the track: the caption and the
-        /// gap above it. Nothing is reserved above the track — the gain readout
-        /// lives in the heading row, so the track starts right under it.
+        /// gap above it. Nothing is reserved above the track — a band's value
+        /// is drawn at its own handle, over the track, so it costs no layout.
         static var chromeHeight: CGFloat { 6 + labelHeight }
         /// Floor for the track when the window is at its shortest.
         static let minSliderHeight: CGFloat = 96
 
         static let sliderHeight: CGFloat = 146
-        /// Height the heading row's gain readout occupies, so the row doesn't
-        /// change height as the readout comes and goes.
-        static let readoutHeight: CGFloat = 18
         static let columnWidth: CGFloat = 26
         static let knobDiameter: CGFloat = 14
         static let trackWidth: CGFloat = 2

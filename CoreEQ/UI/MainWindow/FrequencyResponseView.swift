@@ -43,6 +43,16 @@ struct FrequencyResponseView: View {
     /// the parametric table. One selection, shown in both places.
     var selectedFilterID: UUID?
 
+    /// The band the pointer is on down in the slider strip, and the one being
+    /// dragged there.
+    ///
+    /// A slider and a handle on this curve are two grips on the same band, so
+    /// moving either one is answered here: the handle lights up, and while the
+    /// band is actually moving its value is drawn beside it — in the one place
+    /// that can show what the change did to the sound.
+    var stripHoveredBand: Int?
+    var stripDraggedBand: Int?
+
     var onBandGainChange: ((_ slot: Int, _ gain: Double) -> Void)?
     var onBandReset: ((_ slot: Int) -> Void)?
     var onFilterMove: ((_ id: UUID, _ frequency: Double, _ gain: Double) -> Void)?
@@ -76,6 +86,16 @@ struct FrequencyResponseView: View {
 
     @State private var dragged: Handle?
     @State private var hovered: Handle?
+
+    /// The point being moved, from either grip.
+    private var activeDrag: Handle? {
+        dragged ?? stripDraggedBand.map(Handle.band)
+    }
+
+    /// The point being pointed at, from either grip.
+    private var activeHover: Handle? {
+        hovered ?? stripHoveredBand.map(Handle.band)
+    }
 
     /// Display range. Slightly wider than the ±12 dB slider range because
     /// overlapping filters can sum a few dB past a single one's maximum.
@@ -354,7 +374,7 @@ struct FrequencyResponseView: View {
     /// pointed at, so choosing a row in the parametric table shows what that
     /// row is doing to the sound and not only which node it owns.
     private func drawHighlightedFilterCurve(_ context: GraphicsContext, _ size: CGSize) {
-        guard let handle = dragged ?? hovered ?? selectedFilterID.map(Handle.filter) else { return }
+        guard let handle = activeDrag ?? activeHover ?? selectedFilterID.map(Handle.filter) else { return }
         let source: EQFilter?
         switch handle {
         case .band(let slot): source = bands[safe: slot]
@@ -418,7 +438,7 @@ struct FrequencyResponseView: View {
 
     private func drawBandMarkers(_ context: GraphicsContext, _ size: CGSize) {
         for (slot, band) in bands.enumerated() {
-            let isHighlighted = (dragged ?? hovered) == .band(slot)
+            let isHighlighted = (activeDrag ?? activeHover) == .band(slot)
             // Bands the processor cannot render (at or above Nyquist for the
             // current sample rate) are shown dimmed. A band at 0 dB is not one
             // of them — it is flat, which is a value like any other.
@@ -439,7 +459,11 @@ struct FrequencyResponseView: View {
             )
         }
 
-        if case .band(let slot)? = dragged, let band = bands[safe: slot] {
+        // The value goes here, at the handle, whether the band was moved by
+        // dragging this point or by dragging its slider below. It is the number
+        // and the shape of the change in one place, which is the reason the
+        // curve is the biggest thing in the window.
+        if case .band(let slot)? = activeDrag, let band = bands[safe: slot] {
             drawGainLabel(context, size, center: bandHandleCenter(band, size), gain: band.gain)
         }
     }
@@ -456,7 +480,7 @@ struct FrequencyResponseView: View {
     private func drawFilterNodes(_ context: GraphicsContext, _ size: CGSize) {
         for (index, filter) in freeFilters.enumerated() {
             let tint = BandColor.at(filter.colorIndex).color
-            let isHighlighted = (dragged ?? hovered) == .filter(filter.id)
+            let isHighlighted = (activeDrag ?? activeHover) == .filter(filter.id)
             let isSelected = selectedFilterID == filter.id
             // Dimmed only when the band is switched off or its frequency can't
             // be rendered at this sample rate. Not when its gain is 0: a band
@@ -489,7 +513,7 @@ struct FrequencyResponseView: View {
             context.draw(number, at: center, anchor: .center)
         }
 
-        if case .filter(let id)? = dragged, let filter = freeFilters.first(where: { $0.id == id }) {
+        if case .filter(let id)? = activeDrag, let filter = freeFilters.first(where: { $0.id == id }) {
             let center = filterNodeCenter(filter, size)
             let text = filter.kind.usesGain
                 ? "\(BandFormat.frequency(filter.frequency)) Hz  \(BandFormat.gain(filter.gain))"
