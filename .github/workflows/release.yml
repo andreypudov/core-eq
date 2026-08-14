@@ -9,12 +9,34 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-15
+    # AppKit picks an app's appearance from the SDK it was linked against, not
+    # from the macOS running it. Building on an older image shipped a binary
+    # that looked like a pre-26 app on every current Mac, while local builds
+    # looked native — so the runner image is a user-visible choice, not a
+    # detail. The deployment target (14.2) is set in the project and is
+    # unaffected by this.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
+      - name: Show toolchain
+        run: xcodebuild -version && xcrun --show-sdk-version
+
       - name: Build and package
         run: make release
+
+      # The failure this guards against is silent: a runner image whose default
+      # Xcode has moved produces a working, correctly versioned app that simply
+      # renders as the wrong generation of macOS. Better to fail the release.
+      - name: Verify the binary is linked against a current SDK
+        run: |
+          sdk=$(otool -l build/Release/CoreEQ.app/Contents/MacOS/CoreEQ \
+                | awk '/LC_BUILD_VERSION/ {found=1} found && /sdk /{print $2; exit}')
+          echo "linked against SDK $sdk"
+          case "$sdk" in
+            2[6-9].*|[3-9][0-9].*) ;;
+            *) echo "::error::expected the macOS 26 SDK or newer, got $sdk"; exit 1 ;;
+          esac
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

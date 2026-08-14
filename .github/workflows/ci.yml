@@ -7,9 +7,14 @@ on:
 
 jobs:
   test:
-    runs-on: macos-15
+    # Kept in step with the release job: tests have to run against the same
+    # SDK the shipped binary is linked against.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: xcodebuild -version && xcrun --show-sdk-version
 
       - name: Run unit tests
         run: make test
