@@ -43,10 +43,6 @@ struct FilterListView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .accessibilityAddTraits(.isHeader)
 
-            Text(summary)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-
             Spacer(minLength: 12)
 
             // The same switch the Graphic tab has over its sliders: hearing one
@@ -72,15 +68,6 @@ struct FilterListView: View {
     }
 
     private var hasBands: Bool { !profileManager.freeFilters.isEmpty }
-
-    private var summary: String {
-        let count = profileManager.freeFilters.count
-        switch count {
-        case 0: return "None"
-        case 1: return "1 band"
-        default: return "\(count) bands"
-        }
-    }
 
     /// The column titles. Same widths and same spacing as a band row, from the
     /// same tokens, so the two can't drift apart.
