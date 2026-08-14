@@ -8,7 +8,7 @@ extension. Processing runs entirely on Apple's native Core Audio process-tap
 API, so there is nothing to install into the system and nothing left behind
 when CoreEQ is not running.
 
-[[./Design/screenshots/core-eq-1.5.png]]
+[[./Design/screenshots/core-eq-1.6.png]]
 
 * Features
 
