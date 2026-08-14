@@ -159,7 +159,9 @@ final class SpectrumAnalyzer: ObservableObject {
 
     // MARK: - Analysis
 
-    private func analyze() {
+    /// One frame of analysis. Driven by the timer in `start()`; not private so
+    /// the tests can step it deterministically rather than waiting on a clock.
+    func analyze() {
         guard let fftSetup else { return }
 
         let total = buffer.snapshot(into: &window)

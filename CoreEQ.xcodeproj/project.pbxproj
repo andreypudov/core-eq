@@ -20,11 +20,8 @@
 				Audio/AudioDeviceList.swift,
 				Audio/AudioDevices.swift,
 				Audio/AudioEngine.swift,
-				EQ/EQProcessor.swift,
 				"Extensions/Color+CoreEQ.swift",
 				"Extensions/NSFont+Bold.swift",
-				UI/BandColor.swift,
-				UI/BandFormat.swift,
 				UI/MainWindow/AppMark.swift,
 				UI/MainWindow/DownwardPointer.swift,
 				UI/MainWindow/EqualizerDetailView.swift,
@@ -45,8 +42,6 @@
 				UI/MenuBar/MenuRowView.swift,
 				UI/MenuBar/QuickEQBodyView.swift,
 				UI/MenuBar/QuickEQMenuMetrics.swift,
-				UI/ScrollAdjuster.swift,
-				UI/Theme.swift,
 			);
 			target = 1A0000000000000000000010 /* CoreEQTests */;
 		};
