@@ -74,33 +74,41 @@ struct EqualizerDetailView: View {
     /// and the sidebar already lists every preset with the active one ticked.
     /// Naming both again here was furniture.
     private var header: some View {
-        ZStack {
-            // Centred on the content column — the same centreline the plot and
-            // the volume control below it use.
+        // Three columns: the editor switcher, the device, and the state of what
+        // is loaded. The device keeps the column's centreline by giving the two
+        // sides equal, flexible halves — *not* by floating over them, which is
+        // what let the engine warning slide underneath the pop-up and collide
+        // with its chevron. Laid out in the row, the sides can only push and
+        // truncate, never overlap.
+        HStack(spacing: 12) {
+            Picker("Editor", selection: $tab) {
+                Text("Graphic").tag(EditorTab.graphic)
+                Text("Parametric").tag(EditorTab.parametric)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .accessibilityLabel("Editor")
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             deviceControl
 
-            HStack(spacing: 12) {
-                Picker("Editor", selection: $tab) {
-                    Text("Graphic").tag(EditorTab.graphic)
-                    Text("Parametric").tag(EditorTab.parametric)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .accessibilityLabel("Editor")
-
-                Spacer(minLength: 16)
-
+            HStack(spacing: 10) {
+                // The symbol alone, with the sentence in its tooltip. A rare
+                // state should not hold a phrase's worth of the row open at
+                // every other moment — and at the window's minimum width, that
+                // phrase is what would push the preset out of the header.
                 if let warning = engineWarning {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11))
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
                         .help(audioEngine.status.description)
+                        .accessibilityLabel(warning)
                 }
 
-                Button("Reset") { profileManager.resetToActiveProfile() }
+                presetStatus
+
+                Button("Revert") { profileManager.resetToActiveProfile() }
                     .disabled(!profileManager.isModified)
                     .help("Discard changes and return to the saved preset")
 
@@ -115,8 +123,40 @@ struct EqualizerDetailView: View {
                     .accessibilityLabel("Equalizer")
                     .help(audioEngine.isEnabled ? "Turn the equalizer off" : "Turn the equalizer on")
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(height: Theme.headerHeight)
+    }
+
+    /// What is loaded, and whether it has been changed since — beside the
+    /// button that undoes those changes.
+    ///
+    /// The header used to carry a bare "Reset" whose object was named nowhere
+    /// on this side of the window: the preset was in the sidebar, which can be
+    /// scrolled, and the fact that anything had been edited was a dot down
+    /// there too. An action reads better next to the thing it acts on.
+    private var presetStatus: some View {
+        HStack(spacing: 5) {
+            Text(profileManager.activeProfileName)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            // The same mark the sidebar row uses for the same fact.
+            if profileManager.isModified {
+                Circle()
+                    .fill(.secondary)
+                    .frame(width: 5, height: 5)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Preset")
+        .accessibilityValue(
+            profileManager.isModified
+                ? "\(profileManager.activeProfileName), edited"
+                : profileManager.activeProfileName
+        )
     }
 
     /// The device, as a pop-up while there is something to choose between and
