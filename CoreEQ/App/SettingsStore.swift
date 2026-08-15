@@ -105,10 +105,10 @@ final class SettingsStore {
     /// never written again.
     ///
     /// Held in memory and written through, because this is the one setting on an
-    /// interaction path: every slider tick files the working chain under the
-    /// current device, and each of those went through a full decode of every
-    /// device's state purely to put one key back. Reading is now free and only
-    /// the encode remains.
+    /// interaction path: every step of a slider drag files the working chain
+    /// under the current device, and each of those went through a full decode of
+    /// every device's state purely to put one key back. Reading is now free and
+    /// only the encode remains.
     var deviceStates: [String: DeviceEQState] {
         get {
             if let cachedDeviceStates { return cachedDeviceStates }

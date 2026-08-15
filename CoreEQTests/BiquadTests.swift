@@ -57,7 +57,7 @@ final class BiquadTests: XCTestCase {
     /// The property the whole layered-chain idea rests on: cascaded biquads
     /// multiply in magnitude, so their dB contributions add exactly. If this
     /// ever stopped holding, the composite curve would no longer be the sum of
-    /// its parts and the slider tick would be lying.
+    /// its parts, and the graph would be lying about what is being heard.
     func testChainMagnitudesAddInDecibels() {
         let filters = [bell(125, 3), bell(180, 2, q: 0.8), bell(4_000, -4, q: 2)]
         for probe in [60.0, 125.0, 180.0, 1_000.0, 4_000.0, 12_000.0] {

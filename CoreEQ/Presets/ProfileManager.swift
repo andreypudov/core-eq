@@ -230,25 +230,6 @@ final class ProfileManager: ObservableObject {
         freeFilters.count < BuiltInProfiles.maxFreeFilters
     }
 
-    /// What the filters total at `frequency` — the second number shown at a
-    /// band's handle while it is being dragged.
-    ///
-    /// Deliberately excludes the preamp. That number exists to say "something
-    /// else in the chain reaches this band"; a trim that lifts every frequency
-    /// by the same amount says nothing about any particular one, and folding it
-    /// in would make it differ from the band's own gain on all eleven sliders
-    /// the moment the trim left zero. The trim has its own column, and the
-    /// curve — which is the output — carries it there.
-    ///
-    /// This is a readout and never a control: a slider always sets its own
-    /// filter's gain, so nothing here can move a knob the user did not touch.
-    func totalGain(at frequency: Double, sampleRate: Double) -> Double {
-        currentFilters.reduce(0.0) { total, filter in
-            total + Biquad(filter: filter, sampleRate: sampleRate)
-                .magnitudeDB(at: frequency, sampleRate: sampleRate)
-        }
-    }
-
     // MARK: - Presets
 
     /// Selecting a profile replaces the entire chain — free filters included —

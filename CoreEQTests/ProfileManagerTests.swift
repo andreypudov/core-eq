@@ -34,8 +34,8 @@ final class ProfileManagerTests: XCTestCase {
         settings.deviceStates[device ?? ""] = state
     }
 
-    /// Total response of a chain at `frequency`, the way the graph and the
-    /// slider tick compute it.
+    /// Total response of a chain at `frequency`, the way the graph computes the
+    /// curve it draws.
     private func total(_ filters: [EQFilter], at frequency: Double, sampleRate: Double = 48_000) -> Double {
         filters.reduce(0.0) {
             $0 + Biquad(filter: $1, sampleRate: sampleRate).magnitudeDB(at: frequency, sampleRate: sampleRate)
@@ -423,20 +423,6 @@ final class ProfileManagerTests: XCTestCase {
         XCTAssertEqual(total(manager.currentFilters, at: 1_000), 6, accuracy: 0.01, "only the ladder remains")
     }
 
-    // MARK: - Reading the chain
-
-    /// The number the slider tick shows. It has to include free filters, or the
-    /// tick would never differ from the knob and would carry no information.
-    func testTotalGainSumsTheWholeChain() {
-        let manager = makeManager()
-        manager.setActiveProfile(name: "Flat")
-        manager.setGain(4, forBandAt: 5)                   // 1 kHz band
-        manager.addFilter(frequency: 1_000, gain: 3)       // free filter on top
-
-        XCTAssertEqual(manager.totalGain(at: 1_000, sampleRate: 48_000), 7, accuracy: 0.01)
-        XCTAssertEqual(manager.bandFilters[5].gain, 4, "the band still reports only its own gain")
-    }
-
     // MARK: - Global gain
 
     func testPreampIsClampedAndCountsAsAnEdit() {
@@ -450,23 +436,6 @@ final class ProfileManagerTests: XCTestCase {
 
         manager.setPreamp(-99)
         XCTAssertEqual(manager.currentPreamp, BuiltInProfiles.preampRange.lowerBound)
-    }
-
-    /// The trim lifts every frequency equally, so it says nothing about any one
-    /// band. Folding it into the per-band total would put a tick on all eleven
-    /// sliders the moment it left zero.
-    func testTotalGainExcludesThePreamp() {
-        let manager = makeManager()
-        manager.setActiveProfile(name: "Flat")
-        manager.setGain(4, forBandAt: 5)
-        manager.setPreamp(-3)
-
-        XCTAssertEqual(manager.totalGain(at: 1_000, sampleRate: 48_000), 4, accuracy: 0.01)
-
-        // Three octaves up, only the tail of the 1 kHz bell reaches — a few
-        // hundredths of a dB, nowhere near the −3 dB trim. A band nothing
-        // overlaps shows no tick however the trim is set.
-        XCTAssertEqual(manager.totalGain(at: 8_000, sampleRate: 48_000), 0, accuracy: 0.05)
     }
 
     func testPreampIsSavedIntoAndRestoredFromAPreset() {

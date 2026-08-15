@@ -465,11 +465,16 @@ struct FrequencyResponseView: View {
             )
         }
 
-        // The value goes here, at the handle, whether the band was moved by
-        // dragging this point or by dragging its slider below. It is the number
-        // and the shape of the change in one place, which is the reason the
+        // The value goes here, at the handle, whether the band is being pointed
+        // at or moved, and from either grip — this point or its slider below. It
+        // is the number and the shape in one place, which is the reason the
         // curve is the biggest thing in the window.
-        if case .band(let slot)? = activeDrag, let band = bands[safe: slot] {
+        //
+        // Reading a value must not require changing it. Showing this on drag
+        // alone meant the only way to find out where a band sat was to pick it
+        // up, which puts an undo between the user and a question they only
+        // wanted answered.
+        if case .band(let slot)? = activeDrag ?? activeHover, let band = bands[safe: slot] {
             drawGainLabel(context, size, center: bandHandleCenter(band, axis, size), gain: band.gain)
         }
     }
@@ -520,7 +525,11 @@ struct FrequencyResponseView: View {
             context.draw(number, at: center, anchor: .center)
         }
 
-        if case .filter(let id)? = activeDrag, let filter = freeFilters.first(where: { $0.id == id }) {
+        // Pointed at or moved, as with a band. A free filter carries its
+        // frequency too: unlike a rung, it can be anywhere, so the value is not
+        // readable from the axis beneath it.
+        if case .filter(let id)? = activeDrag ?? activeHover,
+           let filter = freeFilters.first(where: { $0.id == id }) {
             let center = filterNodeCenter(filter, axis, size)
             let text = filter.kind.usesGain
                 ? "\(BandFormat.frequency(filter.frequency)) Hz  \(BandFormat.gain(filter.gain))"

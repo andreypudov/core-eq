@@ -211,32 +211,31 @@ These are the guarantees the design exists to provide.
 1. A slider shows the gain of its own filter, and nothing else. It never moves
    on its own.
 2. The graph shows the sum of the whole chain. It is exact.
-3. Where those two differ, a faint tick on the slider track marks the total at
-   that frequency.
+3. Where those two differ, the graph is where the difference is visible: the
+   curve rides above a handle that some other filter is reaching.
 4. A preset sets the entire chain, including its output trim.
 5. Nothing is ever fitted, estimated, or redistributed.
 
-** The tick
+** Own value, not the total
 
-#+begin_src text
-   +12 ┤
-       │
-    +6 ┤   ▐   ← knob: this band is +6.0 dB
-       │   ┄   ← tick: the chain totals +8.0 dB here
-     0 ┤   ▐
-#+end_src
-
-A slider that reports the total instead of its own value would be a control
+A slider that reported the total instead of its own value would be a control
 that lies. Adding a free filter near 125 Hz would slide the 125 Hz slider by
 itself; a high pass below it would make the top of the slider's own scale
 unreachable; and dragging the slider would require solving for the gain that
 produces a requested total, which is exactly the kind of inverse problem this
 design exists to avoid.
 
-The tick gives the same information — what is happening at this frequency —
-without any of that. Both values are visible on one control and only one of
-them is draggable. An untouched band reads as "I am contributing nothing here,
-but something else is."
+The same reasoning puts a band's handle on the graph at the band's own gain
+rather than on the summed curve: moving one filter must never move another's
+handle.
+
+A second number showing the chain total alongside the band's own was tried and
+removed. Two dB values on one small floating label read as a single value
+someone had failed to round, and the information was already on screen in the
+form that needs no explaining: the curve rides above the handle exactly where
+something else is reaching that frequency. Pointing at a handle shows one
+number — what that band is set to — and the curve above it shows what is
+actually being heard.
 
 * Crossing over
 

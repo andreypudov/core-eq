@@ -223,7 +223,7 @@ struct EqualizerDetailView: View {
         )
         .opacity(audioEngine.isEnabled ? 1.0 : 0.5)
         .allowsHitTesting(audioEngine.isEnabled)
-        .help("Click a point to select its band; drag it to adjust; double-click to reset it")
+        .help("Point at a handle to read its value; drag it to adjust; double-click to reset it")
     }
 
     // MARK: - Band levels
@@ -374,15 +374,6 @@ struct EqualizerDetailView: View {
             .disabled(!profileManager.canAddFilter)
         }
     }
-
-    /// What the hovered or dragged band is doing, shown beside the heading.
-    ///
-    /// Two values whenever they differ: the band's own gain, which is what its
-    /// slider sets, and what the whole chain totals at that frequency, which is
-    /// what you hear. The gap between them is always some other filter reaching
-    /// this far, and showing it is what keeps the slider honest without letting
-    /// it report a value it doesn't control.
-    @ViewBuilder
 
     // MARK: - Output
 
