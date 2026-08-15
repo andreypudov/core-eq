@@ -3,6 +3,7 @@ import XCTest
 /// Everything the app remembers between launches passes through here, so a
 /// silent failure in this file is a user's presets and per-device state
 /// disappearing.
+@MainActor
 final class SettingsStoreTests: XCTestCase {
     private var suiteName = ""
     private var defaults: UserDefaults!

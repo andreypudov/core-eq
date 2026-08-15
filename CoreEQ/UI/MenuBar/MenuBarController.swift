@@ -25,6 +25,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let profileManager: ProfileManager
     private let audioEngine: AudioEngine
+    /// The same device list the window's picker reads, rather than a second
+    /// enumeration of Core Audio. Two lists could disagree — and the one built
+    /// on menu open cost a full walk of every device's name, transport, data
+    /// source, and stream configuration, twice, every time the menu was opened.
+    private let outputs: AudioDeviceList
     private let openMainWindow: () -> Void
     private let openSettings: () -> Void
 
@@ -53,11 +58,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     init(
         profileManager: ProfileManager,
         audioEngine: AudioEngine,
+        outputs: AudioDeviceList,
         openMainWindow: @escaping () -> Void,
         openSettings: @escaping () -> Void
     ) {
         self.profileManager = profileManager
         self.audioEngine = audioEngine
+        self.outputs = outputs
         self.openMainWindow = openMainWindow
         self.openSettings = openSettings
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -152,7 +159,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             gutter: MenuListMetrics.badgeGutter,
             height: MenuListMetrics.rowHeight,
             marker: profileManager.isModified,
-            canExpand: profileManager.listProfiles().count > 1
+            canExpand: profileManager.profiles.count > 1
         )
     }
 
@@ -176,9 +183,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// it — unless the machine only has the one, when there is nothing to choose
     /// between: the row then states where the sound goes, without a chevron.
     private func outputItem() -> NSMenuItem {
-        let currentID = AudioDevices.defaultOutputDeviceID()
-        let devices = AudioDevices.outputDevices()
-        let current = devices.first { $0.id == currentID }
+        let current = outputs.devices.first { $0.id == outputs.defaultDeviceID }
 
         guard let current else {
             // No usable output at all: no name to state, and nothing to open.
@@ -193,7 +198,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             image: Self.deviceIcon(current.symbolName, selected: true),
             gutter: MenuListMetrics.badgeGutter,
             height: MenuListMetrics.rowHeight,
-            canExpand: devices.count > 1
+            canExpand: outputs.hasChoice
         )
     }
 
@@ -331,7 +336,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// badges: what else there is, and what each one would sound like.
     private func presetRows() -> [MenuRowView] {
         let active = profileManager.activeProfileName
-        return profileManager.listProfiles()
+        return profileManager.profiles
             .filter { $0.name != active }
             .map { profile in
                 MenuRowView(
@@ -349,9 +354,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// Every output device except the one in use. Its accent-filled badge stays
     /// on the row above, so the list is all plain badges: what else there is.
     private func outputRows() -> [MenuRowView] {
-        let currentID = AudioDevices.defaultOutputDeviceID()
-        return AudioDevices.outputDevices()
-            .filter { $0.id != currentID }
+        outputs.devices
+            .filter { $0.id != outputs.defaultDeviceID }
             .map { device in
                 MenuRowView(
                     title: device.name,
@@ -359,7 +363,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                     gutter: MenuListMetrics.badgeGutter,
                     height: MenuListMetrics.rowHeight
                 ) { [weak self] in
-                    AudioDevices.setDefaultOutputDevice(device.id)
+                    // Through the list, so the menu and the window's picker take
+                    // the same route to a device change — including the optimistic
+                    // update that keeps the selection from flicking back.
+                    self?.outputs.select(device.id)
                     self?.dismissMenu()
                 }
             }

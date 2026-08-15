@@ -3,6 +3,12 @@ import Foundation
 /// Thin `UserDefaults` wrapper for the persisted app state: active profile,
 /// EQ enabled flag, user-created presets, and the working chain — the active
 /// preset plus whatever the user has changed since selecting it.
+///
+/// Main-actor isolated. `UserDefaults` is thread-safe on its own, but this type
+/// caches on top of it, and every owner — the profile manager, the engine, the
+/// app delegate — is already on the main actor. Stating that here keeps the
+/// cache correct by construction rather than by convention.
+@MainActor
 final class SettingsStore {
     private enum Key {
         static let activeProfileName = "activeProfileName"
@@ -97,12 +103,23 @@ final class SettingsStore {
     /// Replaces the single active-preset / working-chain / trim / tone keys,
     /// which are now read once at launch to seed the current device's slot and
     /// never written again.
+    ///
+    /// Held in memory and written through, because this is the one setting on an
+    /// interaction path: every slider tick files the working chain under the
+    /// current device, and each of those went through a full decode of every
+    /// device's state purely to put one key back. Reading is now free and only
+    /// the encode remains.
     var deviceStates: [String: DeviceEQState] {
         get {
-            guard let data = defaults.data(forKey: Key.deviceStates) else { return [:] }
-            return (try? JSONDecoder().decode([String: DeviceEQState].self, from: data)) ?? [:]
+            if let cachedDeviceStates { return cachedDeviceStates }
+            let stored = defaults.data(forKey: Key.deviceStates)
+                .flatMap { try? JSONDecoder().decode([String: DeviceEQState].self, from: $0) }
+                ?? [:]
+            cachedDeviceStates = stored
+            return stored
         }
         set {
+            cachedDeviceStates = newValue
             if newValue.isEmpty {
                 defaults.removeObject(forKey: Key.deviceStates)
             } else if let data = try? JSONEncoder().encode(newValue) {
@@ -110,6 +127,10 @@ final class SettingsStore {
             }
         }
     }
+
+    /// Mirror of `deviceStates`, populated on first read. Valid because a store
+    /// is the only writer of its own defaults key.
+    private var cachedDeviceStates: [String: DeviceEQState]?
 
     /// Presets the user created in the main window, stored as JSON. Empty when
     /// the user hasn't made any. Decoding failures fall back to an empty list

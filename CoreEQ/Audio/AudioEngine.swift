@@ -38,9 +38,13 @@ final class AudioEngine: ObservableObject {
 
     @Published private(set) var status: Status = .stopped
 
+    /// Rate assumed before a device has reported one. Only ever seen during
+    /// launch, and replaced as soon as the aggregate device exists.
+    static let defaultSampleRate = 44_100.0
+
     /// Nominal sample rate of the active aggregate device. The response curve
     /// uses it so the drawn filters match what the processor actually renders.
-    @Published private(set) var sampleRate: Double = 44_100
+    @Published private(set) var sampleRate = AudioEngine.defaultSampleRate
 
     /// Global bypass. When false the engine keeps running but passes audio
     /// through untouched, so toggling is instant and glitch-free.
@@ -75,9 +79,16 @@ final class AudioEngine: ObservableObject {
     init(settings: SettingsStore) {
         self.settings = settings
         self.isEnabled = settings.isEnabled
-        self.spectrum = SpectrumAnalyzer(buffer: processor.spectrumBuffer, sampleRate: { 44_100 })
+        // Two steps because the provider closes over `self`: the analyzer has to
+        // exist before there is a `self` to hand it.
+        self.spectrum = SpectrumAnalyzer(
+            buffer: processor.spectrumBuffer,
+            sampleRate: { AudioEngine.defaultSampleRate }
+        )
         processor.setBypassed(!settings.isEnabled)
-        spectrum.setSampleRateProvider { [weak self] in self?.sampleRate ?? 44_100 }
+        spectrum.setSampleRateProvider { [weak self] in
+            self?.sampleRate ?? AudioEngine.defaultSampleRate
+        }
     }
 
     // MARK: - Lifecycle
@@ -99,8 +110,16 @@ final class AudioEngine: ObservableObject {
         }
     }
 
+    /// Stops for good, as opposed to the teardown a restart does.
+    ///
+    /// The system observers have to come off here. They outlive any single
+    /// aggregate device — that is the point of them — so left installed they
+    /// would answer the next device change or wake by starting an engine the app
+    /// has already shut down, which on quit means building a tap during
+    /// termination.
     func stop() {
         pendingRestart?.cancel()
+        removeSystemObservers()
         teardownEngine()
         status = .stopped
     }
@@ -204,6 +223,23 @@ final class AudioEngine: ObservableObject {
     }
 
     // MARK: - Change handling
+
+    /// Removes the observers that survive a restart. `start()` reinstalls both,
+    /// so stopping and starting again is a complete cycle.
+    private func removeSystemObservers() {
+        if let defaultDeviceListener {
+            var addr = propertyAddress(kAudioHardwarePropertyDefaultOutputDevice)
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject), &addr, .main, defaultDeviceListener
+            )
+        }
+        defaultDeviceListener = nil
+
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+        }
+        wakeObserver = nil
+    }
 
     private func scheduleRestart(after delay: TimeInterval, reason: String) {
         logger.info("Restart scheduled: \(reason, privacy: .public)")

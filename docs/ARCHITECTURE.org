@@ -1,7 +1,11 @@
-#+TITLE: CoreEQ Architecture Proposal
+#+TITLE: CoreEQ Architecture
 #+SUBTITLE: One filter chain, two editors, three depths of access
 #+DATE: <2026-08-06 Thu>
 #+OPTIONS: toc:3 num:nil
+
+This began as a proposal and is now what CoreEQ does, as of 1.6. It is kept as
+the record of *why* the equalizer is shaped this way; the file layout and the
+build are in [[file:../DEVELOPMENT.org][DEVELOPMENT.org]].
 
 * Goal
 
@@ -132,7 +136,7 @@ preset, same chain, same curve, same audio — and the editing area is a fixed
 height so nothing above it moves when you switch.
 
 #+begin_src text
- [ Graphic | Parametric ]                    Classical ▾   Reset
+ [ Graphic | Parametric ]        [ Output ▾ ]        Classical   Revert   ⏻
 
  Parametric Bands — 2 bands                                        ⏻
    #  Enable  Type          Frequency     Gain         Q       Actions
@@ -140,7 +144,7 @@ height so nothing above it moves when you switch.
    ●2   ( )   High Shelf ▾  ◔ 8000 Hz   ◔ −2.0 dB    ◔ 0.70        🗑
  + Add Band
 
- Output [MacBook Pro Speakers]   Preamp ──▪── +2.0 dB   🔈 ──▪── 70%
+ Preamp ──▪── +2.0 dB
 #+end_src
 
 The Graphic tab is the default and is what a user who knows the Apple Music or
@@ -290,28 +294,30 @@ gave, and it remains the right rejection. Fitting a free filter set onto a fixed
 ladder is an approximation, and approximations are what this application is
 trying not to make.
 
-* Impact on the code
+* What it cost the code
 
-The engine is nearly unaffected, which is the strongest evidence the model is
-right.
+The engine was nearly unaffected, which is the strongest evidence the model was
+right. As built:
 
-- =EQBand= becomes =Filter=: adds =type=, =enabled=, and the slot index.
-- =PeakingFilter= becomes a typed biquad. Its defining property must survive
-  unchanged: one coefficient implementation, used by both =EQProcessor= and
-  =FrequencyResponseView=. This is what makes the drawn curve a truthful
-  picture of the audio path, and every new filter type is a new opportunity to
+- =EQBand= became =EQFilter=: it adds a kind, an enabled flag, a colour, and a
+  ladder slot. The slot — not the frequency — is a band's identity, so a fixed
+  strip of eleven sliders indexes into a variable-length chain.
+- =PeakingFilter= became =Biquad=, typed by kind. Its defining property
+  survived: one coefficient implementation, used by both =EQProcessor= and
+  =FrequencyResponseView=. That is what makes the drawn curve a truthful
+  picture of the audio path, and every new filter kind is a new opportunity to
   break it.
-- =EQProfile= holds =[Filter]= instead of =[EQBand]=. Existing user presets
-  decode into eleven band filters; the migration is a decoder default.
-- =EQProcessor.maxBands= rises from 16. Eleven slots plus a cap of sixteen free
-  filters plus room for future automatic processing suggests 32. Each filter is
-  one more pass over the buffer in =processChannel=, so the cap is a real
-  budget rather than a formality.
-- =EqualizerDetailView= gains one collapsible section between the sliders and
-  the output row.
-- =FrequencyResponseView= gains free nodes alongside the band handles, and
+- =EQProfile= holds a chain instead of a band array. Presets written by 1.x
+  decode into eleven band filters through a decoder default, so no one lost a
+  preset to the change.
+- =EQProcessor.maxFilters= is 32 — eleven slots, a cap of sixteen added bands,
+  and room for automatic processing later. Each filter is one more pass over
+  the buffer in =processChannel=, so the cap is a budget rather than a
+  formality.
+- =EqualizerDetailView= gained the tab pair and a fixed-height editing area.
+- =FrequencyResponseView= gained free nodes alongside the band handles, and
   two-axis dragging for them.
-- =QuickTone= is unaffected: it offsets band gains by slot, and slots still
+- =QuickTone= was unaffected: it offsets band gains by slot, and slots still
   exist.
 
 * Global gain

@@ -73,37 +73,15 @@ final class ProfileManager: ObservableObject {
             .map { EQProfile(name: $0.name, filters: Self.normalized($0.filters)) }
         self.userProfiles = userProfiles
 
-        let profiles = builtIns + userProfiles
         let state = Self.migratedStateIfNeeded(settings: settings, deviceUID: outputDeviceUID)
             ?? settings.deviceStates[Self.slot(for: outputDeviceUID)]
             ?? DeviceEQState(profileName: BuiltInProfiles.defaultProfileName)
 
-        let active = profiles.first { $0.name == state.profileName }
-            ?? profiles.first { $0.name == BuiltInProfiles.defaultProfileName }
-            ?? profiles[0]
-        self.activeProfileName = active.name
-
-        var restoredTone = ToneControls()
-        if let saved = state.tone, saved.count == 3 {
-            restoredTone = ToneControls(
-                bass: saved[0].clamped(to: QuickTone.range),
-                mid: saved[1].clamped(to: QuickTone.range),
-                treble: saved[2].clamped(to: QuickTone.range)
-            )
-        }
-        self.tone = restoredTone
-
-        if !restoredTone.isNeutral {
-            // Tone positions take precedence: derive the chain from them so the
-            // popover and engine agree on launch.
-            self.currentFilters = Self.applyingTone(restoredTone, to: active.filters)
-        } else if let stored = state.filters {
-            self.currentFilters = Self.normalized(stored)
-        } else {
-            self.currentFilters = active.filters
-        }
-
-        self.currentPreamp = state.preamp.clamped(to: BuiltInProfiles.preampRange)
+        let resolved = Self.resolve(state, against: builtIns + userProfiles)
+        self.activeProfileName = resolved.profileName
+        self.currentFilters = resolved.filters
+        self.currentPreamp = resolved.preamp
+        self.tone = resolved.tone
     }
 
     // MARK: - Output device
@@ -127,23 +105,59 @@ final class ProfileManager: ObservableObject {
     }
 
     private func apply(_ state: DeviceEQState) {
-        let profile = profile(named: state.profileName)
-            ?? profile(named: BuiltInProfiles.defaultProfileName)
-            ?? builtInProfiles[0]
-        activeProfileName = profile.name
+        let resolved = Self.resolve(state, against: profiles)
+        activeProfileName = resolved.profileName
+        currentFilters = resolved.filters
+        currentPreamp = resolved.preamp
+        tone = resolved.tone
+    }
 
+    /// A stored slot as something playable: what a device's saved state means
+    /// against the presets that exist right now.
+    ///
+    /// Launch and a device switch both go through here. They used to each carry
+    /// their own copy of these rules, which had already drifted — a slot holding
+    /// an explicit neutral tone restored its edited chain on launch and the bare
+    /// preset on a switch. One reading, one behaviour.
+    private struct Resolved {
+        var profileName: String
+        var filters: [EQFilter]
+        var preamp: Double
+        var tone: ToneControls
+    }
+
+    private static func resolve(_ state: DeviceEQState, against profiles: [EQProfile]) -> Resolved {
+        // A preset that has since been deleted falls back to the default rather
+        // than to nothing, so a stale slot can never leave the app with no sound
+        // selected.
+        let profile = profiles.first { $0.name == state.profileName }
+            ?? profiles.first { $0.name == BuiltInProfiles.defaultProfileName }
+            ?? profiles[0]
+
+        var tone = ToneControls()
         if let saved = state.tone, saved.count == 3 {
             tone = ToneControls(
                 bass: saved[0].clamped(to: QuickTone.range),
                 mid: saved[1].clamped(to: QuickTone.range),
                 treble: saved[2].clamped(to: QuickTone.range)
             )
-            currentFilters = Self.applyingTone(tone, to: profile.filters)
-        } else {
-            tone = ToneControls()
-            currentFilters = state.filters.map(Self.normalized) ?? profile.filters
         }
-        currentPreamp = state.preamp.clamped(to: BuiltInProfiles.preampRange)
+
+        let filters: [EQFilter]
+        if !tone.isNeutral {
+            // Tone positions win: the chain is derived from them, so the popover
+            // sliders and the audio cannot disagree about where the tone sits.
+            filters = applyingTone(tone, to: profile.filters)
+        } else {
+            filters = state.filters.map(normalized) ?? profile.filters
+        }
+
+        return Resolved(
+            profileName: profile.name,
+            filters: filters,
+            preamp: state.preamp.clamped(to: BuiltInProfiles.preampRange),
+            tone: tone
+        )
     }
 
     /// Key for a device's slot. The empty string stands for "no output device",
@@ -188,16 +202,16 @@ final class ProfileManager: ObservableObject {
         builtInProfiles + userProfiles
     }
 
-    func listProfiles() -> [EQProfile] {
-        profiles
-    }
-
-    func getActiveProfile() -> EQProfile {
-        profiles.first { $0.name == activeProfileName } ?? builtInProfiles[0]
+    /// The preset the working chain was loaded from. Everything "unsaved" is
+    /// measured against this.
+    var activeProfile: EQProfile {
+        profile(named: activeProfileName) ?? builtInProfiles[0]
     }
 
     func profile(named name: String) -> EQProfile? {
-        profiles.first { $0.name == name }
+        // Built-ins are searched first and are the common case; only a user
+        // preset pays for the second pass.
+        builtInProfiles.first { $0.name == name } ?? userProfiles.first { $0.name == name }
     }
 
     // MARK: - Reading the chain
@@ -348,7 +362,7 @@ final class ProfileManager: ObservableObject {
     /// Restores a single band to the active profile's original value
     /// (Lightroom-style double-click reset).
     func resetBand(at slot: Int) {
-        let profileBands = getActiveProfile().bandFilters
+        let profileBands = activeProfile.bandFilters
         guard slot < BuiltInProfiles.bandCount,
               currentFilters.indices.contains(slot),
               profileBands.indices.contains(slot) else { return }
@@ -491,7 +505,7 @@ final class ProfileManager: ObservableObject {
         if let mid { tone.mid = mid.clamped(to: QuickTone.range) }
         if let treble { tone.treble = treble.clamped(to: QuickTone.range) }
 
-        let profileBands = getActiveProfile().bandFilters
+        let profileBands = activeProfile.bandFilters
         let offsets = QuickTone.offsets(bass: tone.bass, mid: tone.mid, treble: tone.treble)
         for slot in 0..<min(BuiltInProfiles.bandCount, currentFilters.count) {
             let base = profileBands[safe: slot]?.gain ?? 0
@@ -504,7 +518,7 @@ final class ProfileManager: ObservableObject {
     /// controls.
     func resetToActiveProfile() {
         tone = ToneControls()
-        let profile = getActiveProfile()
+        let profile = activeProfile
         currentFilters = profile.filters
         currentPreamp = profile.preamp
         persistDeviceState()
@@ -517,8 +531,15 @@ final class ProfileManager: ObservableObject {
         persistDeviceState()
     }
 
+    /// Whether the working state differs from the preset it came from — what
+    /// puts "Edited" in the header and what decides whether a device's slot has
+    /// a chain worth storing.
+    ///
+    /// Read on the drag path, so the preset is looked up once rather than once
+    /// per term.
     var isModified: Bool {
-        currentFilters != getActiveProfile().filters || currentPreamp != getActiveProfile().preamp
+        let profile = activeProfile
+        return currentFilters != profile.filters || currentPreamp != profile.preamp
     }
 
     // MARK: - Private

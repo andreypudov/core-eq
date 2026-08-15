@@ -31,11 +31,39 @@ final class EQProcessor {
     /// consumer can snapshot without the producer overtaking the read region.
     let spectrumBuffer = SpectrumAudioBuffer(capacity: 8_192)
 
-    private struct FilterState {
+    /// What the render thread needs to know about one filter: no identifier, no
+    /// colour, no ladder slot. Plain data, so staging a chain is a fixed number
+    /// of scalar copies into storage that already exists.
+    private struct FilterParameters: Equatable {
         var kind = EQFilter.Kind.bell
         var frequency = 1_000.0
+        var gain = 0.0
         var q = 1.0
         var isEnabled = true
+
+        init() {}
+
+        init(_ filter: EQFilter) {
+            kind = filter.kind
+            frequency = filter.frequency
+            gain = filter.gain
+            q = filter.q
+            isEnabled = filter.isEnabled
+        }
+
+        /// Whether a change here invalidates the coefficients and the filter's
+        /// delay line. Gain is excluded: it is ramped rather than jumped, so it
+        /// updates coefficients without discarding state.
+        func changesShape(from other: FilterParameters) -> Bool {
+            kind != other.kind
+                || frequency != other.frequency
+                || q != other.q
+                || isEnabled != other.isEnabled
+        }
+    }
+
+    private struct FilterState {
+        var parameters = FilterParameters()
         var targetGain = 0.0
         var currentGain = 0.0
         var needsCoefficientUpdate = true
@@ -48,10 +76,19 @@ final class EQProcessor {
     }
 
     // Staged parameters, written by the main thread under `lock` and consumed
-    // by the render thread. The render thread may free a small array here;
-    // that is a deliberate simplicity trade-off, bounded and rare.
+    // by the render thread.
+    //
+    // The staging chain is allocated once, at its maximum length, and written
+    // in place. Handing over a fresh `[EQFilter]` instead would make the render
+    // thread the last owner of that array — and therefore the thread that frees
+    // it, inside the IO callback, on every parameter change. A slider drag
+    // sends one array per frame, so that is a `free()` on the audio thread sixty
+    // times a second: unbounded in principle, and exactly the kind of thing that
+    // shows up as a dropout under memory pressure rather than in testing.
     private let lock = OSAllocatedUnfairLock()
-    private var pendingFilters: [EQFilter]?
+    private var pendingFilters = [FilterParameters](repeating: FilterParameters(), count: EQProcessor.maxFilters)
+    /// Number of staged filters, or nil when no chain is waiting to be picked up.
+    private var pendingFilterCount: Int?
     private var pendingPreamp: Double?
     private var pendingBypass: Bool?
     private var pendingSampleRate: Double?
@@ -59,6 +96,11 @@ final class EQProcessor {
     // Render-thread-only state.
     private var filters = [FilterState](repeating: FilterState(), count: EQProcessor.maxFilters)
     private var filterCount = 0
+    /// Where a staged chain is copied to while the lock is held, so the lock is
+    /// released before the longer work of comparing it against what is running.
+    /// Holding it across that would put the main thread in a position to block
+    /// on the audio thread, which is the inversion the staging exists to avoid.
+    private var stagedFilters = [FilterParameters](repeating: FilterParameters(), count: EQProcessor.maxFilters)
     private var sampleRate = 44_100.0
     private var bypassed = false
     // Output trim, smoothed like the band gains so dragging the preamp slider
@@ -68,9 +110,16 @@ final class EQProcessor {
 
     // MARK: - Control (any thread)
 
+    /// Stages a chain for the render thread. Anything past `maxFilters` is
+    /// dropped here rather than in the callback, so the render side never has to
+    /// reason about a chain longer than its storage.
     func setFilters(_ newFilters: [EQFilter]) {
+        let count = min(newFilters.count, Self.maxFilters)
         lock.lock()
-        pendingFilters = newFilters
+        for i in 0..<count {
+            pendingFilters[i] = FilterParameters(newFilters[i])
+        }
+        pendingFilterCount = count
         lock.unlock()
     }
 
@@ -160,11 +209,18 @@ final class EQProcessor {
 
     private func consumePendingParameters() {
         guard lock.lockIfAvailable() else { return }
-        let newFilters = pendingFilters
+        // Copied out under the lock into fixed storage the render thread already
+        // owns, so nothing is allocated, retained, or released here.
+        let newFilterCount = pendingFilterCount
+        if let newFilterCount {
+            for i in 0..<newFilterCount {
+                stagedFilters[i] = pendingFilters[i]
+            }
+        }
         let newPreamp = pendingPreamp
         let newBypass = pendingBypass
         let newRate = pendingSampleRate
-        pendingFilters = nil
+        pendingFilterCount = nil
         pendingPreamp = nil
         pendingBypass = nil
         pendingSampleRate = nil
@@ -178,25 +234,19 @@ final class EQProcessor {
             }
         }
 
-        if let newFilters {
-            filterCount = min(newFilters.count, Self.maxFilters)
+        if let newFilterCount {
+            filterCount = newFilterCount
             for i in 0..<filterCount {
-                let filter = newFilters[i]
-                if filters[i].kind != filter.kind
-                    || filters[i].frequency != filter.frequency
-                    || filters[i].q != filter.q
-                    || filters[i].isEnabled != filter.isEnabled {
-                    filters[i].kind = filter.kind
-                    filters[i].frequency = filter.frequency
-                    filters[i].q = filter.q
-                    filters[i].isEnabled = filter.isEnabled
+                let staged = stagedFilters[i]
+                if staged.changesShape(from: filters[i].parameters) {
                     filters[i].needsCoefficientUpdate = true
                     filters[i].resetState()
                 }
+                filters[i].parameters = staged
                 // Switching a gain-bearing filter off ramps it to zero, which is
                 // the same smooth path a slider drag takes and lands on identity.
                 // High and low pass have no gain to ramp, so they switch at once.
-                filters[i].targetGain = filter.isEnabled ? filter.gain : 0
+                filters[i].targetGain = staged.isEnabled ? staged.gain : 0
             }
         }
 
@@ -239,16 +289,17 @@ final class EQProcessor {
                 filters[i].needsCoefficientUpdate = true
             }
             if filters[i].needsCoefficientUpdate {
+                let parameters = filters[i].parameters
                 // Coefficients come from the same `Biquad` the response curve is
                 // drawn from, so the plot always matches the audio.
-                if !filters[i].isEnabled, !filters[i].kind.usesGain {
+                if !parameters.isEnabled, !parameters.kind.usesGain {
                     filters[i].filter = .identity
                 } else {
                     filters[i].filter = Biquad(
-                        kind: filters[i].kind,
-                        frequency: filters[i].frequency,
+                        kind: parameters.kind,
+                        frequency: parameters.frequency,
                         gain: filters[i].currentGain,
-                        q: filters[i].q,
+                        q: parameters.q,
                         sampleRate: sampleRate
                     )
                 }

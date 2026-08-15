@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController = MenuBarController(
             profileManager: profileManager,
             audioEngine: audioEngine,
+            outputs: outputs,
             openMainWindow: { [weak self] in self?.showMainWindow() },
             openSettings: { [weak self] in self?.showSettings() }
         )

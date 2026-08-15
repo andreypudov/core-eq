@@ -116,6 +116,16 @@ account). The release pipeline is GitHub Actions
 =make release= on a macOS runner and attaches the zip to a GitHub Release
 with generated notes.
 
+*The runner image is a user-visible choice.* AppKit decides which generation of
+the macOS design an app renders in from the SDK it was *linked against*, not
+from the macOS running it. Building 1.6 on the =macos-15= image (Xcode 16, SDK
+15.5) shipped a binary that drew as a pre-26 app on every current Mac, while
+local builds against the 26 SDK looked native — same commit, same version, two
+different-looking apps. Both workflows therefore pin =macos-26=, and the release
+job asserts the linked SDK out of =LC_BUILD_VERSION= before publishing. The
+deployment target (=MACOSX_DEPLOYMENT_TARGET= 14.2) is set in the project and is
+unaffected by any of this: a 26-SDK build still runs on macOS 14.2.
+
 1. Bump =MARKETING_VERSION= (and =CURRENT_PROJECT_VERSION=) in the target
    build settings.
 2. Commit, then tag and push:
@@ -174,22 +184,31 @@ CoreEQ/
     SpectrumAnalyzer.swift  Windowed FFT driving the response backdrop
     SpectrumAudioBuffer.swift Lock-light ring buffer feeding the analyzer
   EQ/
-    EQProcessor.swift       Realtime biquad EQ with parameter smoothing
-    PeakingFilter.swift     Single peaking-EQ biquad (coefficients + math)
+    EQProcessor.swift       Realtime biquad chain with parameter smoothing
+    Biquad.swift            One RBJ biquad: coefficients + magnitude response
   Presets/
-    EQBand.swift            One band: frequency, gain, Q
-    EQProfile.swift         A named set of bands
+    EQFilter.swift          One filter: kind, frequency, gain, Q, ladder slot
+    EQProfile.swift         A named chain plus its preamp
     BuiltInProfiles.swift   Shipped presets + the band ladder they share
+    DeviceEQState.swift     What one output device was last playing
     QuickTone.swift         Bass / mid / treble weighting over the ladder
-    ProfileManager.swift    Active profile + working band values, persistence
+    ProfileManager.swift    Active profile, working chain, per-device persistence
   UI/
     Theme.swift             Design tokens (accent, spacing, metrics)
     BandFormat.swift        Frequency and gain label formatting
+    BandColor.swift         Palette a parametric band is tagged with
+    KnobScale.swift         Value ladders shared by the knobs and fields
+    ScrollAdjuster.swift    Scroll-wheel / trackpad adjustment for any control
     MainWindow/
       EqualizerSidebarView.swift Preset list + preset actions
-      EqualizerDetailView.swift  Content column: header, graph, bands, output
-      FrequencyResponseView.swift Response curve + spectrum overlay
+      EqualizerDetailView.swift  Content column: header, graph, editors, preamp
+      FrequencyResponseView.swift Response curve, handles, spectrum backdrop
+      FilterListView.swift       Parametric editor: one row per added band
       VerticalGainSlider.swift   Band gain slider
+      GlobalGainView.swift       Preamp column beside the editors
+      GainScale.swift            The dB scale both of those are read against
+      KnobControl.swift          Frequency / gain / Q knob
+      ValueField.swift           Editable numeric field beside a knob
       WindowBackground.swift     Window material behind the content column
       AppMark.swift              Vector app mark for the sidebar
       DownwardPointer.swift      Tail shape under the gain readout
@@ -256,6 +275,11 @@ editing an SVG, rerun the target and rebuild:
 
 * Architecture
 
+This section is how CoreEQ is put together. *Why* it is put together this way —
+one chain behind two editors, what a band is, what the graph is allowed to do —
+is [[file:docs/ARCHITECTURE.org][docs/ARCHITECTURE.org]]. Read that before changing anything about the
+relationship between the graphic and parametric editors.
+
 ** Audio path: how CoreEQ attaches to system audio
 
 Implemented in =AudioEngine.swift=:
@@ -279,24 +303,39 @@ clean up.
 
 ** DSP
 
-=EQProcessor= is a cascade of RBJ audio-cookbook peaking biquads (transposed
-direct form II, independent state per band and channel; 11 bands, stereo).
-Custom biquads were chosen over wrapping Apple's EQ Audio Unit because they
-are trivially realtime-safe inside a HAL IO proc and have no format
-negotiation edge cases (the spec allows either).
+=EQProcessor= is one flat cascade of RBJ audio-cookbook biquads (transposed
+direct form II, independent state per filter and channel; up to
+=EQProcessor.maxFilters= entries, stereo). It has no notion of bands, sliders,
+or lists: it is handed a chain and runs every entry the same way, which is what
+makes the graphic and parametric editors two views of one equalizer rather than
+two equalizers in series.
+
+Coefficients come from =Biquad=, the same type =FrequencyResponseView= draws
+its curve from. That sharing is deliberate and load-bearing — a second copy of
+the gain law or the Nyquist guard would let the plot quietly disagree with what
+is being heard.
+
+Custom biquads were chosen over wrapping Apple's EQ Audio Unit because they are
+trivially realtime-safe inside a HAL IO proc and have no format negotiation
+edge cases (the spec allows either).
 
 ** Threading model
 
 - The IO proc runs on the Core Audio realtime thread and *never blocks*:
-  parameter changes (bands, bypass, sample rate) are staged behind an
+  parameter changes (filters, preamp, bypass, sample rate) are staged behind an
   =OSAllocatedUnfairLock= and consumed with =lockIfAvailable()= — under
   contention the render path simply reuses the previous parameters for one
   cycle.
+- It also never *allocates*. The staging chain is a fixed-length array of plain
+  values, written in place, so handing over a new chain neither allocates on the
+  main thread nor leaves the render thread holding the last reference to
+  something it would then have to free inside the IO callback.
 - Gain changes are smoothed over ~50 ms on the render thread, so profile
   switches and slider drags are glitch-free.
-- Everything else (=AudioEngine=, =ProfileManager=, UI) is =@MainActor=.
-  =AppDelegate= wires =ProfileManager.$currentBands= to
-  =AudioEngine.apply(bands:)= via Combine.
+- Everything else (=AudioEngine=, =ProfileManager=, =SettingsStore=, UI) is
+  =@MainActor=. =AppDelegate= wires =ProfileManager.$currentFilters= to
+  =AudioEngine.apply(filters:)= via Combine, and =$currentPreamp= to
+  =apply(preamp:)=.
 
 ** Resilience
 
@@ -312,18 +351,39 @@ negotiation edge cases (the spec allows either).
 
 ** Persistence
 
-=SettingsStore= wraps =UserDefaults= with three keys: active profile name,
-enabled flag, and custom band gains (present only while the active profile is
-modified). =ProfileManager= restores all three on launch.
+=SettingsStore= wraps =UserDefaults=. Two keys carry everything that matters:
+
+- =userProfiles= — the presets the user made, as JSON. Shared across devices: a
+  preset is a thing you own, not a property of a cable.
+- =deviceStates= — a =DeviceEQState= per output device, keyed by the device's
+  *persistent UID*. Which preset is playing, any unsaved edits to it, the
+  preamp, and the Quick EQ tone positions all follow the hardware, the way
+  volume does on macOS. =AudioDeviceID= is reassigned per boot and cannot key
+  anything that outlives a session, which is why the UID is used.
+
+=ProfileManager= is the only writer of =deviceStates=; every mutation funnels
+through =persistDeviceState()=, so a new control cannot change the sound without
+being remembered alongside the rest. The keys that predate the per-device model
+(=activeProfileName=, =workingFilters=, =workingPreamp=, =quickToneControls=,
+=customBandGains=) are read once at launch, migrated into the current device's
+slot, and cleared.
 
 ** Design decisions
 
 - *Deployment target 14.2, not 13.0.* The process-tap API is the only way to
   process all system audio without shipping a virtual audio driver; it was
   introduced in macOS 14.2.
-- *Fixed band layout.* All profiles share the same eleven center frequencies
-  (the ISO octave ladder 32 Hz – 8 kHz plus 15 and 20 kHz, Q 1.41 ≈ one-octave
-  bandwidth), so a profile is just a named list of gains and switching never
-  rebuilds filters, only retargets gain smoothing. The Nyquist guard in
-  =EQProcessor= sits at 0.47 × sample rate so the 20 kHz band stays active at
-  a 44.1 kHz device sample rate.
+- *Fixed band ladder, free filters on top.* Every profile carries the same
+  eleven centre frequencies (the ISO octave ladder 32 Hz – 16 kHz plus 20 kHz,
+  Q 1.41 ≈ one-octave bandwidth) as its first eleven entries, in slot order —
+  =ProfileManager.normalized= guarantees it, so the slider strip can index
+  straight into the chain. Anything after those eleven is a filter the user
+  added, with its own kind, frequency, and Q. The Nyquist guard in =Biquad= sits
+  at 0.47 × sample rate so the 20 kHz band stays active at a 44.1 kHz device
+  sample rate.
+- *A band is moved into the parametric editor, never converted.* =Edit as
+  Filter…= lifts a slot's filter out unchanged and leaves the slot at 0 dB,
+  which is identity — the chain sums to exactly what it did before. The reverse
+  is not offered, because fitting an arbitrary filter back onto a fixed ladder
+  would be an approximation, and this application does not approximate what the
+  user asked for.

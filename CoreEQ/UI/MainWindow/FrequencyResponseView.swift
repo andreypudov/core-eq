@@ -264,11 +264,15 @@ struct FrequencyResponseView: View {
             }
         }
 
+        // Built once: this runs on every pointer move, and the axis was
+        // previously rebuilt — array copy included — for all twenty-seven
+        // candidates.
+        let axis = axis(size)
         for filter in freeFilters {
-            consider(.filter(filter.id), filterNodeCenter(filter, size), bias: Self.handleHitRadius / 2)
+            consider(.filter(filter.id), filterNodeCenter(filter, axis, size), bias: Self.handleHitRadius / 2)
         }
         for (slot, band) in bands.enumerated() {
-            consider(.band(slot), bandHandleCenter(band, size), bias: 0)
+            consider(.band(slot), bandHandleCenter(band, axis, size), bias: 0)
         }
         return best?.handle
     }
@@ -296,15 +300,15 @@ struct FrequencyResponseView: View {
     /// Because the bands overlap by an octave the summed curve rides above the
     /// handles, which `drawHighlightedFilterCurve` explains by drawing the
     /// highlighted filter's own response underneath it.
-    private func bandHandleCenter(_ band: EQFilter, _ size: CGSize) -> CGPoint {
-        CGPoint(x: xPosition(band.frequency, size), y: yPosition(band.gain, size))
+    private func bandHandleCenter(_ band: EQFilter, _ axis: ResponseAxis, _ size: CGSize) -> CGPoint {
+        CGPoint(x: axis.x(band.frequency), y: yPosition(band.gain, size))
     }
 
     /// Same rule for a free filter, except that a high or low pass has no gain
     /// and so rides the 0 dB line.
-    private func filterNodeCenter(_ filter: EQFilter, _ size: CGSize) -> CGPoint {
+    private func filterNodeCenter(_ filter: EQFilter, _ axis: ResponseAxis, _ size: CGSize) -> CGPoint {
         CGPoint(
-            x: xPosition(filter.frequency, size),
+            x: axis.x(filter.frequency),
             y: yPosition(filter.kind.usesGain ? filter.gain : 0, size)
         )
     }
@@ -324,12 +328,13 @@ struct FrequencyResponseView: View {
     private func drawGrid(_ context: GraphicsContext, _ size: CGSize) {
         let bottom = plotHeight(size)
         let left = axisGutter
+        let axis = axis(size)
 
         // Dotted verticals on the band centers are the whole grid — the major
         // frequency divisions, and nothing else competing with the curve.
         var verticals = Path()
         for frequency in anchors {
-            let x = xPosition(frequency, size)
+            let x = axis.x(frequency)
             verticals.move(to: CGPoint(x: x, y: 0))
             verticals.addLine(to: CGPoint(x: x, y: bottom))
         }
@@ -350,7 +355,7 @@ struct FrequencyResponseView: View {
             let label = Text(BandFormat.frequency(frequency))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            context.draw(label, at: CGPoint(x: xPosition(frequency, size), y: bottom + labelStripHeight / 2), anchor: .center)
+            context.draw(label, at: CGPoint(x: axis.x(frequency), y: bottom + labelStripHeight / 2), anchor: .center)
         }
         // Lighter than the frequency labels: the dB scale should never pull the
         // eye off the curve.
@@ -437,6 +442,7 @@ struct FrequencyResponseView: View {
     }
 
     private func drawBandMarkers(_ context: GraphicsContext, _ size: CGSize) {
+        let axis = axis(size)
         for (slot, band) in bands.enumerated() {
             let isHighlighted = (activeDrag ?? activeHover) == .band(slot)
             // Bands the processor cannot render (at or above Nyquist for the
@@ -445,7 +451,7 @@ struct FrequencyResponseView: View {
             let isActive = band.isEnabled && Biquad.isRealisable(
                 frequency: band.frequency, sampleRate: sampleRate
             )
-            let center = bandHandleCenter(band, size)
+            let center = bandHandleCenter(band, axis, size)
             let radius: CGFloat = isHighlighted ? 5 : 4
             let dot = circle(at: center, radius: radius)
 
@@ -464,7 +470,7 @@ struct FrequencyResponseView: View {
         // and the shape of the change in one place, which is the reason the
         // curve is the biggest thing in the window.
         if case .band(let slot)? = activeDrag, let band = bands[safe: slot] {
-            drawGainLabel(context, size, center: bandHandleCenter(band, size), gain: band.gain)
+            drawGainLabel(context, size, center: bandHandleCenter(band, axis, size), gain: band.gain)
         }
     }
 
@@ -478,6 +484,7 @@ struct FrequencyResponseView: View {
     /// the same band. The curve itself stays green: it is the output, and the
     /// output belongs to no single band.
     private func drawFilterNodes(_ context: GraphicsContext, _ size: CGSize) {
+        let axis = axis(size)
         for (index, filter) in freeFilters.enumerated() {
             let tint = BandColor.at(filter.colorIndex).color
             let isHighlighted = (activeDrag ?? activeHover) == .filter(filter.id)
@@ -489,7 +496,7 @@ struct FrequencyResponseView: View {
             let isActive = filter.isEnabled && Biquad.isRealisable(
                 frequency: filter.frequency, sampleRate: sampleRate
             )
-            let center = filterNodeCenter(filter, size)
+            let center = filterNodeCenter(filter, axis, size)
             // Large enough for the number inside to be read rather than
             // guessed at, which is the whole point of putting it there: the
             // number is how a node is matched to its row in the table.
@@ -514,7 +521,7 @@ struct FrequencyResponseView: View {
         }
 
         if case .filter(let id)? = activeDrag, let filter = freeFilters.first(where: { $0.id == id }) {
-            let center = filterNodeCenter(filter, size)
+            let center = filterNodeCenter(filter, axis, size)
             let text = filter.kind.usesGain
                 ? "\(BandFormat.frequency(filter.frequency)) Hz  \(BandFormat.gain(filter.gain))"
                 : "\(BandFormat.frequency(filter.frequency)) Hz"
@@ -576,10 +583,6 @@ struct FrequencyResponseView: View {
     /// Horizontal extent of the plot, to the right of the dB-label gutter.
     private func plotWidth(_ size: CGSize) -> CGFloat {
         max(size.width - axisGutter, 1)
-    }
-
-    private func xPosition(_ frequency: Double, _ size: CGSize) -> CGFloat {
-        axis(size).x(frequency)
     }
 
     /// The minimal menu graph reserves only half the stroke width at the top and

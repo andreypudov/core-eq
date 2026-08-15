@@ -65,7 +65,7 @@ final class ThemeTests: XCTestCase {
     /// so their tracks start and end level. If the chrome ever exceeds the
     /// height, the track gets a negative size.
     func testTheBandColumnLeavesRoomForItsTrack() {
-        XCTAssertGreaterThan(Theme.BandRow.sliderHeight, Theme.BandRow.chromeHeight)
+        XCTAssertGreaterThan(Theme.BandRow.minSliderHeight, Theme.BandRow.chromeHeight)
         XCTAssertGreaterThan(Theme.BandRow.minSliderHeight, Theme.BandRow.knobDiameter)
         XCTAssertGreaterThan(Theme.BandRow.columnWidth, Theme.BandRow.trackWidth)
     }

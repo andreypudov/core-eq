@@ -741,6 +741,33 @@ final class ProfileManagerTests: XCTestCase {
         XCTAssertEqual(storedState(device: "headphones")?.profileName, "Rock")
     }
 
+    /// Launching on a device and switching to it have to read its stored slot
+    /// the same way.
+    ///
+    /// They were separate pieces of code, and had drifted: a slot holding an
+    /// explicit centred tone alongside an edited chain restored the edits on
+    /// launch and threw them away on a switch. Nothing writes a centred tone
+    /// today — it is stored as nil — so this only ever bit a slot written by an
+    /// older build, silently, by making a device sound different depending on
+    /// how it was arrived at.
+    func testASlotReadsTheSameOnLaunchAsOnASwitch() {
+        var chain = BuiltInProfiles.emptyBandChain()
+        chain[3].gain = 7
+        seed(
+            DeviceEQState(profileName: "Flat", filters: chain, preamp: -2, tone: [0, 0, 0]),
+            device: "headphones"
+        )
+
+        let onLaunch = makeManager(device: "headphones")
+
+        let onSwitch = makeManager(device: "speakers")
+        onSwitch.setOutputDevice(uid: "headphones")
+
+        XCTAssertEqual(onSwitch.currentFilters, onLaunch.currentFilters)
+        XCTAssertEqual(onSwitch.currentPreamp, onLaunch.currentPreamp)
+        XCTAssertEqual(onLaunch.currentFilters[3].gain, 7, "the edited chain is what was stored")
+    }
+
     // MARK: - Persistence
 
     func testUserProfilesSurviveRelaunch() {

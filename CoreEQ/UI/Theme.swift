@@ -112,7 +112,6 @@ enum Theme {
         /// Floor for the track when the window is at its shortest.
         static let minSliderHeight: CGFloat = 96
 
-        static let sliderHeight: CGFloat = 146
         static let columnWidth: CGFloat = 26
         static let knobDiameter: CGFloat = 14
         static let trackWidth: CGFloat = 2
