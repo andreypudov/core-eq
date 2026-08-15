@@ -72,12 +72,17 @@ struct FilterListView: View {
     /// The column titles. Same widths and same spacing as a band row, from the
     /// same tokens, so the two can't drift apart.
     private var columnTitles: some View {
-        HStack(spacing: Theme.FilterRow.columnSpacing) {
+        HStack(spacing: 0) {
             title("#", width: Theme.FilterRow.Column.index, alignment: .leading)
+            ColumnGap()
             title("Enable", width: Theme.FilterRow.Column.enable)
+            ColumnGap()
             title("Type", width: Theme.FilterRow.Column.type)
+            ColumnGap()
             title("Frequency", width: Theme.FilterRow.Column.frequency)
+            ColumnGap()
             title("Gain", width: Theme.FilterRow.Column.gain)
+            ColumnGap()
             title("Q", width: Theme.FilterRow.Column.q)
             Spacer(minLength: Theme.FilterRow.columnSpacing)
             title("Actions", width: Theme.FilterRow.Column.actions, alignment: .trailing)
@@ -265,6 +270,20 @@ struct FilterListView: View {
 /// while listening — dragged, scrolled, nudged until it sounds right — and the
 /// number is how a value already known is entered. The graph is the third way
 /// in, and all three write to the same filter.
+/// The space between two columns, in the title row and in every band row — one
+/// definition, because a gap that differed between them would put every title
+/// off its column by the difference, multiplied along the row.
+///
+/// Flexible rather than fixed: the columns are sized for their controls, so a
+/// window wider than the minimum has width left over, and sharing it between
+/// the gaps is what keeps the table from sitting bunched against its left edge.
+private struct ColumnGap: View {
+    var body: some View {
+        Spacer(minLength: Theme.FilterRow.columnSpacing)
+            .frame(maxWidth: Theme.FilterRow.columnSpacingMax)
+    }
+}
+
 struct FilterRowView: View {
     let index: Int
     let filter: EQFilter
@@ -282,13 +301,22 @@ struct FilterRowView: View {
     private var isLive: Bool { isEnabled && filter.isEnabled }
 
     var body: some View {
-        HStack(spacing: Theme.FilterRow.columnSpacing) {
+        HStack(spacing: 0) {
             indexCell
+            ColumnGap()
             enableCell
+            ColumnGap()
             typeCell
+            ColumnGap()
             frequencyCell
+            ColumnGap()
             gainCell
+            ColumnGap()
             qCell
+            // Uncapped, unlike the gaps between the values: whatever is left
+            // after they reach their ceiling collects here, which is what keeps
+            // the delete button on the right edge of the row instead of
+            // drifting inward as the window widens.
             Spacer(minLength: Theme.FilterRow.columnSpacing)
             actionsCell
         }
@@ -324,7 +352,7 @@ struct FilterRowView: View {
     /// The swatch is a button, and the number beside it never changes colour:
     /// the colour is a second way to tell bands apart, never the only one.
     private var indexCell: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Theme.FilterRow.Column.indexGap) {
             Button {
                 isChoosingColor = true
             } label: {
@@ -348,6 +376,12 @@ struct FilterRowView: View {
             Text("\(index)")
                 .font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(.secondary)
+                // A band number is two glyphs at most and must stay on one line.
+                // Given the room to sit on one it will, but wrapping is the one
+                // outcome that has to be impossible: it breaks the row's fixed
+                // height rather than just looking cramped.
+                .lineLimit(1)
+                .fixedSize()
         }
         .frame(width: Theme.FilterRow.Column.index, alignment: .leading)
     }

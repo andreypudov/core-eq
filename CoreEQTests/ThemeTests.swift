@@ -38,6 +38,29 @@ final class ThemeTests: XCTestCase {
         )
     }
 
+    /// The band number has to fit beside its colour swatch on one line.
+    ///
+    /// This is measured, not asserted from a comment, because the failure was
+    /// silent and off by half a point: the column held a swatch and one digit
+    /// exactly, so bands 1–9 looked right and band 10 wrapped. The row is a
+    /// fixed height, so a wrap is not a cramped label — it is a broken row.
+    func testABandNumberFitsItsColumn() {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        // The widest number the list can reach: filters are capped, and every
+        // digit is the same width in a monospaced-digit face.
+        let widest = String(repeating: "0", count: String(BuiltInProfiles.maxFreeFilters).count)
+        let text = (widest as NSString).size(withAttributes: [.font: font]).width
+
+        let available = Theme.FilterRow.Column.index
+            - Theme.FilterRow.Column.indexSwatch
+            - Theme.FilterRow.Column.indexGap
+
+        XCTAssertGreaterThanOrEqual(
+            available, text,
+            "band \(BuiltInProfiles.maxFreeFilters) needs \(text) pt and the column leaves \(available) pt"
+        )
+    }
+
     /// Rows are sized in whole pitches, and the list divides by that pitch to
     /// decide how many fit. A zero or negative pitch would divide by zero.
     func testARowHasAPositivePitch() {

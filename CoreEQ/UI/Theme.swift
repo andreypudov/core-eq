@@ -66,11 +66,21 @@ enum Theme {
         /// size itself to whole rows.
         static let separator: CGFloat = 1
 
-        /// Gap between columns. Small on purpose: at the window's minimum width
-        /// the editor block is about 536 points wide, and the columns below,
-        /// their gaps, and the row's own padding claim 522 of it. Widen any of
-        /// them and the table starts clipping on a 960-point window.
+        /// Narrowest a gap between two columns may be. Reached only at the
+        /// window's minimum width, where the editor block is about 536 points
+        /// wide and the columns, their gaps, and the row's own padding claim 526
+        /// of it. Widen a column and the table starts clipping on a 960-point
+        /// window.
         static let columnSpacing: CGFloat = 8
+
+        /// Widest a gap may grow to.
+        ///
+        /// The gaps are flexible between these two bounds, so the width a wider
+        /// window gives the table is shared by every column instead of pooling
+        /// in front of the last one. The ceiling is what stops that from
+        /// continuing on a very wide window until the row reads as scattered
+        /// controls rather than a table.
+        static let columnSpacingMax: CGFloat = 28
 
         /// Fixed column widths, shared by the title row and every band row so
         /// the two line up without a `Grid` spanning the scroll view between
@@ -80,7 +90,16 @@ enum Theme {
         /// "+12.0 dB", "10.00", and "High Shelf" are what these have to hold.
         enum Column {
             /// Colour swatch and band number, up to two digits.
-            static let index: CGFloat = 34
+            ///
+            /// 34 held the swatch and one digit exactly, and wrapped the second:
+            /// two monospaced digits at this size measure 14.6 pt and what was
+            /// left over was 14. `ThemeTests` now measures it rather than
+            /// trusting the arithmetic in this comment.
+            static let index: CGFloat = 38
+            /// The swatch button: an 8 pt circle inside a 3 pt hit-target
+            /// padding, and the gap between it and the number.
+            static let indexSwatch: CGFloat = 14
+            static let indexGap: CGFloat = 6
             static let enable: CGFloat = 30
             static let type: CGFloat = 100
             static let frequency: CGFloat = 94
