@@ -47,7 +47,7 @@ struct VerticalGainSlider: View {
                 // strip shows the preset's shape at a glance, in the accent
                 // while the band is hovered or dragged.
                 Capsule()
-                    .fill(isActive ? AnyShapeStyle(Color.coreEQAccent) : AnyShapeStyle(Color.primary.opacity(0.35)))
+                    .fill(isActive ? AnyShapeStyle(Color.coreEQSignal) : AnyShapeStyle(Color.primary.opacity(0.35)))
                     .frame(width: Self.trackWidth, height: abs(zeroY - knobY))
                     .position(x: midX, y: (knobY + zeroY) / 2)
 
@@ -55,7 +55,7 @@ struct VerticalGainSlider: View {
                     .fill(colorScheme == .dark ? Color(white: 0.85) : .white)
                     .overlay(
                         Circle().strokeBorder(
-                            isActive ? Color.coreEQAccent : Color.black.opacity(0.22),
+                            isActive ? Color.coreEQSignal : Color.black.opacity(0.22),
                             lineWidth: isActive ? 2 : 0.5
                         )
                     )

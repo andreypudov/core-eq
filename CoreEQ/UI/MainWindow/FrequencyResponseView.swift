@@ -386,7 +386,7 @@ struct FrequencyResponseView: View {
         case .filter(let id): source = freeFilters.first { $0.id == id }
         }
         guard let source else { return }
-        let tint = source.isBand ? Color.coreEQAccent : BandColor.at(source.colorIndex).color
+        let tint = source.isBand ? Color.coreEQSignal : BandColor.at(source.colorIndex).color
         let biquad = Biquad(filter: source, sampleRate: sampleRate)
         let axis = axis(size)
 
@@ -432,13 +432,13 @@ struct FrequencyResponseView: View {
         context.fill(
             fill,
             with: .linearGradient(
-                Gradient(colors: [.coreEQAccent.opacity(0.10), .coreEQAccent.opacity(0.0)]),
+                Gradient(colors: [.coreEQSignal.opacity(0.10), .coreEQSignal.opacity(0.0)]),
                 startPoint: CGPoint(x: 0, y: 0),
                 endPoint: CGPoint(x: 0, y: floor)
             )
         )
 
-        context.stroke(curve, with: .color(.coreEQAccent), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+        context.stroke(curve, with: .color(.coreEQSignal), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
     }
 
     private func drawBandMarkers(_ context: GraphicsContext, _ size: CGSize) {
@@ -460,7 +460,7 @@ struct FrequencyResponseView: View {
             context.fill(dot, with: .color(.white.opacity(isActive ? 0.95 : 0.35)))
             context.stroke(
                 dot,
-                with: .color(.coreEQAccent.opacity(isActive ? 1.0 : 0.35)),
+                with: .color(.coreEQSignal.opacity(isActive ? 1.0 : 0.35)),
                 lineWidth: isHighlighted ? 2 : 1.5
             )
         }

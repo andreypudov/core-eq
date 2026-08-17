@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The app's design tokens, in one place so the sidebar, the graph, and the
@@ -11,7 +12,23 @@ enum Theme {
     /// Controls are deliberately *not* this colour. Switches, sliders, the tab
     /// switcher, and list selection all take the system accent, so the window
     /// says "system utility" first and "CoreEQ" second.
-    static let accent = Color.green
+    ///
+    /// It used to be `Color.green`, which said the same thing and did the
+    /// opposite: on a Mac with the green accent — the default on none of them,
+    /// but common — the curve, the selected tab, the sidebar selection and every
+    /// switch were one colour, and the accent stopped distinguishing anything.
+    /// Amber belongs to no accent, so the separation is now real.
+    ///
+    /// Two values, because one cannot serve both grounds: measured against the
+    /// window's own background, `#E8A33D` scores 7.2:1 on the dark appearance and
+    /// 2.0:1 on the light one. `ThemeTests` holds both above the 3:1 that
+    /// graphical objects need.
+    static let signal = Color(nsColor: NSColor(name: "CoreEQSignal") { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return isDark
+            ? NSColor(srgbRed: 0.910, green: 0.639, blue: 0.239, alpha: 1)  // #E8A33D
+            : NSColor(srgbRed: 0.588, green: 0.365, blue: 0.071, alpha: 1)  // #965D12
+    })
 
     /// Border shared by every block and by the plot, so the plot reads as one of
     /// them rather than as a panel with different rules.

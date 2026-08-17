@@ -126,7 +126,7 @@ struct FilterListView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(profileManager.canAddFilter ? Color.coreEQAccent : Color.secondary)
+            .foregroundStyle(profileManager.canAddFilter ? Color.accentColor : Color.secondary)
             .disabled(!isEnabled || !profileManager.canAddFilter)
             .padding(.top, 8)
             .padding(.leading, 8)

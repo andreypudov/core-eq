@@ -75,7 +75,7 @@ struct GlobalGainView: View {
                         .foregroundStyle(
                             profileManager.currentPreamp == 0
                                 ? AnyShapeStyle(.secondary)
-                                : AnyShapeStyle(Color.coreEQAccent)
+                                : AnyShapeStyle(Color.coreEQSignal)
                         )
                         .frame(height: Theme.BandRow.labelHeight)
                         .accessibilityHidden(true)

@@ -10,11 +10,17 @@ import SwiftUI
 /// of these apart.
 ///
 /// A fixed set rather than a free colour well. Eight named system colours stay
-/// legible on both the light and the dark window, keep their meaning against
-/// the green response curve, and turn choosing a colour into one click instead
-/// of a trip through the system picker. They are stored by index (see
-/// `EQFilter.colorIndex`), so a preset written today still opens if the palette
-/// is ever extended.
+/// legible on both the light and the dark window, and turn choosing a colour
+/// into one click instead of a trip through the system picker. They are stored
+/// by index (see `EQFilter.colorIndex`), so a preset written today still opens
+/// if the palette is ever extended.
+///
+/// One caveat, now that the curve is amber (`Theme.signal`) rather than green:
+/// `.orange` sits close enough to it that an orange band's node can be hard to
+/// pick out of the line it stands on. Swapping that entry for `.brown` would fix
+/// it without shifting any index — but it would also silently repaint every
+/// band a user has already tagged orange, so it is a decision to take
+/// deliberately rather than a tidy-up to slip in.
 enum BandColor: Int, CaseIterable, Identifiable {
     case green, blue, purple, pink, orange, teal, indigo, red
 
