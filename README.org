@@ -129,7 +129,8 @@ Download the latest =CoreEQ-x.y.zip= from the *Releases* page, unzip, and move
 * Using CoreEQ
 
 *Menu bar* — master switch, output device, preset selection, Quick EQ tone
-controls, *Open Equalizer…*, and *Quit*.
+controls, *Open Equalizer…*, *Settings…*, *About CoreEQ*, and *Quit*. CoreEQ has
+no menu bar of its own, so this is where those live.
 
 *Window* — presets in the sidebar; the response graph, the *Graphic* /
 *Parametric* editors, and the preamp on the right. The output device and the

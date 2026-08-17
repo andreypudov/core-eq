@@ -62,23 +62,25 @@ log stream --predicate 'subsystem == "com.andreypudov.coreeq"' --level info
 
 * Testing
 
-There is no automated test target yet. The DSP core (=EQProcessor=) and the
-models (=EQProfile=, =ProfileManager=, =SettingsStore=) are deliberately free
-of audio-hardware dependencies so a unit-test bundle can cover them directly;
-adding an XCTest target is the natural next step.
+=make test= runs =CoreEQTests=, a host-less logic bundle covering the filter
+maths, the built-in profiles, =ProfileManager=, =SettingsStore=, the analyzer and
+its ring buffer, the scroll handling, and the layout arithmetic that has no
+runtime check. See “Packaging and releases → Tests” for how the target is
+assembled.
 
-Until then, a manual smoke test after changes:
+Nothing in that suite touches audio hardware, so the parts that only exist at
+runtime still need a manual pass after changes:
 
-1. Build and launch; confirm the menu bar icon appears and the status line in
-   the main window reads “Processing system audio on …”.
-2. Play music; switch between *Flat* and *Bass Boost* — the change must be
+1. Build and launch; confirm the menu bar icon appears and the window's header
+   shows no engine warning.
+2. Play music; switch between *Flat* and *Bass Booster* — the change must be
    audible, immediate, and free of clicks.
-3. Toggle *Enable Equalizer* — instant, glitch-free A/B.
-4. Drag a band slider — the sound tracks the slider smoothly; a *Reset*
-   button appears.
-5. Switch the system output device (e.g. speakers → headphones) — processing
-   resumes on the new device within ~1 s.
-6. Quit and relaunch — profile, slider tweaks, and enabled state are restored.
+3. Toggle the master switch — instant, glitch-free.
+4. Drag a band slider — the sound tracks the slider smoothly and the curve
+   follows it.
+5. Switch the system output device (speakers → headphones) — processing resumes
+   on the new device within ~1 s, *and that device's own preset loads*.
+6. Quit and relaunch — preset, edits, and enabled state come back, per device.
 7. Quit — system audio returns to the normal unprocessed path.
 
 * Packaging and releases
@@ -174,9 +176,10 @@ Design/
   menubar.svg             Monochrome menu bar template source (not shipped)
 CoreEQ/
   App/
-    CoreEQApp.swift         SwiftUI entry point (@main)
+    CoreEQApp.swift         SwiftUI entry point (@main) + the Settings scene
     AppDelegate.swift       App lifecycle, main-window construction, wiring
     SettingsStore.swift     UserDefaults wrapper
+    LoginItem.swift         Open-at-login, via SMAppService
   Audio/
     AudioEngine.swift       Tap + aggregate device + IO proc, device-change handling
     AudioDevices.swift      Output device enumeration + default-device get/set
@@ -212,8 +215,11 @@ CoreEQ/
       WindowBackground.swift     Window material behind the content column
       AppMark.swift              Vector app mark for the sidebar
       DownwardPointer.swift      Tail shape under the gain readout
+    Settings/
+      GeneralSettingsView.swift The Settings window's only pane
+      SettingsOpener.swift      Opens that window from the AppKit menu
     MenuBar/
-      MenuBarController.swift NSStatusItem menu (presets, output, bypass, quit)
+      MenuBarController.swift NSStatusItem menu (presets, output, bypass, settings, quit)
       MenuHeaderView.swift    Title + on/off switch at the top of the menu
       QuickEQBodyView.swift   Mini response graph + tone sliders
       QuickEQMenuMetrics.swift Sizes shared by the menu's custom views
@@ -348,6 +354,42 @@ edge cases (the spec allows either).
   retries, with the error surfaced in the menu and the main window.
 - *Bypass* keeps the tap running and passes audio through untouched, so
   toggling is instant and glitch-free.
+
+** Settings, About, and why they live in the status menu
+
+=LSUIElement= makes CoreEQ an *accessory* application: no Dock icon, and no menu
+bar of its own — not even while the main window is key. There is therefore no App
+menu, which is where About, Settings, and Quit normally live, so the status menu
+carries all three at its tail.
+
+Three consequences worth knowing:
+
+- *No ⌘,* — a status menu's key equivalents only fire while that menu is open, so
+  a shortcut there would be a promise the app cannot keep.
+- *Activate before showing anything.* An accessory app is not frontmost when its
+  status menu is clicked, so both =SettingsOpener.open()= and =showAbout()= call
+  =NSApp.activate(ignoringOtherApps:)= first or the window opens behind whatever
+  is in front.
+- *Opening the Settings scene needs SwiftUI.* =NSApp.sendAction(Selector(("showSettingsWindow:")))=
+  no longer opens it, and returns =true= while doing nothing — a silent failure.
+  =SettingsLink= and =EnvironmentValues.openSettings= are the supported routes and
+  both live inside SwiftUI, so =SettingsOpener= hosts a one-point transparent view
+  in the status item's button and keeps the action out of its environment.
+
+  Two dead ends, both measured rather than assumed: a hosted =SettingsLink=
+  contains no =NSButton= to =performClick=, because SwiftUI draws its own
+  controls; and a hosting view belonging to no window never fires =onAppear=, so
+  the action is never captured. The host must be a view that is really on
+  screen — hence the status item's button rather than a window of our own.
+
+About is =orderFrontStandardAboutPanel=, which reads the name, version and build
+straight from the bundle — nothing to keep in step with the build.
+
+=LoginItem= wraps =SMAppService.mainApp=, which registers the application itself
+and so needs no helper bundle. It deliberately stores nothing: macOS owns the
+state, the user can revoke it in System Settings → General → Login Items while
+CoreEQ is not running, and a cached =Bool= would then be describing a world that
+no longer exists.
 
 ** Persistence
 

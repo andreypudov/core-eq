@@ -31,7 +31,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// source, and stream configuration, twice, every time the menu was opened.
     private let outputs: AudioDeviceList
     private let openMainWindow: () -> Void
-    private let openSettings: () -> Void
+    private let showAbout: () -> Void
+
+    /// Owned here because opening the Settings scene needs a SwiftUI view inside
+    /// a live window, and the status item's button is the one this class already
+    /// has. See `SettingsOpener`.
+    private let settingsOpener = SettingsOpener()
 
     /// Kept between rebuilds so tone-slider changes can redraw the graph in
     /// place while the menu stays open.
@@ -60,13 +65,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         audioEngine: AudioEngine,
         outputs: AudioDeviceList,
         openMainWindow: @escaping () -> Void,
-        openSettings: @escaping () -> Void
+        showAbout: @escaping () -> Void
     ) {
         self.profileManager = profileManager
         self.audioEngine = audioEngine
         self.outputs = outputs
         self.openMainWindow = openMainWindow
-        self.openSettings = openSettings
+        self.showAbout = showAbout
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -77,6 +82,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             image?.accessibilityDescription = "CoreEQ"
             button.image = image
             button.toolTip = "CoreEQ"
+            settingsOpener.install(in: button)
         }
 
         let menu = NSMenu()
@@ -115,6 +121,27 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let openItem = NSMenuItem(title: "Open Equalizer…", action: #selector(openWindow(_:)), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
+
+        menu.addItem(.separator())
+
+        // The tail every menu bar item in the system carries, and the only place
+        // CoreEQ can carry it: as an accessory application it has no menu bar of
+        // its own, so there is no App menu to hold About, Settings, or Quit.
+        // Wi-Fi ends in "Wi-Fi Settings…" for the same reason.
+        //
+        // No key equivalents: a status menu's shortcuts only fire while the menu
+        // is open, so ⌘, here would be a promise the app cannot keep.
+        let settingsItem = NSMenuItem(
+            title: "Settings…", action: #selector(openSettingsItem(_:)), keyEquivalent: ""
+        )
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        let aboutItem = NSMenuItem(
+            title: "About CoreEQ", action: #selector(showAboutItem(_:)), keyEquivalent: ""
+        )
+        aboutItem.target = self
+        menu.addItem(aboutItem)
 
         menu.addItem(.separator())
 
@@ -495,7 +522,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func openSettingsItem(_ sender: NSMenuItem) {
-        openSettings()
+        settingsOpener.open()
+    }
+
+    @objc private func showAboutItem(_ sender: NSMenuItem) {
+        showAbout()
     }
 
     @objc private func quit(_ sender: NSMenuItem) {

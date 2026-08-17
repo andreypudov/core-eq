@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             audioEngine: audioEngine,
             outputs: outputs,
             openMainWindow: { [weak self] in self?.showMainWindow() },
-            openSettings: { [weak self] in self?.showSettings() }
+            showAbout: { [weak self] in self?.showAbout() }
         )
 
         let audioEngine = self.audioEngine
@@ -201,15 +201,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         audioEngine.spectrum.start()
     }
 
-    /// Opens the standard SwiftUI Settings scene. As a menu bar (LSUIElement)
-    /// app CoreEQ isn't active when the popover is clicked, so activate first or
-    /// the settings window opens behind other apps.
-    private func showSettings() {
+    /// The system's own About panel rather than a window of our own: it already
+    /// knows how to lay out an icon, a name, a version and a copyright line, and
+    /// it reads all four out of the bundle, so there is nothing here to keep in
+    /// step with the build.
+    ///
+    /// Activated first for the same reason the settings window is — an accessory
+    /// application is not frontmost when its menu is clicked, and the panel would
+    /// otherwise open behind whatever is.
+    private func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
-        // `showSettingsWindow:` on macOS 13+, older `showPreferencesWindow:` fallback.
-        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "CoreEQ",
+            // The panel shows the marketing version and then the build in
+            // parentheses — "Version 1.6 (7)". The build number means something
+            // to the release pipeline and nothing to the person reading it, and
+            // an empty string is the documented way to leave it out.
+            // `CFBundleShortVersionString` still supplies the 1.6.
+            .version: "",
+            .credits: Self.aboutCredits,
+        ])
+    }
+
+    /// The panel's info area: one sentence about what CoreEQ is, then the two
+    /// places worth going.
+    ///
+    /// Everything here is measured against the panel's own metrics rather than
+    /// guessed: the text column is 268 points wide, so the sentence is written to
+    /// fall on two lines and the links share a third. Longer copy scrolls, and a
+    /// scrollbar inside a 284-point panel looks like a mistake.
+    ///
+    /// The copyright and licence sit below the version, from
+    /// `NSHumanReadableCopyright` in the bundle — the place the system reserves
+    /// for them — so this text does not repeat either.
+    private static var aboutCredits: NSAttributedString {
+        let body = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        let credits = NSMutableAttributedString(
+            string: "Equalizes everything you hear, with no driver and nothing left behind.\n\n",
+            attributes: [.font: body, .foregroundColor: NSColor.secondaryLabelColor]
+        )
+        credits.append(link("Source code", to: "https://github.com/andreypudov/core-eq", font: body))
+        credits.append(NSAttributedString(
+            string: "  ·  ",
+            attributes: [.font: body, .foregroundColor: NSColor.tertiaryLabelColor]
+        ))
+        // The release list rather than this version's tag: a tag exists only once
+        // the release is cut, so a build made between releases would send the
+        // user to a 404. The list always resolves, newest first.
+        credits.append(link("Release notes", to: "https://github.com/andreypudov/core-eq/releases", font: body))
+
+        let centred = NSMutableParagraphStyle()
+        centred.alignment = .center
+        credits.addAttribute(
+            .paragraphStyle, value: centred, range: NSRange(location: 0, length: credits.length)
+        )
+        return credits
+    }
+
+    private static func link(_ text: String, to urlString: String, font: NSFont) -> NSAttributedString {
+        NSAttributedString(
+            string: text,
+            attributes: [.font: font, .link: URL(string: urlString) as Any]
+        )
     }
 }
 
