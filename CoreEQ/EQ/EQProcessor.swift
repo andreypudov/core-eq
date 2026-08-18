@@ -71,7 +71,10 @@ final class EQProcessor {
         var z1L = 0.0, z2L = 0.0, z1R = 0.0, z2R = 0.0
 
         mutating func resetState() {
-            z1L = 0; z2L = 0; z1R = 0; z2R = 0
+            z1L = 0
+            z2L = 0
+            z1R = 0
+            z2R = 0
         }
     }
 
@@ -86,7 +89,8 @@ final class EQProcessor {
     // times a second: unbounded in principle, and exactly the kind of thing that
     // shows up as a dropout under memory pressure rather than in testing.
     private let lock = OSAllocatedUnfairLock()
-    private var pendingFilters = [FilterParameters](repeating: FilterParameters(), count: EQProcessor.maxFilters)
+    private var pendingFilters = [FilterParameters](
+        repeating: FilterParameters(), count: EQProcessor.maxFilters)
     /// Number of staged filters, or nil when no chain is waiting to be picked up.
     private var pendingFilterCount: Int?
     private var pendingPreamp: Double?
@@ -100,7 +104,8 @@ final class EQProcessor {
     /// released before the longer work of comparing it against what is running.
     /// Holding it across that would put the main thread in a position to block
     /// on the audio thread, which is the inversion the staging exists to avoid.
-    private var stagedFilters = [FilterParameters](repeating: FilterParameters(), count: EQProcessor.maxFilters)
+    private var stagedFilters = [FilterParameters](
+        repeating: FilterParameters(), count: EQProcessor.maxFilters)
     private var sampleRate = 44_100.0
     private var bypassed = false
     // Output trim, smoothed like the band gains so dragging the preamp slider
@@ -147,7 +152,9 @@ final class EQProcessor {
     /// Copies tapped system audio from `input` to `output`, applying the EQ
     /// in place unless bypassed. Assumes Float32 samples, the native format
     /// for process taps and aggregate device IO.
-    func render(input: UnsafePointer<AudioBufferList>, output: UnsafeMutablePointer<AudioBufferList>) {
+    func render(
+        input: UnsafePointer<AudioBufferList>, output: UnsafeMutablePointer<AudioBufferList>
+    ) {
         let inABL = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
         let outABL = UnsafeMutableAudioBufferListPointer(output)
 
@@ -179,10 +186,12 @@ final class EQProcessor {
             for i in 0..<outABL.count where channelBase < Self.maxChannels {
                 let buffer = outABL[i]
                 let channels = Int(buffer.mNumberChannels)
-                guard channels > 0, let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
+                guard channels > 0, let data = buffer.mData?.assumingMemoryBound(to: Float.self)
+                else { continue }
                 let frames = Int(buffer.mDataByteSize) / (MemoryLayout<Float>.size * channels)
                 for ch in 0..<channels where channelBase + ch < Self.maxChannels {
-                    processChannel(data + ch, stride: channels, frames: frames, channel: channelBase + ch)
+                    processChannel(
+                        data + ch, stride: channels, frames: frames, channel: channelBase + ch)
                 }
                 applyPreamp(data, count: frames * channels)
                 channelBase += channels
@@ -198,7 +207,8 @@ final class EQProcessor {
     /// the first output buffer, which covers the common interleaved case.
     private func feedSpectrum(_ outABL: UnsafeMutableAudioBufferListPointer) {
         guard let first = outABL.first,
-              let data = first.mData?.assumingMemoryBound(to: Float.self) else { return }
+            let data = first.mData?.assumingMemoryBound(to: Float.self)
+        else { return }
         let channels = Int(first.mNumberChannels)
         guard channels > 0 else { return }
         let frames = Int(first.mDataByteSize) / (MemoryLayout<Float>.size * channels)
@@ -277,11 +287,13 @@ final class EQProcessor {
 
         if currentPreampLinear != targetPreampLinear {
             let next = currentPreampLinear + (targetPreampLinear - currentPreampLinear) * step
-            currentPreampLinear = abs(next - targetPreampLinear) < 0.0005 ? targetPreampLinear : next
+            currentPreampLinear =
+                abs(next - targetPreampLinear) < 0.0005 ? targetPreampLinear : next
         }
         for i in 0..<filterCount {
             if filters[i].currentGain != filters[i].targetGain {
-                var gain = filters[i].currentGain + (filters[i].targetGain - filters[i].currentGain) * step
+                var gain =
+                    filters[i].currentGain + (filters[i].targetGain - filters[i].currentGain) * step
                 if abs(gain - filters[i].targetGain) < 0.02 {
                     gain = filters[i].targetGain
                 }
@@ -308,14 +320,19 @@ final class EQProcessor {
         }
     }
 
-    private func processChannel(_ samples: UnsafeMutablePointer<Float>, stride: Int, frames: Int, channel: Int) {
+    private func processChannel(
+        _ samples: UnsafeMutablePointer<Float>, stride: Int, frames: Int, channel: Int
+    ) {
         for i in 0..<filterCount {
             let filter = filters[i].filter
             // Identity filters are the common case — every band the user has not
             // touched — so skipping them keeps an untouched chain nearly free.
             if filter == .identity { continue }
-            let b0 = filter.b0, b1 = filter.b1, b2 = filter.b2
-            let a1 = filter.a1, a2 = filter.a2
+            let b0 = filter.b0
+            let b1 = filter.b1
+            let b2 = filter.b2
+            let a1 = filter.a1
+            let a2 = filter.a2
             var z1 = channel == 0 ? filters[i].z1L : filters[i].z1R
             var z2 = channel == 0 ? filters[i].z2L : filters[i].z2R
 
@@ -333,9 +350,11 @@ final class EQProcessor {
             if abs(z1) < 1e-15 { z1 = 0 }
             if abs(z2) < 1e-15 { z2 = 0 }
             if channel == 0 {
-                filters[i].z1L = z1; filters[i].z2L = z2
+                filters[i].z1L = z1
+                filters[i].z2L = z2
             } else {
-                filters[i].z1R = z1; filters[i].z2R = z2
+                filters[i].z1R = z1
+                filters[i].z2R = z2
             }
         }
     }

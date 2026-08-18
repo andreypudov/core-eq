@@ -52,7 +52,8 @@ enum FilterChain {
         var chain = filters
         let offsets = QuickTone.offsets(bass: bass, mid: mid, treble: treble)
         for slot in 0..<min(BuiltInProfiles.bandCount, chain.count) {
-            chain[slot].gain = (chain[slot].gain + offsets[slot]).clamped(to: BuiltInProfiles.gainRange)
+            chain[slot].gain = (chain[slot].gain + offsets[slot]).clamped(
+                to: BuiltInProfiles.gainRange)
         }
         return chain
     }

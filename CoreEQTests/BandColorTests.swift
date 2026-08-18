@@ -18,10 +18,14 @@ final class BandColorTests: XCTestCase {
     /// hand-edited. It has to resolve to a colour rather than trapping.
     func testAnyStoredIndexResolvesToAColour() {
         XCTAssertEqual(BandColor.at(0), BandColor.allCases[0])
-        XCTAssertEqual(BandColor.at(EQFilter.colorCount - 1), BandColor.allCases[EQFilter.colorCount - 1])
-        XCTAssertEqual(BandColor.at(EQFilter.colorCount), BandColor.allCases[0], "the palette wraps")
+        XCTAssertEqual(
+            BandColor.at(EQFilter.colorCount - 1), BandColor.allCases[EQFilter.colorCount - 1])
+        XCTAssertEqual(
+            BandColor.at(EQFilter.colorCount), BandColor.allCases[0], "the palette wraps")
         XCTAssertEqual(BandColor.at(EQFilter.colorCount * 3 + 2), BandColor.allCases[2])
-        XCTAssertEqual(BandColor.at(-1), BandColor.allCases[EQFilter.colorCount - 1], "a negative index wraps too")
+        XCTAssertEqual(
+            BandColor.at(-1), BandColor.allCases[EQFilter.colorCount - 1],
+            "a negative index wraps too")
     }
 
     /// Every colour is nameable: the swatch's tooltip and its accessibility

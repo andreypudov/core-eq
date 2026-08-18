@@ -37,13 +37,17 @@ struct PowerToggleStyle: ToggleStyle {
             Image(systemName: "power")
                 .font(.system(size: weight.diameter, weight: .medium))
                 .foregroundStyle(
-                    configuration.isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary)
+                    configuration.isOn
+                        ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary)
                 )
                 .padding(weight.padding)
                 .background {
                     if weight.hasWell {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(configuration.isOn ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.06))
+                            .fill(
+                                configuration.isOn
+                                    ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.06)
+                            )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                                     .strokeBorder(

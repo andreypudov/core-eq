@@ -10,7 +10,9 @@ import XCTest
 /// scrolling.
 @MainActor
 final class ScrollAdjusterTests: XCTestCase {
-    private func makeCatcher(pointsPerStep: CGFloat = 6) -> (ScrollAdjuster.CatcherView, () -> [Int]) {
+    private func makeCatcher(
+        pointsPerStep: CGFloat = 6
+    ) -> (ScrollAdjuster.CatcherView, () -> [Int]) {
         let view = ScrollAdjuster.CatcherView()
         view.pointsPerStep = pointsPerStep
         view.isEnabled = true

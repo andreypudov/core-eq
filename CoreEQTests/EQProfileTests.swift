@@ -41,9 +41,11 @@ final class EQProfileTests: XCTestCase {
     func testCodingRoundTrip() throws {
         let profile = EQProfile(
             name: "Late Night",
-            filters: chain(bandGain: 2, free: [
-                EQFilter(kind: .lowShelf, frequency: 120, gain: -3, q: 0.7, colorIndex: 3)
-            ]),
+            filters: chain(
+                bandGain: 2,
+                free: [
+                    EQFilter(kind: .lowShelf, frequency: 120, gain: -3, q: 0.7, colorIndex: 3)
+                ]),
             preamp: -1.5
         )
         let decoded = try JSONDecoder().decode(
@@ -77,17 +79,20 @@ final class EQProfileTests: XCTestCase {
     /// enabled flag, and no slot. They have to open, or an update looks like it
     /// deleted the user's presets.
     func testAPresetFromTheBandEraStillOpens() throws {
-        let json = Data("""
-        {"name": "From 1.x", "bands": [
-            {"frequency": 32, "gain": 4, "q": 1.41},
-            {"frequency": 64, "gain": -2, "q": 1.41}
-        ]}
-        """.utf8)
+        let json = Data(
+            """
+            {"name": "From 1.x", "bands": [
+                {"frequency": 32, "gain": 4, "q": 1.41},
+                {"frequency": 64, "gain": -2, "q": 1.41}
+            ]}
+            """.utf8)
         let decoded = try JSONDecoder().decode(EQProfile.self, from: json)
 
         XCTAssertEqual(decoded.name, "From 1.x")
         XCTAssertEqual(decoded.filters.count, 2)
-        XCTAssertEqual(decoded.filters.map(\.band), [0, 1], "old bands take slots in the order they were stored")
+        XCTAssertEqual(
+            decoded.filters.map(\.band), [0, 1],
+            "old bands take slots in the order they were stored")
         XCTAssertEqual(decoded.filters.map(\.gain), [4, -2])
         XCTAssertTrue(decoded.filters.allSatisfy { $0.kind == .bell && $0.isEnabled })
     }
@@ -100,7 +105,8 @@ final class DeviceEQStateTests: XCTestCase {
         var chain = BuiltInProfiles.emptyBandChain()
         chain[4].gain = -3
 
-        let state = DeviceEQState(profileName: "Jazz", filters: chain, preamp: 2, tone: [1, -1, 0.5])
+        let state = DeviceEQState(
+            profileName: "Jazz", filters: chain, preamp: 2, tone: [1, -1, 0.5])
         let decoded = try JSONDecoder().decode(
             DeviceEQState.self, from: JSONEncoder().encode(state)
         )

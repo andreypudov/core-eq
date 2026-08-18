@@ -194,7 +194,9 @@ struct FrequencyResponseView: View {
         // of a double-click) from grabbing a handle and jittering its gain.
         DragGesture(minimumDistance: 3)
             .onChanged { value in
-                guard let handle = dragged ?? handle(near: value.startLocation, size) else { return }
+                guard let handle = dragged ?? handle(near: value.startLocation, size) else {
+                    return
+                }
                 dragged = handle
                 switch handle {
                 case .band(let slot):
@@ -205,7 +207,9 @@ struct FrequencyResponseView: View {
                     let frequency = frequency(atFraction: fraction(atX: value.location.x, size))
                     // A high or low pass has no gain to drag, so it stays on the
                     // 0 dB line and only its frequency follows the pointer.
-                    let gain = filter.kind.usesGain ? snappedGain(atY: value.location.y, size) : filter.gain
+                    let gain =
+                        filter.kind.usesGain
+                        ? snappedGain(atY: value.location.y, size) : filter.gain
                     onFilterMove?(id, frequency, gain)
                 }
             }
@@ -269,7 +273,9 @@ struct FrequencyResponseView: View {
         // candidates.
         let axis = axis(size)
         for filter in freeFilters {
-            consider(.filter(filter.id), filterNodeCenter(filter, axis, size), bias: Self.handleHitRadius / 2)
+            consider(
+                .filter(filter.id), filterNodeCenter(filter, axis, size),
+                bias: Self.handleHitRadius / 2)
         }
         for (slot, band) in bands.enumerated() {
             consider(.band(slot), bandHandleCenter(band, axis, size), bias: 0)
@@ -300,13 +306,16 @@ struct FrequencyResponseView: View {
     /// Because the bands overlap by an octave the summed curve rides above the
     /// handles, which `drawHighlightedFilterCurve` explains by drawing the
     /// highlighted filter's own response underneath it.
-    private func bandHandleCenter(_ band: EQFilter, _ axis: ResponseAxis, _ size: CGSize) -> CGPoint {
+    private func bandHandleCenter(_ band: EQFilter, _ axis: ResponseAxis, _ size: CGSize) -> CGPoint
+    {
         CGPoint(x: axis.x(band.frequency), y: yPosition(band.gain, size))
     }
 
     /// Same rule for a free filter, except that a high or low pass has no gain
     /// and so rides the 0 dB line.
-    private func filterNodeCenter(_ filter: EQFilter, _ axis: ResponseAxis, _ size: CGSize) -> CGPoint {
+    private func filterNodeCenter(
+        _ filter: EQFilter, _ axis: ResponseAxis, _ size: CGSize
+    ) -> CGPoint {
         CGPoint(
             x: axis.x(filter.frequency),
             y: yPosition(filter.kind.usesGain ? filter.gain : 0, size)
@@ -355,7 +364,9 @@ struct FrequencyResponseView: View {
             let label = Text(BandFormat.frequency(frequency))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            context.draw(label, at: CGPoint(x: axis.x(frequency), y: bottom + labelStripHeight / 2), anchor: .center)
+            context.draw(
+                label, at: CGPoint(x: axis.x(frequency), y: bottom + labelStripHeight / 2),
+                anchor: .center)
         }
         // Lighter than the frequency labels: the dB scale should never pull the
         // eye off the curve.
@@ -379,7 +390,9 @@ struct FrequencyResponseView: View {
     /// pointed at, so choosing a row in the parametric table shows what that
     /// row is doing to the sound and not only which node it owns.
     private func drawHighlightedFilterCurve(_ context: GraphicsContext, _ size: CGSize) {
-        guard let handle = activeDrag ?? activeHover ?? selectedFilterID.map(Handle.filter) else { return }
+        guard let handle = activeDrag ?? activeHover ?? selectedFilterID.map(Handle.filter) else {
+            return
+        }
         let source: EQFilter?
         switch handle {
         case .band(let slot): source = bands[safe: slot]
@@ -393,8 +406,10 @@ struct FrequencyResponseView: View {
         var response = Path()
         for step in 0..<Self.curvePointCount {
             let fraction = Double(step) / Double(Self.curvePointCount - 1)
-            let dB = biquad.magnitudeDB(at: axis.frequency(atFraction: fraction), sampleRate: sampleRate)
-            let point = CGPoint(x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
+            let dB = biquad.magnitudeDB(
+                at: axis.frequency(atFraction: fraction), sampleRate: sampleRate)
+            let point = CGPoint(
+                x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
             if step == 0 {
                 response.move(to: point)
             } else {
@@ -438,7 +453,9 @@ struct FrequencyResponseView: View {
             )
         )
 
-        context.stroke(curve, with: .color(.coreEQSignal), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+        context.stroke(
+            curve, with: .color(.coreEQSignal), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round)
+        )
     }
 
     private func drawBandMarkers(_ context: GraphicsContext, _ size: CGSize) {
@@ -448,9 +465,11 @@ struct FrequencyResponseView: View {
             // Bands the processor cannot render (at or above Nyquist for the
             // current sample rate) are shown dimmed. A band at 0 dB is not one
             // of them — it is flat, which is a value like any other.
-            let isActive = band.isEnabled && Biquad.isRealisable(
-                frequency: band.frequency, sampleRate: sampleRate
-            )
+            let isActive =
+                band.isEnabled
+                && Biquad.isRealisable(
+                    frequency: band.frequency, sampleRate: sampleRate
+                )
             let center = bandHandleCenter(band, axis, size)
             let radius: CGFloat = isHighlighted ? 5 : 4
             let dot = circle(at: center, radius: radius)
@@ -475,7 +494,8 @@ struct FrequencyResponseView: View {
         // up, which puts an undo between the user and a question they only
         // wanted answered.
         if case .band(let slot)? = activeDrag ?? activeHover, let band = bands[safe: slot] {
-            drawGainLabel(context, size, center: bandHandleCenter(band, axis, size), gain: band.gain)
+            drawGainLabel(
+                context, size, center: bandHandleCenter(band, axis, size), gain: band.gain)
         }
     }
 
@@ -498,9 +518,11 @@ struct FrequencyResponseView: View {
             // be rendered at this sample rate. Not when its gain is 0: a band
             // that was just added sits at 0 dB, and dimming it there says it is
             // inactive when it is simply flat.
-            let isActive = filter.isEnabled && Biquad.isRealisable(
-                frequency: filter.frequency, sampleRate: sampleRate
-            )
+            let isActive =
+                filter.isEnabled
+                && Biquad.isRealisable(
+                    frequency: filter.frequency, sampleRate: sampleRate
+                )
             let center = filterNodeCenter(filter, axis, size)
             // Large enough for the number inside to be read rather than
             // guessed at, which is the whole point of putting it there: the
@@ -529,9 +551,11 @@ struct FrequencyResponseView: View {
         // frequency too: unlike a rung, it can be anywhere, so the value is not
         // readable from the axis beneath it.
         if case .filter(let id)? = activeDrag ?? activeHover,
-           let filter = freeFilters.first(where: { $0.id == id }) {
+            let filter = freeFilters.first(where: { $0.id == id })
+        {
             let center = filterNodeCenter(filter, axis, size)
-            let text = filter.kind.usesGain
+            let text =
+                filter.kind.usesGain
                 ? "\(BandFormat.frequency(filter.frequency)) Hz  \(BandFormat.gain(filter.gain))"
                 : "\(BandFormat.frequency(filter.frequency)) Hz"
             drawLabel(context, size, center: center, text: text)
@@ -539,19 +563,24 @@ struct FrequencyResponseView: View {
     }
 
     private func circle(at center: CGPoint, radius: CGFloat) -> Path {
-        Path(ellipseIn: CGRect(
-            x: center.x - radius,
-            y: center.y - radius,
-            width: radius * 2,
-            height: radius * 2
-        ))
+        Path(
+            ellipseIn: CGRect(
+                x: center.x - radius,
+                y: center.y - radius,
+                width: radius * 2,
+                height: radius * 2
+            ))
     }
 
-    private func drawGainLabel(_ context: GraphicsContext, _ size: CGSize, center: CGPoint, gain: Double) {
+    private func drawGainLabel(
+        _ context: GraphicsContext, _ size: CGSize, center: CGPoint, gain: Double
+    ) {
         drawLabel(context, size, center: center, text: BandFormat.gain(gain))
     }
 
-    private func drawLabel(_ context: GraphicsContext, _ size: CGSize, center: CGPoint, text: String) {
+    private func drawLabel(
+        _ context: GraphicsContext, _ size: CGSize, center: CGPoint, text: String
+    ) {
         let label = Text(text)
             .font(.system(size: 11, weight: .medium).monospacedDigit())
             .foregroundStyle(.primary)
@@ -571,8 +600,11 @@ struct FrequencyResponseView: View {
         return (0..<Self.curvePointCount).map { index in
             let fraction = Double(index) / Double(Self.curvePointCount - 1)
             let frequency = axis.frequency(atFraction: fraction)
-            let dB = biquads.reduce(preamp) { $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate) }
-            return CGPoint(x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
+            let dB = biquads.reduce(preamp) {
+                $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate)
+            }
+            return CGPoint(
+                x: axisGutter + CGFloat(fraction) * plotWidth(size), y: yPosition(dB, size))
         }
     }
 

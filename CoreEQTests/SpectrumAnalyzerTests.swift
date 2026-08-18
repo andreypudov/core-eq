@@ -31,7 +31,9 @@ final class SpectrumAnalyzerTests: XCTestCase {
     /// Analysis only recomputes when new audio has arrived; call it twice on
     /// one buffer and the second call decays the display instead. So the audio
     /// and the frames have to advance together, exactly as they do in the app.
-    private func play(_ samples: [Float], into buffer: SpectrumAudioBuffer, analyser: SpectrumAnalyzer) {
+    private func play(
+        _ samples: [Float], into buffer: SpectrumAudioBuffer, analyser: SpectrumAnalyzer
+    ) {
         let chunk = 1_024
         for start in stride(from: 0, to: samples.count, by: chunk) {
             write(Array(samples[start..<min(start + chunk, samples.count)]), to: buffer)
@@ -90,7 +92,8 @@ final class SpectrumAnalyzerTests: XCTestCase {
         let near = level(analyzer, closestTo: 1_000)
         let far = level(analyzer, closestTo: 15_000)
         XCTAssertGreaterThan(near, 0.2, "a 1 kHz tone left the display at 1 kHz empty")
-        XCTAssertGreaterThan(near, far * 2, "the tone did not stand out from the rest of the spectrum")
+        XCTAssertGreaterThan(
+            near, far * 2, "the tone did not stand out from the rest of the spectrum")
     }
 
     /// Silence has to read as silence rather than as the last thing that

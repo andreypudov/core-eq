@@ -74,7 +74,9 @@ struct EqualizerSidebarView: View {
                 .onAppear { scroll.scrollTo(profileManager.activeProfileName, anchor: .center) }
             }
         }
-        .alert("Delete the preset “\(deletionCandidate ?? "")”?", isPresented: deletionAlertPresented) {
+        .alert(
+            "Delete the preset “\(deletionCandidate ?? "")”?", isPresented: deletionAlertPresented
+        ) {
             Button("Delete", role: .destructive) {
                 if let name = deletionCandidate { profileManager.deleteProfile(named: name) }
                 deletionCandidate = nil

@@ -139,7 +139,8 @@ final class SpectrumAnalyzer: ObservableObject {
     func start() {
         guard !isRunning, fftSetup != nil else { return }
         isRunning = true
-        let timer = Timer(timeInterval: 1.0 / Self.framesPerSecond, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0 / Self.framesPerSecond, repeats: true) {
+            [weak self] _ in
             MainActor.assumeIsolated { self?.analyze() }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -207,9 +208,12 @@ final class SpectrumAnalyzer: ObservableObject {
 
         realp.withUnsafeMutableBufferPointer { realBuffer in
             imagp.withUnsafeMutableBufferPointer { imagBuffer in
-                var split = DSPSplitComplex(realp: realBuffer.baseAddress!, imagp: imagBuffer.baseAddress!)
+                var split = DSPSplitComplex(
+                    realp: realBuffer.baseAddress!, imagp: imagBuffer.baseAddress!)
                 windowed.withUnsafeBufferPointer { input in
-                    input.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: Self.fftSize / 2) { complex in
+                    input.baseAddress!.withMemoryRebound(
+                        to: DSPComplex.self, capacity: Self.fftSize / 2
+                    ) { complex in
                         vDSP_ctoz(complex, 2, &split, 1, vDSP_Length(Self.fftSize / 2))
                     }
                 }

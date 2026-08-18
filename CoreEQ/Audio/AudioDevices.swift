@@ -19,7 +19,8 @@ enum AudioDevices {
         let symbolName: String
     }
 
-    private static let logger = Logger(subsystem: "com.andreypudov.coreeq", category: "AudioDevices")
+    private static let logger = Logger(
+        subsystem: "com.andreypudov.coreeq", category: "AudioDevices")
 
     /// UID prefix of the private aggregate device `AudioEngine` creates to render
     /// the equalized signal. Devices with this prefix are CoreEQ's own plumbing
@@ -31,7 +32,9 @@ enum AudioDevices {
     static func outputDevices() -> [Device] {
         allDeviceIDs()
             .filter { hasOutputChannels($0) && !isCoreEQAggregate($0) }
-            .compactMap { id in name(of: id).map { Device(id: id, name: $0, symbolName: symbolName(for: id)) } }
+            .compactMap { id in
+                name(of: id).map { Device(id: id, name: $0, symbolName: symbolName(for: id)) }
+            }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
@@ -86,17 +89,21 @@ enum AudioDevices {
     private static func allDeviceIDs() -> [AudioDeviceID] {
         var address = address(kAudioHardwarePropertyDevices)
         var dataSize: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize
-        ) == noErr else { return [] }
+        guard
+            AudioObjectGetPropertyDataSize(
+                AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize
+            ) == noErr
+        else { return [] }
 
         let count = Int(dataSize) / MemoryLayout<AudioDeviceID>.size
         guard count > 0 else { return [] }
 
         var ids = [AudioDeviceID](repeating: 0, count: count)
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize, &ids
-        ) == noErr else { return [] }
+        guard
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize, &ids
+            ) == noErr
+        else { return [] }
         return ids
     }
 
@@ -136,11 +143,13 @@ enum AudioDevices {
     /// ('ispk' internal speakers vs 'hdpn' headphones).
     private static func builtInSymbol(for deviceID: AudioDeviceID, name: String) -> String {
         let headphonesSource: UInt32 = 0x6864_706E  // 'hdpn'
-        var address = address(kAudioDevicePropertyDataSource, scope: kAudioObjectPropertyScopeOutput)
+        var address = address(
+            kAudioDevicePropertyDataSource, scope: kAudioObjectPropertyScopeOutput)
         var source: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
         if AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &source) == noErr,
-           source == headphonesSource {
+            source == headphonesSource
+        {
             return "headphones"
         }
         // Internal speakers: laptop glyph on MacBooks, generic speaker on
@@ -163,19 +172,25 @@ enum AudioDevices {
     }
 
     private static func hasOutputChannels(_ deviceID: AudioDeviceID) -> Bool {
-        var address = address(kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeOutput)
+        var address = address(
+            kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeOutput)
         var dataSize: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &dataSize) == noErr, dataSize > 0 else {
+        guard AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &dataSize) == noErr,
+            dataSize > 0
+        else {
             return false
         }
 
-        let bufferList = UnsafeMutableRawPointer.allocate(byteCount: Int(dataSize), alignment: MemoryLayout<AudioBufferList>.alignment)
+        let bufferList = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(dataSize), alignment: MemoryLayout<AudioBufferList>.alignment)
         defer { bufferList.deallocate() }
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &dataSize, bufferList) == noErr else {
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &dataSize, bufferList) == noErr
+        else {
             return false
         }
 
-        let buffers = UnsafeMutableAudioBufferListPointer(bufferList.assumingMemoryBound(to: AudioBufferList.self))
+        let buffers = UnsafeMutableAudioBufferListPointer(
+            bufferList.assumingMemoryBound(to: AudioBufferList.self))
         return buffers.contains { $0.mNumberChannels > 0 }
     }
 
@@ -183,10 +198,12 @@ enum AudioDevices {
         _ selector: AudioObjectPropertySelector,
         scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal
     ) -> AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
+        AudioObjectPropertyAddress(
+            mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
     }
 
-    static func systemAddress(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
+    static func systemAddress(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress
+    {
         address(selector)
     }
 }

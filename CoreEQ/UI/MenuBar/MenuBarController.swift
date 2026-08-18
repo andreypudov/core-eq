@@ -74,8 +74,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         super.init()
 
         if let button = statusItem.button {
-            let image = NSImage(named: "MenuBarIconTemplate")
-                ?? NSImage(systemSymbolName: "slider.vertical.3", accessibilityDescription: "CoreEQ")
+            let image =
+                NSImage(named: "MenuBarIconTemplate")
+                ?? NSImage(
+                    systemSymbolName: "slider.vertical.3", accessibilityDescription: "CoreEQ")
             image?.isTemplate = true
             image?.accessibilityDescription = "CoreEQ"
             button.image = image
@@ -116,7 +118,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(quickEQItem())
         menu.addItem(.separator())
 
-        let openItem = NSMenuItem(title: "Open Equalizer…", action: #selector(openWindow(_:)), keyEquivalent: "")
+        let openItem = NSMenuItem(
+            title: "Open Equalizer…", action: #selector(openWindow(_:)), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
 
@@ -142,7 +145,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit CoreEQ", action: #selector(quit(_:)), keyEquivalent: "")
+        let quitItem = NSMenuItem(
+            title: "Quit CoreEQ", action: #selector(quit(_:)), keyEquivalent: "")
         quitItem.target = self
         menu.addItem(quitItem)
     }
@@ -426,12 +430,15 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let span = log(16_000.0) - low
         let curve: [Double] = (0..<steps).map { step in
             let frequency = exp(low + span * Double(step) / Double(steps - 1))
-            return biquads.reduce(0.0) { $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate) }
+            return biquads.reduce(0.0) {
+                $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate)
+            }
         }
 
         let side = MenuListMetrics.badgeSide
         return NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
-            (selected ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.12)).setFill()
+            (selected ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.12))
+                .setFill()
             NSBezierPath(ovalIn: rect).fill()
 
             // The full slider range fills the box, so a preset that uses all of
@@ -464,26 +471,31 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// at its own standard size. The drawing handler runs at display time, so
     /// the dynamic colours resolve correctly for Light / Dark mode.
     private static func deviceIcon(_ symbolName: String, selected: Bool) -> NSImage? {
-        guard let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) else {
+        guard let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+        else {
             return nil
         }
         let side: CGFloat = 28
         let glyphInset: CGFloat = 4
         return NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
-            (selected ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.12)).setFill()
+            (selected ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.12))
+                .setFill()
             NSBezierPath(ovalIn: rect).fill()
 
             let glyphColor: NSColor = selected ? .white : .labelColor
-            let tinted = symbol.withSymbolConfiguration(
-                NSImage.SymbolConfiguration(paletteColors: [glyphColor])
-            ) ?? symbol
+            let tinted =
+                symbol.withSymbolConfiguration(
+                    NSImage.SymbolConfiguration(paletteColors: [glyphColor])
+                ) ?? symbol
 
             let box = rect.insetBy(dx: glyphInset, dy: glyphInset)
             let symbolSize = tinted.size
             guard symbolSize.width > 0, symbolSize.height > 0 else { return true }
             let scale = min(box.width / symbolSize.width, box.height / symbolSize.height)
-            let drawSize = NSSize(width: symbolSize.width * scale, height: symbolSize.height * scale)
-            let origin = NSPoint(x: rect.midX - drawSize.width / 2, y: rect.midY - drawSize.height / 2)
+            let drawSize = NSSize(
+                width: symbolSize.width * scale, height: symbolSize.height * scale)
+            let origin = NSPoint(
+                x: rect.midX - drawSize.width / 2, y: rect.midY - drawSize.height / 2)
             tinted.draw(in: NSRect(origin: origin, size: drawSize))
             return true
         }

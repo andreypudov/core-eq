@@ -22,7 +22,8 @@ final class AudioDeviceList: ObservableObject {
     deinit {
         for (selector, block) in listeners {
             var address = AudioDevices.systemAddress(selector)
-            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main, block)
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject), &address, .main, block)
         }
     }
 

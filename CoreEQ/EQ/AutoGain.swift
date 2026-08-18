@@ -62,7 +62,9 @@ enum AutoGain {
         for index in 0..<sampleCount {
             let fraction = Double(index) / Double(sampleCount - 1)
             let frequency = pow(10, logLow + (logHigh - logLow) * fraction)
-            total += biquads.reduce(0.0) { $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate) }
+            total += biquads.reduce(0.0) {
+                $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate)
+            }
         }
 
         let average = total / Double(sampleCount)

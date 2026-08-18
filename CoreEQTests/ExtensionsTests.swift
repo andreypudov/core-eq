@@ -14,7 +14,9 @@ final class ExtensionsTests: XCTestCase {
 
     func testClampingLeavesTheValueItselfUntouched() {
         let value = 0.1 + 0.2
-        XCTAssertEqual(value.clamped(to: 0...1), value, "clamping rounded a value it should have passed through")
+        XCTAssertEqual(
+            value.clamped(to: 0...1), value,
+            "clamping rounded a value it should have passed through")
     }
 
     func testSafeIndexingReturnsNilInsteadOfTrapping() {

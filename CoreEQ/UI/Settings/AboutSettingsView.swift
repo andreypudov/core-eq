@@ -49,7 +49,8 @@ struct AboutSettingsView: View {
     /// Read from the bundle rather than written here, so a release cannot ship
     /// an About that disagrees with itself.
     private var versionLine: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let version =
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         return "Version \(version ?? "—")"
     }
 

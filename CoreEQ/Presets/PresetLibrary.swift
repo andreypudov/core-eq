@@ -33,9 +33,14 @@ struct PresetLibrary: Equatable {
         self.builtIn = builtIn
 
         var seen = Set(builtIn.map(\.name))
-        self.user = stored
+        self.user =
+            stored
             .filter { seen.insert($0.name).inserted }
-            .map { EQProfile(name: $0.name, filters: FilterChain.normalized($0.filters), preamp: $0.preamp, autoGain: $0.autoGain) }
+            .map {
+                EQProfile(
+                    name: $0.name, filters: FilterChain.normalized($0.filters), preamp: $0.preamp,
+                    autoGain: $0.autoGain)
+            }
     }
 
     // MARK: - Reading
@@ -63,7 +68,8 @@ struct PresetLibrary: Equatable {
 
         func keep(_ profiles: [EQProfile]) -> [EQProfile] {
             profiles.filter {
-                $0.name.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+                $0.name.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive])
+                    != nil
             }
         }
         return (keep(user), keep(builtIn))
@@ -98,8 +104,8 @@ struct PresetLibrary: Equatable {
     mutating func rename(_ name: String, to newName: String) -> String? {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let index = user.firstIndex(where: { $0.name == name }),
-              !trimmed.isEmpty,
-              trimmed != name
+            !trimmed.isEmpty,
+            trimmed != name
         else { return nil }
 
         let unique = uniqueName(from: trimmed)

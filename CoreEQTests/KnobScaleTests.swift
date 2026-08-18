@@ -17,7 +17,10 @@ final class KnobScaleTests: XCTestCase {
             // band is created with, the values built-in presets carry, and the
             // ones the field can show.
             ("Q", q, [0.1, 0.5, 0.7, 0.99, 1.0, 1.2, 1.41, 2.95, 3.0, 5.0, 9.9]),
-            ("frequency", frequency, [20, 32, 99, 100, 125, 995, 1_000, 2_500, 9_950, 10_000, 16_000]),
+            (
+                "frequency", frequency,
+                [20, 32, 99, 100, 125, 995, 1_000, 2_500, 9_950, 10_000, 16_000]
+            ),
             ("gain", gain, [-12, -3.5, 0, 0.5, 4, 11.5]),
         ] as [(String, KnobScale, [Double])] {
             for start in starts {
@@ -70,7 +73,8 @@ final class KnobScaleTests: XCTestCase {
 
     func testStepsStopAtTheEndsOfTheRange() {
         XCTAssertEqual(q.stepped(q.range.upperBound, by: 50), q.range.upperBound)
-        XCTAssertEqual(frequency.stepped(frequency.range.lowerBound, by: -50), frequency.range.lowerBound)
+        XCTAssertEqual(
+            frequency.stepped(frequency.range.lowerBound, by: -50), frequency.range.lowerBound)
     }
 
     /// A detent is a useful size at any point on the scale: a twentieth of a Q,

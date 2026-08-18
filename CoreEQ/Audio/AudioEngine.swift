@@ -100,7 +100,8 @@ final class AudioEngine: ObservableObject {
             retryCount = 0
         } catch {
             teardownEngine()
-            let message = (error as? CoreAudioError)?.localizedDescription ?? error.localizedDescription
+            let message =
+                (error as? CoreAudioError)?.localizedDescription ?? error.localizedDescription
             logger.error("Engine start failed: \(message, privacy: .public)")
             status = .failed(message)
             if retryCount < Self.maxRetries {
@@ -153,12 +154,15 @@ final class AudioEngine: ObservableObject {
         tapDescription.isPrivate = true
 
         var newTapID = AudioObjectID(kAudioObjectUnknown)
-        try check(AudioHardwareCreateProcessTap(tapDescription, &newTapID), "creating the system audio tap (check System Audio Recording permission)")
+        try check(
+            AudioHardwareCreateProcessTap(tapDescription, &newTapID),
+            "creating the system audio tap (check System Audio Recording permission)")
         tapID = newTapID
 
         let description: [String: Any] = [
             kAudioAggregateDeviceNameKey: "CoreEQ Aggregate",
-            kAudioAggregateDeviceUIDKey: "\(AudioDevices.coreEQAggregateUIDPrefix)\(UUID().uuidString)",
+            kAudioAggregateDeviceUIDKey:
+                "\(AudioDevices.coreEQAggregateUIDPrefix)\(UUID().uuidString)",
             kAudioAggregateDeviceMainSubDeviceKey: outputUID,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,
@@ -174,7 +178,9 @@ final class AudioEngine: ObservableObject {
             ],
         ]
         var newAggregateID = AudioObjectID(kAudioObjectUnknown)
-        try check(AudioHardwareCreateAggregateDevice(description as CFDictionary, &newAggregateID), "creating the aggregate device")
+        try check(
+            AudioHardwareCreateAggregateDevice(description as CFDictionary, &newAggregateID),
+            "creating the aggregate device")
         aggregateID = newAggregateID
 
         let rate = try nominalSampleRate(of: aggregateID)
@@ -183,9 +189,11 @@ final class AudioEngine: ObservableObject {
 
         let processor = self.processor
         var newProcID: AudioDeviceIOProcID?
-        try check(AudioDeviceCreateIOProcIDWithBlock(&newProcID, aggregateID, nil) { _, input, _, output, _ in
-            processor.render(input: input, output: output)
-        }, "creating the IO proc")
+        try check(
+            AudioDeviceCreateIOProcIDWithBlock(&newProcID, aggregateID, nil) {
+                _, input, _, output, _ in
+                processor.render(input: input, output: output)
+            }, "creating the IO proc")
         ioProcID = newProcID
 
         try check(AudioDeviceStart(aggregateID, newProcID), "starting the aggregate device")
@@ -257,7 +265,8 @@ final class AudioEngine: ObservableObject {
                 self?.scheduleRestart(after: 0.5, reason: "default output device changed")
             }
         }
-        let status = AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, .main, block)
+        let status = AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject), &addr, .main, block)
         if status == noErr {
             defaultDeviceListener = block
         } else {
@@ -313,7 +322,8 @@ final class AudioEngine: ObservableObject {
         _ selector: AudioObjectPropertySelector,
         scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal
     ) -> AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
+        AudioObjectPropertyAddress(
+            mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
     }
 
     private func defaultOutputDeviceID() throws -> AudioDeviceID {
@@ -321,11 +331,14 @@ final class AudioEngine: ObservableObject {
         var deviceID = AudioDeviceID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         try check(
-            AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID),
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID),
             "reading the default output device"
         )
         guard deviceID != kAudioObjectUnknown else {
-            throw CoreAudioError(status: OSStatus(kAudioHardwareBadDeviceError), operation: "reading the default output device")
+            throw CoreAudioError(
+                status: OSStatus(kAudioHardwareBadDeviceError),
+                operation: "reading the default output device")
         }
         return deviceID
     }
@@ -334,7 +347,9 @@ final class AudioEngine: ObservableObject {
         var addr = propertyAddress(kAudioDevicePropertyDeviceUID)
         var uid: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        try check(AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &uid), "reading the device UID")
+        try check(
+            AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &uid),
+            "reading the device UID")
         return uid?.takeRetainedValue() as String? ?? ""
     }
 
@@ -342,7 +357,9 @@ final class AudioEngine: ObservableObject {
         var addr = propertyAddress(kAudioObjectPropertyName)
         var name: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        try check(AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &name), "reading the device name")
+        try check(
+            AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &name),
+            "reading the device name")
         return name?.takeRetainedValue() as String? ?? ""
     }
 
@@ -350,7 +367,9 @@ final class AudioEngine: ObservableObject {
         var addr = propertyAddress(kAudioDevicePropertyNominalSampleRate)
         var rate = Float64(0)
         var size = UInt32(MemoryLayout<Float64>.size)
-        try check(AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &rate), "reading the sample rate")
+        try check(
+            AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &rate),
+            "reading the sample rate")
         return rate
     }
 

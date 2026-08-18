@@ -12,8 +12,8 @@ final class ThemeTests: XCTestCase {
     /// The width the editor block actually has when the window is at its
     /// smallest, derived the way the window derives it.
     private var editorBlockWidth: CGFloat {
-        let windowMinimum: CGFloat = 960          // AppDelegate.contentMinSize
-        let sidebar: CGFloat = 216                // NSSplitViewItem.minimumThickness
+        let windowMinimum: CGFloat = 960  // AppDelegate.contentMinSize
+        let sidebar: CGFloat = 216  // NSSplitViewItem.minimumThickness
         let content = windowMinimum - sidebar - Theme.Spacing.window * 2
         let editor = content - Theme.globalGainWidth - Theme.Spacing.inner
         return editor - Theme.blockPadding * 2
@@ -30,7 +30,7 @@ final class ThemeTests: XCTestCase {
             Theme.FilterRow.Column.actions,
         ]
         let gaps = Theme.FilterRow.columnSpacing * CGFloat(columns.count - 1)
-        let rowPadding: CGFloat = 8 * 2           // FilterRowView's horizontal inset
+        let rowPadding: CGFloat = 8 * 2  // FilterRowView's horizontal inset
         let needed = columns.reduce(0, +) + gaps + rowPadding
 
         XCTAssertLessThanOrEqual(
@@ -52,7 +52,8 @@ final class ThemeTests: XCTestCase {
         let widest = String(repeating: "0", count: String(BuiltInProfiles.maxFreeFilters).count)
         let text = (widest as NSString).size(withAttributes: [.font: font]).width
 
-        let available = Theme.FilterRow.Column.index
+        let available =
+            Theme.FilterRow.Column.index
             - Theme.FilterRow.Column.indexSwatch
             - Theme.FilterRow.Column.indexGap
 
@@ -66,7 +67,8 @@ final class ThemeTests: XCTestCase {
     /// decide how many fit. A zero or negative pitch would divide by zero.
     func testARowHasAPositivePitch() {
         XCTAssertGreaterThan(Theme.FilterRow.height, 0)
-        XCTAssertGreaterThan(Theme.FilterRow.height + Theme.FilterRow.separator, Theme.FilterRow.height)
+        XCTAssertGreaterThan(
+            Theme.FilterRow.height + Theme.FilterRow.separator, Theme.FilterRow.height)
         XCTAssertGreaterThan(Theme.FilterRow.knobDiameter, 0)
         XCTAssertLessThan(
             Theme.FilterRow.knobDiameter, Theme.FilterRow.height,
@@ -117,18 +119,24 @@ final class ThemeTests: XCTestCase {
 
         // 3:1 is what WCAG asks of a graphical object, and the curve is a 1.5 pt
         // line: the one element in the window that has to be followed by eye.
-        let onDark = contrast(dark, try resolve(Color(nsColor: .windowBackgroundColor), in: .darkAqua))
-        let onLight = contrast(light, try resolve(Color(nsColor: .windowBackgroundColor), in: .aqua))
-        XCTAssertGreaterThan(onDark, 3.0, "the curve is hard to see on the dark window (\(onDark):1)")
-        XCTAssertGreaterThan(onLight, 3.0, "the curve is hard to see on the light window (\(onLight):1)")
+        let onDark = contrast(
+            dark, try resolve(Color(nsColor: .windowBackgroundColor), in: .darkAqua))
+        let onLight = contrast(
+            light, try resolve(Color(nsColor: .windowBackgroundColor), in: .aqua))
+        XCTAssertGreaterThan(
+            onDark, 3.0, "the curve is hard to see on the dark window (\(onDark):1)")
+        XCTAssertGreaterThan(
+            onLight, 3.0, "the curve is hard to see on the light window (\(onLight):1)")
     }
 
     /// The whole point of the change: data and controls must never be the same
     /// colour, whatever accent the user has chosen.
     func testTheSignalColourIsNotAnAccentColour() throws {
         let signal = try resolve(Theme.signal, in: .darkAqua)
-        for accent in [NSColor.systemGreen, .systemBlue, .systemPurple, .systemPink,
-                       .systemRed, .systemOrange, .systemYellow, .systemGray] {
+        for accent in [
+            NSColor.systemGreen, .systemBlue, .systemPurple, .systemPink,
+            .systemRed, .systemOrange, .systemYellow, .systemGray,
+        ] {
             let resolved = try resolve(Color(nsColor: accent), in: .darkAqua)
             XCTAssertGreaterThan(
                 distance(signal, resolved), 0.12,

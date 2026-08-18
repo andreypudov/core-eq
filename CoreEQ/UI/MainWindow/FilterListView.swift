@@ -64,7 +64,8 @@ struct FilterListView: View {
     /// full length if it is the wider of the two: the columns are sized for the
     /// controls in them, and "Actions" over a 24-point button would otherwise
     /// arrive as "Ac…".
-    private func title(_ text: String, width: CGFloat, alignment: Alignment = .center) -> some View {
+    private func title(_ text: String, width: CGFloat, alignment: Alignment = .center) -> some View
+    {
         Text(text)
             // The size the Preamp readout and the band captions use, so the
             // window has one voice for the small print rather than a different
@@ -128,51 +129,53 @@ struct FilterListView: View {
             // mouse plugged in, that is fifteen points of drift between every
             // title and the column under it.
             GeometryReader { geometry in
-              ScrollViewReader { proxy in
-                ScrollView(.vertical) {
-                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        Section {
-                            ForEach(Array(profileManager.freeFilters.enumerated()), id: \.element.id) { index, filter in
-                                FilterRowView(
-                                    index: index + 1,
-                                    filter: filter,
-                                    isSelected: selectedFilterID == filter.id,
-                                    isEnabled: isEnabled,
-                                    profileManager: profileManager
-                                )
-                                .onTapGesture { selectedFilterID = filter.id }
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical) {
+                        LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                            Section {
+                                ForEach(
+                                    Array(profileManager.freeFilters.enumerated()), id: \.element.id
+                                ) { index, filter in
+                                    FilterRowView(
+                                        index: index + 1,
+                                        filter: filter,
+                                        isSelected: selectedFilterID == filter.id,
+                                        isEnabled: isEnabled,
+                                        profileManager: profileManager
+                                    )
+                                    .onTapGesture { selectedFilterID = filter.id }
 
-                                if filter.id != profileManager.freeFilters.last?.id {
-                                    Rectangle()
-                                        .fill(Theme.blockBorder)
-                                        .frame(height: Theme.FilterRow.separator)
-                                        .padding(.leading, 8)
+                                    if filter.id != profileManager.freeFilters.last?.id {
+                                        Rectangle()
+                                            .fill(Theme.blockBorder)
+                                            .frame(height: Theme.FilterRow.separator)
+                                            .padding(.leading, 8)
+                                    }
                                 }
+                            } header: {
+                                // The window's own material, so rows pass behind the
+                                // titles instead of through them, and the strip still
+                                // reads as part of the one canvas.
+                                columnTitles.background(WindowBackground())
                             }
-                        } header: {
-                            // The window's own material, so rows pass behind the
-                            // titles instead of through them, and the strip still
-                            // reads as part of the one canvas.
-                            columnTitles.background(WindowBackground())
+                        }
+                    }
+                    // A whole number of rows, never a sliced one. The leftover is
+                    // at most a row's height and sits below the table as padding,
+                    // where it reads as space rather than as a band cut in half.
+                    .frame(height: visibleHeight(in: geometry.size.height))
+                    .scrollBounceBehavior(.basedOnSize)
+                    // Only a few rows are visible at a time, so a band chosen by
+                    // clicking its node on the graph is often one the table isn't
+                    // showing. Bringing it into view is what makes the two halves
+                    // of the selection one thing rather than two.
+                    .onChange(of: selectedFilterID) { _, id in
+                        guard let id else { return }
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(id, anchor: .center)
                         }
                     }
                 }
-                // A whole number of rows, never a sliced one. The leftover is
-                // at most a row's height and sits below the table as padding,
-                // where it reads as space rather than as a band cut in half.
-                .frame(height: visibleHeight(in: geometry.size.height))
-                .scrollBounceBehavior(.basedOnSize)
-                // Only a few rows are visible at a time, so a band chosen by
-                // clicking its node on the graph is often one the table isn't
-                // showing. Bringing it into view is what makes the two halves
-                // of the selection one thing rather than two.
-                .onChange(of: selectedFilterID) { _, id in
-                    guard let id else { return }
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        proxy.scrollTo(id, anchor: .center)
-                    }
-                }
-              }
             }
         }
     }
@@ -187,7 +190,8 @@ struct FilterListView: View {
         let pitch = Theme.FilterRow.height + Theme.FilterRow.separator
         let forRows = available - Theme.FilterRow.headerHeight
         let rows = max(1, ((forRows + Theme.FilterRow.separator) / pitch).rounded(.down))
-        return min(rows * pitch - Theme.FilterRow.separator + Theme.FilterRow.headerHeight, available)
+        return min(
+            rows * pitch - Theme.FilterRow.separator + Theme.FilterRow.headerHeight, available)
     }
 
     /// Says what a band is for and how to make one, and stops.
@@ -201,10 +205,12 @@ struct FilterListView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
 
-            Text("A band boosts or cuts one frequency, on top of the Graphic sliders. Add one below, or double-click the graph where you want it.")
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "A band boosts or cuts one frequency, on top of the Graphic sliders. Add one below, or double-click the graph where you want it."
+            )
+            .font(.system(size: 12))
+            .foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
@@ -232,4 +238,3 @@ struct FilterListView: View {
 /// while listening — dragged, scrolled, nudged until it sounds right — and the
 /// number is how a value already known is entered. The graph is the third way
 /// in, and all three write to the same filter.
-

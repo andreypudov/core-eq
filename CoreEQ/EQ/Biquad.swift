@@ -55,7 +55,9 @@ struct Biquad: Equatable {
     /// it cannot render. High and low pass have no gain parameter, so for them
     /// only the frequency matters: a 0 dB high pass is still very much doing
     /// something.
-    static func isActive(kind: EQFilter.Kind, frequency: Double, gain: Double, sampleRate: Double) -> Bool {
+    static func isActive(
+        kind: EQFilter.Kind, frequency: Double, gain: Double, sampleRate: Double
+    ) -> Bool {
         guard isRealisable(frequency: frequency, sampleRate: sampleRate) else { return false }
         return kind.usesGain ? abs(gain) > negligibleGainDB : true
     }
@@ -63,7 +65,8 @@ struct Biquad: Equatable {
     /// Coefficients for a filter, or `identity` when it is inaudible or sits too
     /// close to Nyquist to be realised.
     init(kind: EQFilter.Kind, frequency: Double, gain: Double, q: Double, sampleRate: Double) {
-        guard Self.isActive(kind: kind, frequency: frequency, gain: gain, sampleRate: sampleRate) else {
+        guard Self.isActive(kind: kind, frequency: frequency, gain: gain, sampleRate: sampleRate)
+        else {
             self = .identity
             return
         }
@@ -128,8 +131,10 @@ struct Biquad: Equatable {
     /// Magnitude of H(e^jω) in dB at `frequency`, for drawing the response.
     func magnitudeDB(at frequency: Double, sampleRate: Double) -> Double {
         let w = 2.0 * Double.pi * frequency / sampleRate
-        let cosw = cos(w), sinw = sin(w)
-        let cos2w = cos(2 * w), sin2w = sin(2 * w)
+        let cosw = cos(w)
+        let sinw = sin(w)
+        let cos2w = cos(2 * w)
+        let sin2w = sin(2 * w)
 
         let numeratorReal = b0 + b1 * cosw + b2 * cos2w
         let numeratorImag = -(b1 * sinw + b2 * sin2w)

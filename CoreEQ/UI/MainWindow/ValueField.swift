@@ -32,12 +32,12 @@ struct ValueField: View {
     var body: some View {
         HStack(spacing: 3) {
             TextField("", value: $value, format: format)
-            .textFieldStyle(.plain)
-            .multilineTextAlignment(.trailing)
-            .font(.system(size: 11).monospacedDigit())
-            .focused($isFocused)
-            .disabled(!isEnabled)
-            .accessibilityLabel(accessibilityLabel)
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.trailing)
+                .font(.system(size: 11).monospacedDigit())
+                .focused($isFocused)
+                .disabled(!isEnabled)
+                .accessibilityLabel(accessibilityLabel)
 
             if let unit {
                 Text(unit)

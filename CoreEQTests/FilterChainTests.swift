@@ -13,7 +13,9 @@ final class FilterChainTests: XCTestCase {
         ])
 
         XCTAssertEqual(chain.count, BuiltInProfiles.bandCount + 1)
-        XCTAssertEqual(chain.prefix(BuiltInProfiles.bandCount).map(\.band), Array(0..<BuiltInProfiles.bandCount))
+        XCTAssertEqual(
+            chain.prefix(BuiltInProfiles.bandCount).map(\.band),
+            Array(0..<BuiltInProfiles.bandCount))
         XCTAssertEqual(chain[4].gain, 5, "a band keeps its gain wherever it was stored")
         XCTAssertEqual(chain.last?.frequency, 2_800)
         XCTAssertNil(chain.last?.band)

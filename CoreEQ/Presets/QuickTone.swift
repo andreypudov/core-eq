@@ -13,9 +13,15 @@ enum QuickTone {
 
     // Weight per band, aligned with `BuiltInProfiles.frequencies`
     // (32, 64, 125, 250, 500, 1k, 2k, 4k, 8k, 16k, 20k).
-    static let bassWeights:   [Double] = [1.00, 1.00, 0.80, 0.45, 0.15, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00]
-    static let midWeights:    [Double] = [0.00, 0.00, 0.20, 0.55, 0.90, 1.00, 0.90, 0.45, 0.10, 0.00, 0.00]
-    static let trebleWeights: [Double] = [0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.20, 0.55, 0.85, 1.00, 1.00]
+    static let bassWeights: [Double] = [
+        1.00, 1.00, 0.80, 0.45, 0.15, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00,
+    ]
+    static let midWeights: [Double] = [
+        0.00, 0.00, 0.20, 0.55, 0.90, 1.00, 0.90, 0.45, 0.10, 0.00, 0.00,
+    ]
+    static let trebleWeights: [Double] = [
+        0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.20, 0.55, 0.85, 1.00, 1.00,
+    ]
 
     /// Per-band gain offset produced by the three control values.
     static func offsets(bass: Double, mid: Double, treble: Double) -> [Double] {

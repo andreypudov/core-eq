@@ -1,6 +1,5 @@
 import SwiftUI
 
-
 /// The eight colours a band can wear, in a popover off its swatch.
 ///
 /// A grid of swatches rather than the system colour well: the choice is

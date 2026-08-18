@@ -77,7 +77,7 @@ final class EQProcessorTests: XCTestCase {
         channels: Int = 1,
         passes: Int = 12
     ) -> [Float] {
-        var output = [Float]()
+        var output: [Float] = []
         for _ in 0..<passes { output = render(processor, input, channels: channels) }
         return output
     }
@@ -130,7 +130,8 @@ final class EQProcessorTests: XCTestCase {
         let output = renderSettled(processor, input)
 
         let gain = 20 * log10(rms(output) / rms(input))
-        XCTAssertEqual(gain, 6, accuracy: 0.5, "a +6 dB bell should lift its own frequency by ~6 dB")
+        XCTAssertEqual(
+            gain, 6, accuracy: 0.5, "a +6 dB bell should lift its own frequency by ~6 dB")
     }
 
     func testACutLowersTheLevelAtItsOwnFrequency() {
@@ -195,7 +196,8 @@ final class EQProcessorTests: XCTestCase {
             let output = renderSettled(processor, input)
             let measured = 20 * log10(rms(output) / rms(input))
             let drawn = chain.reduce(0.0) {
-                $0 + Biquad(filter: $1, sampleRate: sampleRate)
+                $0
+                    + Biquad(filter: $1, sampleRate: sampleRate)
                     .magnitudeDB(at: frequency, sampleRate: sampleRate)
             }
             XCTAssertEqual(
@@ -264,7 +266,7 @@ final class EQProcessorTests: XCTestCase {
             filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 6, q: 1)]
         )
         let mono = sine(1_000, frames: 1_024)
-        var interleaved = [Float]()
+        var interleaved: [Float] = []
         for sample in mono {
             interleaved.append(sample)
             interleaved.append(0)

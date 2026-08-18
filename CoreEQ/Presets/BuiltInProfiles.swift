@@ -1,3 +1,10 @@
+// swift-format-ignore-file
+//
+// The preset table below is aligned by hand so the eleven gains line up in
+// columns: that is how one preset is compared with another by eye, and it is
+// the reason this file reads as a table rather than a list of calls. The
+// formatter collapses that alignment, so this one file opts out.
+
 import Foundation
 
 /// The predefined profiles shipped with CoreEQ — the classic Apple/Spotify

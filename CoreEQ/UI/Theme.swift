@@ -23,12 +23,13 @@ enum Theme {
     /// window's own background, `#E8A33D` scores 7.2:1 on the dark appearance and
     /// 2.0:1 on the light one. `ThemeTests` holds both above the 3:1 that
     /// graphical objects need.
-    static let signal = Color(nsColor: NSColor(name: "CoreEQSignal") { appearance in
-        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return isDark
-            ? NSColor(srgbRed: 0.910, green: 0.639, blue: 0.239, alpha: 1)  // #E8A33D
-            : NSColor(srgbRed: 0.588, green: 0.365, blue: 0.071, alpha: 1)  // #965D12
-    })
+    static let signal = Color(
+        nsColor: NSColor(name: "CoreEQSignal") { appearance in
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return isDark
+                ? NSColor(srgbRed: 0.910, green: 0.639, blue: 0.239, alpha: 1)  // #E8A33D
+                : NSColor(srgbRed: 0.588, green: 0.365, blue: 0.071, alpha: 1)  // #965D12
+        })
 
     /// Border shared by every block and by the plot, so the plot reads as one of
     /// them rather than as a panel with different rules.
@@ -166,7 +167,6 @@ enum Theme {
         static let trackWidth: CGFloat = 2
     }
 }
-
 
 extension View {
     /// A block in the content column: a border, and the window's own surface

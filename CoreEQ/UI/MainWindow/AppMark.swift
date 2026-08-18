@@ -31,8 +31,10 @@ struct AppMark: View {
         GeometryReader { geometry in
             let side = min(geometry.size.width, geometry.size.height)
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: side * Self.backgroundCornerRadius, style: .continuous)
-                    .fill(Self.background)
+                RoundedRectangle(
+                    cornerRadius: side * Self.backgroundCornerRadius, style: .continuous
+                )
+                .fill(Self.background)
 
                 ForEach(Array(Self.bars.enumerated()), id: \.offset) { _, bar in
                     RoundedRectangle(cornerRadius: side * Self.barCornerRadius, style: .continuous)

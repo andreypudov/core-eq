@@ -16,7 +16,8 @@ final class AutoGainTests: XCTestCase {
     /// The sign is the whole point: boosting has to pull the trim down.
     func testBoostTrimsDownAndCutTrimsUp() {
         XCTAssertLessThan(AutoGain.trim(for: chain([6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6])), -3)
-        XCTAssertGreaterThan(AutoGain.trim(for: chain([-6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6])), 3)
+        XCTAssertGreaterThan(
+            AutoGain.trim(for: chain([-6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6])), 3)
     }
 
     /// A chain lifted by the same amount everywhere is the one case with an
@@ -32,7 +33,9 @@ final class AutoGainTests: XCTestCase {
     /// What the correction is for: the chain plus its trim should average out to
     /// where it started.
     func testTheCorrectedChainAveragesBackToZero() {
-        for gains in [[6.0], [0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0], [3, 3, 3, -2, -2, 0, 4, 4, 1, 1, 1]] {
+        for gains in [
+            [6.0], [0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0], [3, 3, 3, -2, -2, 0, 4, 4, 1, 1, 1],
+        ] {
             let filters = chain(gains)
             let trim = AutoGain.trim(for: filters)
             let corrected = average(of: filters) + trim
@@ -45,8 +48,10 @@ final class AutoGainTests: XCTestCase {
     /// Booster does not come back quiet.
     func testANarrowLiftIsCorrectedLessThanABroadOne() {
         let narrow = AutoGain.trim(for: chain([0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0]))
-        let broad = AutoGain.trim(for: chain(Array(repeating: 10, count: BuiltInProfiles.bandCount)))
-        XCTAssertGreaterThan(narrow, broad + 4, "a single band was corrected almost as hard as eleven")
+        let broad = AutoGain.trim(
+            for: chain(Array(repeating: 10, count: BuiltInProfiles.bandCount)))
+        XCTAssertGreaterThan(
+            narrow, broad + 4, "a single band was corrected almost as hard as eleven")
         XCTAssertGreaterThan(narrow, -4)
     }
 
@@ -80,7 +85,8 @@ final class AutoGainTests: XCTestCase {
     private func average(of filters: [EQFilter]) -> Double {
         let rate = AutoGain.referenceSampleRate
         let biquads = filters.map { Biquad(filter: $0, sampleRate: rate) }
-        let low = log10(20.0), high = log10(20_000.0)
+        let low = log10(20.0)
+        let high = log10(20_000.0)
         let count = 96
         var total = 0.0
         for index in 0..<count {

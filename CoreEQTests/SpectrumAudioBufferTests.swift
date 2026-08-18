@@ -27,11 +27,12 @@ final class SpectrumAudioBufferTests: XCTestCase {
 
     func testSnapshotReadsAcrossTheWrapPoint() {
         let buffer = SpectrumAudioBuffer(capacity: 4)
-        write([1, 2, 3, 4, 5, 6], to: buffer)   // wraps twice past the start
+        write([1, 2, 3, 4, 5, 6], to: buffer)  // wraps twice past the start
 
         var destination = [Float](repeating: 0, count: 4)
         XCTAssertEqual(buffer.snapshot(into: &destination), 6)
-        XCTAssertEqual(destination, [3, 4, 5, 6], "the snapshot must be the newest window, in order")
+        XCTAssertEqual(
+            destination, [3, 4, 5, 6], "the snapshot must be the newest window, in order")
     }
 
     func testWritingExactlyCapacityLeavesTheBufferOrdered() {
@@ -59,7 +60,9 @@ final class SpectrumAudioBufferTests: XCTestCase {
         write([4, 5], to: buffer)
 
         var destination = [Float](repeating: 0, count: 5)
-        XCTAssertEqual(buffer.snapshot(into: &destination), 5, "the running count is how the analyzer detects silence")
+        XCTAssertEqual(
+            buffer.snapshot(into: &destination), 5,
+            "the running count is how the analyzer detects silence")
     }
 
     func testSnapshotLargerThanCapacityIsClamped() {
@@ -76,7 +79,9 @@ final class SpectrumAudioBufferTests: XCTestCase {
         let buffer = SpectrumAudioBuffer(capacity: 4)
         var empty: [Float] = []
         empty.withUnsafeBufferPointer { pointer in
-            buffer.write(interleaved: pointer.baseAddress ?? UnsafePointer(bitPattern: 0x1000)!, frames: 0, channels: 2)
+            buffer.write(
+                interleaved: pointer.baseAddress ?? UnsafePointer(bitPattern: 0x1000)!, frames: 0,
+                channels: 2)
         }
 
         var destination = [Float](repeating: 0, count: 2)

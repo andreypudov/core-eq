@@ -61,7 +61,9 @@ final class BiquadTests: XCTestCase {
     func testChainMagnitudesAddInDecibels() {
         let filters = [bell(125, 3), bell(180, 2, q: 0.8), bell(4_000, -4, q: 2)]
         for probe in [60.0, 125.0, 180.0, 1_000.0, 4_000.0, 12_000.0] {
-            let summed = filters.reduce(0.0) { $0 + $1.magnitudeDB(at: probe, sampleRate: sampleRate) }
+            let summed = filters.reduce(0.0) {
+                $0 + $1.magnitudeDB(at: probe, sampleRate: sampleRate)
+            }
             let product = filters.reduce(1.0) {
                 $0 * pow(10.0, $1.magnitudeDB(at: probe, sampleRate: sampleRate) / 20.0)
             }
@@ -77,7 +79,8 @@ final class BiquadTests: XCTestCase {
         XCTAssertEqual(low.magnitudeDB(at: 20, sampleRate: sampleRate), 6, accuracy: 0.3)
         XCTAssertEqual(low.magnitudeDB(at: 10_000, sampleRate: sampleRate), 0, accuracy: 0.2)
 
-        let high = Biquad(kind: .highShelf, frequency: 4_000, gain: -6, q: 0.7, sampleRate: sampleRate)
+        let high = Biquad(
+            kind: .highShelf, frequency: 4_000, gain: -6, q: 0.7, sampleRate: sampleRate)
         XCTAssertEqual(high.magnitudeDB(at: 4_000, sampleRate: sampleRate), -3, accuracy: 0.2)
         XCTAssertEqual(high.magnitudeDB(at: 18_000, sampleRate: sampleRate), -6, accuracy: 0.5)
         XCTAssertEqual(high.magnitudeDB(at: 100, sampleRate: sampleRate), 0, accuracy: 0.2)
@@ -86,12 +89,14 @@ final class BiquadTests: XCTestCase {
     // MARK: - Pass filters
 
     func testPassFiltersAreMinusThreeAtTheCornerAndCutBeyond() {
-        let highPass = Biquad(kind: .highPass, frequency: 100, gain: 0, q: 0.707, sampleRate: sampleRate)
+        let highPass = Biquad(
+            kind: .highPass, frequency: 100, gain: 0, q: 0.707, sampleRate: sampleRate)
         XCTAssertEqual(highPass.magnitudeDB(at: 100, sampleRate: sampleRate), -3, accuracy: 0.15)
         XCTAssertLessThan(highPass.magnitudeDB(at: 25, sampleRate: sampleRate), -20)
         XCTAssertEqual(highPass.magnitudeDB(at: 5_000, sampleRate: sampleRate), 0, accuracy: 0.1)
 
-        let lowPass = Biquad(kind: .lowPass, frequency: 5_000, gain: 0, q: 0.707, sampleRate: sampleRate)
+        let lowPass = Biquad(
+            kind: .lowPass, frequency: 5_000, gain: 0, q: 0.707, sampleRate: sampleRate)
         XCTAssertEqual(lowPass.magnitudeDB(at: 5_000, sampleRate: sampleRate), -3, accuracy: 0.15)
         XCTAssertLessThan(lowPass.magnitudeDB(at: 20_000, sampleRate: sampleRate), -20)
         XCTAssertEqual(lowPass.magnitudeDB(at: 100, sampleRate: sampleRate), 0, accuracy: 0.1)
@@ -101,9 +106,12 @@ final class BiquadTests: XCTestCase {
     /// makes an untouched band free must not apply to it — a 0 dB high pass is
     /// still very much doing something.
     func testPassFiltersIgnoreGainWhenDecidingIfTheyAreActive() {
-        XCTAssertTrue(Biquad.isActive(kind: .highPass, frequency: 100, gain: 0, sampleRate: sampleRate))
-        XCTAssertTrue(Biquad.isActive(kind: .lowPass, frequency: 5_000, gain: 0, sampleRate: sampleRate))
-        XCTAssertFalse(Biquad.isActive(kind: .bell, frequency: 1_000, gain: 0, sampleRate: sampleRate))
+        XCTAssertTrue(
+            Biquad.isActive(kind: .highPass, frequency: 100, gain: 0, sampleRate: sampleRate))
+        XCTAssertTrue(
+            Biquad.isActive(kind: .lowPass, frequency: 5_000, gain: 0, sampleRate: sampleRate))
+        XCTAssertFalse(
+            Biquad.isActive(kind: .bell, frequency: 1_000, gain: 0, sampleRate: sampleRate))
 
         XCTAssertNotEqual(
             Biquad(kind: .highPass, frequency: 100, gain: 0, q: 0.707, sampleRate: sampleRate),
@@ -117,7 +125,8 @@ final class BiquadTests: XCTestCase {
     /// flat.
     func testFlatBandIsRealisableEvenThoughItIsNotActive() {
         XCTAssertTrue(Biquad.isRealisable(frequency: 1_000, sampleRate: sampleRate))
-        XCTAssertFalse(Biquad.isActive(kind: .bell, frequency: 1_000, gain: 0, sampleRate: sampleRate))
+        XCTAssertFalse(
+            Biquad.isActive(kind: .bell, frequency: 1_000, gain: 0, sampleRate: sampleRate))
     }
 
     func testFrequenciesOutsideTheRenderableRangeAreNotRealisable() {
@@ -164,7 +173,8 @@ final class BiquadTests: XCTestCase {
         XCTAssertEqual(Biquad.identity.b2, 0)
         XCTAssertEqual(Biquad.identity.a1, 0)
         XCTAssertEqual(Biquad.identity.a2, 0)
-        XCTAssertEqual(Biquad.identity.magnitudeDB(at: 1_000, sampleRate: sampleRate), 0, accuracy: 1e-12)
+        XCTAssertEqual(
+            Biquad.identity.magnitudeDB(at: 1_000, sampleRate: sampleRate), 0, accuracy: 1e-12)
     }
 
     func testDegenerateQIsClampedRatherThanExploding() {

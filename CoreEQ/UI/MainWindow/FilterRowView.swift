@@ -1,6 +1,5 @@
 import SwiftUI
 
-
 struct FilterRowView: View {
     let index: Int
     let filter: EQFilter

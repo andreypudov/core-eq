@@ -44,7 +44,10 @@ struct KnobControl: View {
                 .rotationEffect(.degrees(Double(Self.startAngle)))
 
             Circle()
-                .trim(from: arcBounds(for: fraction).lowerBound, to: arcBounds(for: fraction).upperBound)
+                .trim(
+                    from: arcBounds(for: fraction).lowerBound,
+                    to: arcBounds(for: fraction).upperBound
+                )
                 .stroke(tint.opacity(isEnabled ? 1.0 : 0.35), style: strokeStyle)
                 .rotationEffect(.degrees(Double(Self.startAngle)))
 

@@ -40,7 +40,9 @@ struct GeneralSettingsView: View {
                     HStack(spacing: 8) {
                         Label(permission.title, systemImage: permission.symbol)
                             .labelStyle(.titleAndIcon)
-                            .foregroundStyle(permission.isGranted ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                            .foregroundStyle(
+                                permission.isGranted
+                                    ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
 
                         if !permission.isGranted {
                             Button("Open System Settings…") { openPrivacySettings() }
@@ -54,7 +56,9 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
             // Coming back from System Settings is the likeliest way for either of
             // these to have changed underneath us.
             opensAtLogin = LoginItem.isEnabled
@@ -95,12 +99,15 @@ struct GeneralSettingsView: View {
         var explanation: String {
             switch self {
             case .granted:
-                return "CoreEQ processes the sound you hear. Nothing is recorded, stored, or transmitted."
+                return
+                    "CoreEQ processes the sound you hear. Nothing is recorded, stored, or transmitted."
             case .refused:
-                return "Without it CoreEQ cannot process system audio. Grant it under Privacy & Security → "
+                return
+                    "Without it CoreEQ cannot process system audio. Grant it under Privacy & Security → "
                     + "Screen & System Audio Recording, then quit and reopen CoreEQ."
             case .notRunning:
-                return "The equalizer is not processing at the moment, so there is nothing to report yet."
+                return
+                    "The equalizer is not processing at the moment, so there is nothing to report yet."
             }
         }
     }
@@ -114,9 +121,12 @@ struct GeneralSettingsView: View {
     }
 
     private func openPrivacySettings() {
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-        ) else { return }
+        guard
+            let url = URL(
+                string:
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            )
+        else { return }
         NSWorkspace.shared.open(url)
     }
 

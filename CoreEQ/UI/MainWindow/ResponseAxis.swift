@@ -29,7 +29,8 @@ struct ResponseAxis: Equatable {
             return center(0) + slot * log(frequency / anchors[0]) / log(anchors[1] / anchors[0])
         }
         if frequency >= anchors[n - 1] {
-            return center(n - 1) + slot * log(frequency / anchors[n - 1]) / log(anchors[n - 1] / anchors[n - 2])
+            return center(n - 1) + slot * log(frequency / anchors[n - 1])
+                / log(anchors[n - 1] / anchors[n - 2])
         }
         for i in 0..<(n - 1) where frequency <= anchors[i + 1] {
             return center(i) + slot * log(frequency / anchors[i]) / log(anchors[i + 1] / anchors[i])

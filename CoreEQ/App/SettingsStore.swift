@@ -112,7 +112,8 @@ final class SettingsStore {
     var deviceStates: [String: DeviceEQState] {
         get {
             if let cachedDeviceStates { return cachedDeviceStates }
-            let stored = defaults.data(forKey: Key.deviceStates)
+            let stored =
+                defaults.data(forKey: Key.deviceStates)
                 .flatMap { try? JSONDecoder().decode([String: DeviceEQState].self, from: $0) }
                 ?? [:]
             cachedDeviceStates = stored

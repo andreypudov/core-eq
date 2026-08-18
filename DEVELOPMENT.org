@@ -90,6 +90,8 @@ toolchain if =xcode-select= points at the Command Line Tools):
 
 | =make build=   | Release build into =build/Release/CoreEQ.app=          |
 | =make test=    | Run the =CoreEQTests= unit suite                       |
+| =make format=  | Apply the house style to every Swift file              |
+| =make lint=    | Report style violations without changing anything      |
 | =make install= | Build and install to =/Applications=                   |
 | =make release= | Build and zip to =dist/CoreEQ-<version>.zip= (=ditto=) |
 | =make clean=   | Remove =build/= and =dist/=                            |
@@ -177,6 +179,48 @@ xcrun stapler staple build/Release/CoreEQ.app
 The app is currently *unsandboxed*. App Store distribution would require
 enabling the sandbox and revisiting the audio entitlements; direct
 (Developer ID) distribution does not.
+
+* Formatting
+
+*swift-format*, Apple's own, which ships inside the Xcode toolchain: =xcrun
+swift-format=, no Homebrew, no package dependency, nothing for CI to install.
+It is also the formatter behind Xcode's own Editor ▸ Structure ▸ Format
+commands, so the editor and the command line agree by construction.
+
+It is not the same tool as *SwiftFormat* (Nick Lockwood's), which is
+third-party and configured completely differently. Installing "swiftformat" from
+Homebrew gets the other one.
+
+=.swift-format= at the repository root holds the configuration; Xcode discovers
+it automatically by walking up from the file being edited. It is not the tool's
+defaults: four-space indentation and a hundred-column limit are the codebase's
+existing conventions, measured before being written down — the defaults are two
+spaces, which would have rewritten every line in the project for no reason.
+
+=make lint= runs with =--strict=, so any finding is a non-zero exit and CI fails
+on it.
+
+*One file opts out.* =BuiltInProfiles.swift= carries =// swift-format-ignore-file=
+because its preset table is aligned by hand — eleven gains in columns, so one
+preset can be compared with another by eye. The formatter collapses that
+alignment into ordinary argument lists, and the table stops being a table. That
+is a deliberate, documented exception rather than a disagreement with the tool.
+
+*On SwiftLint.* Not used, deliberately. It is a third-party binary that every
+contributor and every CI runner would have to install, in a project whose one
+boast is that it has no dependencies at all. swift-format's lint mode already
+covers the naming and style rules =AlwaysUseLowerCamelCase=,
+=TypeNamesShouldBeCapitalized=, =NeverUseForceTry=, =DontRepeatTypeInStaticProperties=,
+=ValidateDocumentationComments= and the rest. What SwiftLint would add on top is
+mostly complexity metrics and force-unwrap policing; the project has no force
+unwraps outside tests, and a metric nobody has needed yet is not worth a
+dependency.
+
+*On =.editorconfig=.* Not used. Xcode does not read it — it has never supported
+the format — so in an Xcode-only project it would be a second, silent copy of
+the indentation and line-length settings that =.swift-format= already holds, free
+to drift out of step with it. It earns its place the day someone edits this
+project in VS Code or Vim, and not before.
 
 * Project structure
 

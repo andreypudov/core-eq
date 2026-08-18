@@ -9,7 +9,7 @@ ifneq (,$(findstring CommandLineTools,$(shell xcode-select -p)))
 export DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 endif
 
-.PHONY: build test install release icons clean
+.PHONY: build test format lint install release icons clean
 
 build:
 	xcodebuild -project $(APP).xcodeproj -target $(APP) -configuration $(CONFIG) build
@@ -17,6 +17,16 @@ build:
 # Unit tests for the pure logic: filter math, profiles, and the analyzer ring
 # buffer. The bundle has no test host, so nothing launches the app or touches
 # audio hardware — it runs anywhere, including CI.
+# Apple's formatter, bundled with the toolchain — no install, no dependency.
+# Configuration is in .swift-format.
+format:
+	xcrun swift-format format --in-place --recursive --configuration .swift-format CoreEQ CoreEQTests
+
+# The same rules, reported rather than applied. Fails on any finding, so CI can
+# gate on it.
+lint:
+	xcrun swift-format lint --strict --recursive --configuration .swift-format CoreEQ CoreEQTests
+
 test:
 	xcodebuild test -project $(APP).xcodeproj -scheme $(APP) -destination 'platform=macOS'
 

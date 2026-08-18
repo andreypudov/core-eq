@@ -172,11 +172,14 @@ extension DeviceEQState {
         // A preset that has since been deleted falls back to the default rather
         // than to nothing, so a stale slot can never leave the app with no sound
         // selected.
-        let profile = profiles.first { $0.name == profileName }
+        let profile =
+            profiles.first { $0.name == profileName }
             ?? profiles.first { $0.name == BuiltInProfiles.defaultProfileName }
             ?? profiles[0]
 
-        var bass = 0.0, mid = 0.0, treble = 0.0
+        var bass = 0.0
+        var mid = 0.0
+        var treble = 0.0
         if let saved = tone, saved.count == 3 {
             bass = saved[0].clamped(to: QuickTone.range)
             mid = saved[1].clamped(to: QuickTone.range)
@@ -188,7 +191,8 @@ extension DeviceEQState {
         if !isToneNeutral {
             // Tone positions win: the chain is derived from them, so the popover
             // sliders and the audio cannot disagree about where the tone sits.
-            chain = FilterChain.applyingTone(bass: bass, mid: mid, treble: treble, to: profile.filters)
+            chain = FilterChain.applyingTone(
+                bass: bass, mid: mid, treble: treble, to: profile.filters)
         } else {
             chain = filters.map(FilterChain.normalized) ?? profile.filters
         }
@@ -196,7 +200,8 @@ extension DeviceEQState {
         // A computed trim is recomputed rather than trusted: the stored number
         // was right for the chain as it stood, and the chain may have been
         // normalised on the way in.
-        let trim = autoGain
+        let trim =
+            autoGain
             ? AutoGain.trim(for: chain)
             : preamp.clamped(to: BuiltInProfiles.preampRange)
 

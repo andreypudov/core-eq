@@ -59,7 +59,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(restored.first?.name, "Late Night")
         XCTAssertEqual(restored.first?.preamp, -2.5)
         XCTAssertEqual(restored.first?.filters, profile.filters)
-        XCTAssertEqual(restored.first?.freeFilters.first?.colorIndex, 2, "a band's colour is part of the preset")
+        XCTAssertEqual(
+            restored.first?.freeFilters.first?.colorIndex, 2,
+            "a band's colour is part of the preset")
     }
 
     /// The per-device slots are the whole point of `DeviceEQState`: two devices
@@ -68,7 +70,8 @@ final class SettingsStoreTests: XCTestCase {
         var chain = BuiltInProfiles.emptyBandChain()
         chain[0].gain = 6
         settings.deviceStates = [
-            "speakers": DeviceEQState(profileName: "Rock", filters: chain, preamp: -1, tone: [1, 0, -1]),
+            "speakers": DeviceEQState(
+                profileName: "Rock", filters: chain, preamp: -1, tone: [1, 0, -1]),
             "headphones": DeviceEQState(profileName: "Jazz"),
         ]
 

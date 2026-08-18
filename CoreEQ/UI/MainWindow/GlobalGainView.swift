@@ -72,7 +72,8 @@ struct GlobalGainView: View {
                     }
                     .onHover { isHovering = $0 }
                     .accessibilityLabel("Preamp")
-                    .accessibilityValue(String(format: "%+.1f decibels", profileManager.currentPreamp))
+                    .accessibilityValue(
+                        String(format: "%+.1f decibels", profileManager.currentPreamp))
 
                     // Where a band column carries its frequency; same font, so
                     // the two captions sit on one line.
@@ -100,7 +101,9 @@ struct GlobalGainView: View {
                 .accessibilityAddTraits(.isHeader)
         }
         .opacity(isEnabled ? 1.0 : 0.5)
-        .help("Output trim applied after the whole chain — use it to give back headroom a boosted preset takes")
+        .help(
+            "Output trim applied after the whole chain — use it to give back headroom a boosted preset takes"
+        )
     }
 
     /// The mode switch for the trim, standing on its side beside the track it
@@ -127,16 +130,22 @@ struct GlobalGainView: View {
                 .frame(width: 14, height: 44)
                 .background(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(profileManager.isAutoGain ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05))
+                        .fill(
+                            profileManager.isAutoGain
+                                ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .strokeBorder(
-                            profileManager.isAutoGain ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.12),
+                            profileManager.isAutoGain
+                                ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.12),
                             lineWidth: 1
                         )
                 )
-                .foregroundStyle(profileManager.isAutoGain ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                .foregroundStyle(
+                    profileManager.isAutoGain
+                        ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary)
+                )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

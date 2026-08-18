@@ -79,13 +79,20 @@ final class EQFilterTests: XCTestCase {
     func testEveryStoredPropertyCountsTowardsEquality() {
         let base = EQFilter(kind: .bell, frequency: 1_000, gain: 3, q: 1, band: 2, colorIndex: 1)
 
-        var kind = base; kind.kind = .lowShelf
-        var frequency = base; frequency.frequency = 1_001
-        var gain = base; gain.gain = 3.5
-        var q = base; q.q = 1.1
-        var enabled = base; enabled.isEnabled = false
-        var slot = base; slot.band = 3
-        var colour = base; colour.colorIndex = 4
+        var kind = base
+        kind.kind = .lowShelf
+        var frequency = base
+        frequency.frequency = 1_001
+        var gain = base
+        gain.gain = 3.5
+        var q = base
+        q.q = 1.1
+        var enabled = base
+        enabled.isEnabled = false
+        var slot = base
+        slot.band = 3
+        var colour = base
+        colour.colorIndex = 4
 
         for (name, changed) in [
             ("kind", kind), ("frequency", frequency), ("gain", gain), ("q", q),

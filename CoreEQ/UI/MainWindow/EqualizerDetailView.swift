@@ -2,7 +2,6 @@ import AppKit
 import CoreAudio
 import SwiftUI
 
-
 /// Content column of the main window: the Equalizer heading with its preset
 /// controls, the response graph, the band sliders, and the output selector.
 ///
@@ -114,7 +113,8 @@ struct EqualizerDetailView: View {
                     .toggleStyle(.power)
                     .labelsHidden()
                     .accessibilityLabel("Equalizer")
-                    .help(audioEngine.isEnabled ? "Turn the equalizer off" : "Turn the equalizer on")
+                    .help(
+                        audioEngine.isEnabled ? "Turn the equalizer off" : "Turn the equalizer on")
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -202,12 +202,16 @@ struct EqualizerDetailView: View {
         HStack(spacing: 7) {
             Image(systemName: outputs.defaultDeviceSymbolName)
                 .font(.system(size: 13))
-                .foregroundStyle(outputs.devices.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                .foregroundStyle(
+                    outputs.devices.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(outputs.defaultDeviceName)
                     .font(.system(size: 13))
-                    .foregroundStyle(outputs.devices.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    .foregroundStyle(
+                        outputs.devices.isEmpty
+                            ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
+                    )
                     .lineLimit(1)
                     .truncationMode(.middle)
 
@@ -236,7 +240,8 @@ struct EqualizerDetailView: View {
     }
 
     private var deviceAccessibilityValue: String {
-        let preset = profileManager.isModified
+        let preset =
+            profileManager.isModified
             ? "\(profileManager.activeProfileName), edited"
             : profileManager.activeProfileName
         return "\(outputs.defaultDeviceName), playing \(preset)"
@@ -455,7 +460,6 @@ struct EqualizerDetailView: View {
         .fixedSize()
         .accessibilityLabel("Editor")
     }
-
 
     private func gainAxis(trackHeight: CGFloat) -> some View {
         GainScale(range: BuiltInProfiles.gainRange, trackHeight: trackHeight, side: .leading)

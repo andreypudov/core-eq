@@ -12,7 +12,8 @@ final class MenuListView: NSView {
 
     init(rows: [MenuRowView], rowHeight: CGFloat) {
         self.rows = rows
-        self.visibleHeight = (rowHeight * min(CGFloat(rows.count), MenuListMetrics.maxVisibleRows)).rounded()
+        self.visibleHeight = (rowHeight * min(CGFloat(rows.count), MenuListMetrics.maxVisibleRows))
+            .rounded()
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         rows.forEach { $0.listOwner = self }

@@ -29,9 +29,11 @@ final class MenuHeaderView: NSView {
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: QuickEQMenuMetrics.contentWidth),
             heightAnchor.constraint(equalToConstant: 34),
-            title.leadingAnchor.constraint(equalTo: leadingAnchor, constant: QuickEQMenuMetrics.horizontalInset),
+            title.leadingAnchor.constraint(
+                equalTo: leadingAnchor, constant: QuickEQMenuMetrics.horizontalInset),
             title.centerYAnchor.constraint(equalTo: centerYAnchor),
-            toggle.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -QuickEQMenuMetrics.horizontalInset),
+            toggle.trailingAnchor.constraint(
+                equalTo: trailingAnchor, constant: -QuickEQMenuMetrics.horizontalInset),
             toggle.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }

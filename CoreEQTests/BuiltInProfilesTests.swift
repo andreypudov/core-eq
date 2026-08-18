@@ -89,7 +89,9 @@ final class BuiltInProfilesTests: XCTestCase {
 
     func testNamesAreUnique() {
         let names = BuiltInProfiles.all.map(\.name)
-        XCTAssertEqual(Set(names).count, names.count, "built-in profile names must be unique — they are the identifiers")
+        XCTAssertEqual(
+            Set(names).count, names.count,
+            "built-in profile names must be unique — they are the identifiers")
     }
 
     func testFlatIsFlatAndIsTheDefault() {
@@ -124,7 +126,8 @@ final class BuiltInProfilesTests: XCTestCase {
     /// `ProfileManager.isModified` would report every launch as edited.
     func testDecodedFiltersCompareEqualDespiteFreshIdentifiers() throws {
         let original = BuiltInProfiles.all[3].filters
-        let decoded = try JSONDecoder().decode([EQFilter].self, from: JSONEncoder().encode(original))
+        let decoded = try JSONDecoder().decode(
+            [EQFilter].self, from: JSONEncoder().encode(original))
 
         XCTAssertEqual(decoded, original)
         XCTAssertNotEqual(decoded.map(\.id), original.map(\.id))
@@ -134,11 +137,11 @@ final class BuiltInProfilesTests: XCTestCase {
     /// enabled flag, and no slot. They have to keep working.
     func testLegacyBandsPresetMigratesIntoLadderFilters() throws {
         let legacy = """
-        {"name":"Old","bands":[
-          {"frequency":32,"gain":4,"q":1.41},
-          {"frequency":64,"gain":-2,"q":1.41}
-        ]}
-        """.data(using: .utf8)!
+            {"name":"Old","bands":[
+              {"frequency":32,"gain":4,"q":1.41},
+              {"frequency":64,"gain":-2,"q":1.41}
+            ]}
+            """.data(using: .utf8)!
 
         let decoded = try JSONDecoder().decode(EQProfile.self, from: legacy)
         XCTAssertEqual(decoded.name, "Old")

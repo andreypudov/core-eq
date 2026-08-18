@@ -47,7 +47,11 @@ struct VerticalGainSlider: View {
                 // strip shows the preset's shape at a glance, in the accent
                 // while the band is hovered or dragged.
                 Capsule()
-                    .fill(isActive ? AnyShapeStyle(Color.coreEQSignal) : AnyShapeStyle(Color.primary.opacity(0.35)))
+                    .fill(
+                        isActive
+                            ? AnyShapeStyle(Color.coreEQSignal)
+                            : AnyShapeStyle(Color.primary.opacity(0.35))
+                    )
                     .frame(width: Self.trackWidth, height: abs(zeroY - knobY))
                     .position(x: midX, y: (knobY + zeroY) / 2)
 
@@ -70,7 +74,8 @@ struct VerticalGainSlider: View {
                     .onChanged { drag in
                         guard isEnabled, travel > 0, span > 0 else { return }
                         onDragChange(true)
-                        let fraction = 1.0 - Double((drag.location.y - Self.knobDiameter / 2) / travel)
+                        let fraction =
+                            1.0 - Double((drag.location.y - Self.knobDiameter / 2) / travel)
                         let raw = range.lowerBound + span * min(max(fraction, 0), 1)
                         value = (raw / step).rounded() * step
                     }
@@ -107,7 +112,9 @@ struct VerticalGainSlider: View {
 
     /// Centre of the knob for a given gain. Shared with the dB scale beside the
     /// row so its marks sit exactly level with the knob travel.
-    static func knobCenterY(for gain: Double, in height: CGFloat, range: ClosedRange<Double>) -> CGFloat {
+    static func knobCenterY(
+        for gain: Double, in height: CGFloat, range: ClosedRange<Double>
+    ) -> CGFloat {
         let travel = height - knobDiameter
         let span = range.upperBound - range.lowerBound
         guard span > 0 else { return knobDiameter / 2 + travel / 2 }

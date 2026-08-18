@@ -78,7 +78,8 @@ final class ProfileManager: ObservableObject {
         let library = PresetLibrary(stored: settings.userProfiles)
         self.library = library
 
-        let state = Self.migratedStateIfNeeded(settings: settings, deviceUID: outputDeviceUID)
+        let state =
+            Self.migratedStateIfNeeded(settings: settings, deviceUID: outputDeviceUID)
             ?? settings.deviceStates[Self.slot(for: outputDeviceUID)]
             ?? DeviceEQState(profileName: BuiltInProfiles.defaultProfileName)
 
@@ -107,7 +108,8 @@ final class ProfileManager: ObservableObject {
         persistDeviceState()
         outputDeviceUID = uid
 
-        let state = settings.deviceStates[Self.slot(for: uid)]
+        let state =
+            settings.deviceStates[Self.slot(for: uid)]
             ?? DeviceEQState(profileName: BuiltInProfiles.defaultProfileName)
         apply(state)
     }
@@ -134,7 +136,9 @@ final class ProfileManager: ObservableObject {
         settings: SettingsStore,
         deviceUID: String?
     ) -> DeviceEQState? {
-        guard settings.deviceStates.isEmpty, let name = settings.activeProfileName else { return nil }
+        guard settings.deviceStates.isEmpty, let name = settings.activeProfileName else {
+            return nil
+        }
 
         var state = DeviceEQState(profileName: name)
         state.filters = settings.workingFilters
@@ -142,7 +146,8 @@ final class ProfileManager: ObservableObject {
         state.tone = settings.tone
 
         if state.filters == nil, let legacy = settings.legacyCustomGains,
-           legacy.count == BuiltInProfiles.bandCount {
+            legacy.count == BuiltInProfiles.bandCount
+        {
             var chain = BuiltInProfiles.emptyBandChain()
             for slot in 0..<BuiltInProfiles.bandCount {
                 chain[slot].gain = legacy[slot].clamped(to: BuiltInProfiles.gainRange)
@@ -255,7 +260,8 @@ final class ProfileManager: ObservableObject {
     @discardableResult
     func duplicateProfile(named name: String) -> String? {
         guard let source = profile(named: name) else { return nil }
-        return addProfile(named: "\(source.name) copy", filters: source.filters, preamp: source.preamp)
+        return addProfile(
+            named: "\(source.name) copy", filters: source.filters, preamp: source.preamp)
     }
 
     /// Renames a user preset. Built-in profiles and empty names are ignored, and
@@ -307,7 +313,9 @@ final class ProfileManager: ObservableObject {
     // MARK: - Band editing
 
     func setGain(_ gain: Double, forBandAt slot: Int) {
-        guard slot < BuiltInProfiles.bandCount, currentFilters.indices.contains(slot) else { return }
+        guard slot < BuiltInProfiles.bandCount, currentFilters.indices.contains(slot) else {
+            return
+        }
         currentFilters[slot].gain = gain.clamped(to: BuiltInProfiles.gainRange)
         chainDidChange()
     }
@@ -317,8 +325,9 @@ final class ProfileManager: ObservableObject {
     func resetBand(at slot: Int) {
         let profileBands = activeProfile.bandFilters
         guard slot < BuiltInProfiles.bandCount,
-              currentFilters.indices.contains(slot),
-              profileBands.indices.contains(slot) else { return }
+            currentFilters.indices.contains(slot),
+            profileBands.indices.contains(slot)
+        else { return }
         currentFilters[slot].gain = profileBands[slot].gain
         chainDidChange()
     }
@@ -409,8 +418,9 @@ final class ProfileManager: ObservableObject {
     @discardableResult
     func editBandAsFilter(slot: Int) -> UUID? {
         guard canAddFilter,
-              slot < BuiltInProfiles.bandCount,
-              currentFilters.indices.contains(slot) else { return nil }
+            slot < BuiltInProfiles.bandCount,
+            currentFilters.indices.contains(slot)
+        else { return nil }
         var lifted = currentFilters[slot].unbound()
         // A band carries the ladder's default colour; as a free filter it needs
         // one of its own, or every lifted band would arrive green.
@@ -468,7 +478,8 @@ final class ProfileManager: ObservableObject {
         let offsets = QuickTone.offsets(bass: tone.bass, mid: tone.mid, treble: tone.treble)
         for slot in 0..<min(BuiltInProfiles.bandCount, currentFilters.count) {
             let base = profileBands[safe: slot]?.gain ?? 0
-            currentFilters[slot].gain = (base + offsets[slot]).clamped(to: BuiltInProfiles.gainRange)
+            currentFilters[slot].gain = (base + offsets[slot]).clamped(
+                to: BuiltInProfiles.gainRange)
         }
         chainDidChange()
     }
@@ -538,7 +549,8 @@ final class ProfileManager: ObservableObject {
 
     private func indexOfFreeFilter(id: UUID) -> Int? {
         guard let index = currentFilters.firstIndex(where: { $0.id == id }),
-              index >= BuiltInProfiles.bandCount else { return nil }
+            index >= BuiltInProfiles.bandCount
+        else { return nil }
         return index
     }
 

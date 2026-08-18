@@ -30,7 +30,9 @@ final class QuickEQBodyView: NSView {
     ) {
         self.sampleRate = sampleRate
         self.onToneChange = onToneChange
-        self.graphHost = NSHostingView(rootView: FrequencyResponseView(filters: filters, sampleRate: sampleRate, minimal: true))
+        self.graphHost = NSHostingView(
+            rootView: FrequencyResponseView(filters: filters, sampleRate: sampleRate, minimal: true)
+        )
         super.init(frame: .zero)
         // View-based menu items are sized by Auto Layout: fix the content width
         // and let the vertical stack determine the height.
@@ -52,8 +54,10 @@ final class QuickEQBodyView: NSView {
             graphHost.widthAnchor.constraint(equalTo: stack.widthAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 2),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: QuickEQMenuMetrics.horizontalInset),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -QuickEQMenuMetrics.horizontalInset),
+            stack.leadingAnchor.constraint(
+                equalTo: leadingAnchor, constant: QuickEQMenuMetrics.horizontalInset),
+            stack.trailingAnchor.constraint(
+                equalTo: trailingAnchor, constant: -QuickEQMenuMetrics.horizontalInset),
         ])
         rows.forEach { $0.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
     }
@@ -63,7 +67,8 @@ final class QuickEQBodyView: NSView {
 
     /// Redraws the response curve after a tone change updates the chain.
     func refreshGraph(filters: [EQFilter]) {
-        graphHost.rootView = FrequencyResponseView(filters: filters, sampleRate: sampleRate, minimal: true)
+        graphHost.rootView = FrequencyResponseView(
+            filters: filters, sampleRate: sampleRate, minimal: true)
     }
 
     private func makeSliderRow(_ axis: Axis, value: Double) -> NSView {
@@ -72,7 +77,10 @@ final class QuickEQBodyView: NSView {
         name.translatesAutoresizingMaskIntoConstraints = false
         name.widthAnchor.constraint(equalToConstant: 48).isActive = true
 
-        let slider = ToneSlider(value: value, minValue: QuickTone.range.lowerBound, maxValue: QuickTone.range.upperBound, target: self, action: #selector(sliderChanged(_:)))
+        let slider = ToneSlider(
+            value: value, minValue: QuickTone.range.lowerBound,
+            maxValue: QuickTone.range.upperBound, target: self, action: #selector(sliderChanged(_:))
+        )
         slider.isContinuous = true
         slider.tag = axis.rawValue
         // The same gesture the band sliders and the graph's points answer to,

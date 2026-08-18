@@ -128,7 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let window = NSWindow(contentViewController: splitViewController)
             window.title = "CoreEQ"
-            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+            window.styleMask = [
+                .titled, .closable, .miniaturizable, .resizable, .fullSizeContentView,
+            ]
             // Deliberately *not* setting `titlebarAppearsTransparent`: with a
             // unified toolbar and a full-height sidebar item, AppKit already
             // blends the titlebar into both columns, and forcing transparency
@@ -179,9 +181,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Header, editing area, and padding come to ~380 pt; the rest is the
             // graph, which has a 120 pt floor.
             window.contentMinSize = NSSize(width: 960, height: 540)
-            let visible = (NSScreen.main?.visibleFrame.size).map {
-                NSSize(width: min(1_120, $0.width - 80), height: min(760, $0.height - 80))
-            } ?? NSSize(width: 1_120, height: 760)
+            let visible =
+                (NSScreen.main?.visibleFrame.size).map {
+                    NSSize(width: min(1_120, $0.width - 80), height: min(760, $0.height - 80))
+                } ?? NSSize(width: 1_120, height: 760)
             window.setContentSize(visible)
             window.center()
             // Closing this window only orders it out — SwiftUI's `onDisappear`
@@ -262,7 +265,8 @@ extension AppDelegate: NSToolbarDelegate {
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
         guard itemIdentifier == .sidebarTrackingSeparator,
-              let splitViewController else { return nil }
+            let splitViewController
+        else { return nil }
 
         // Divider zero: the one between the sidebar and the content column.
         return NSTrackingSeparatorToolbarItem(

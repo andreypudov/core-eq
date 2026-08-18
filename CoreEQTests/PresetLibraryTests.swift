@@ -78,7 +78,8 @@ final class PresetLibraryTests: XCTestCase {
     func testRenamingRefusesEmptyNamesAndBuiltIns() {
         var library = PresetLibrary(stored: [profile("Mine")])
         XCTAssertNil(library.rename("Mine", to: "   "))
-        XCTAssertNil(library.rename("Mine", to: "Mine"), "renaming to the same name is not a rename")
+        XCTAssertNil(
+            library.rename("Mine", to: "Mine"), "renaming to the same name is not a rename")
         XCTAssertNil(library.rename("Jazz", to: "Anything"), "a built-in cannot be renamed")
         XCTAssertEqual(library.user.map(\.name), ["Mine"])
     }
@@ -97,7 +98,9 @@ final class PresetLibraryTests: XCTestCase {
 
         XCTAssertEqual(library.remove("B"), "C", "the preset that took its place")
         XCTAssertEqual(library.remove("C"), "A", "the one before it, when there is no next")
-        XCTAssertEqual(library.remove("A"), BuiltInProfiles.defaultProfileName, "the default, when none is left")
+        XCTAssertEqual(
+            library.remove("A"), BuiltInProfiles.defaultProfileName,
+            "the default, when none is left")
     }
 
     func testRemovingSomethingThatIsNotThereChangesNothing() {

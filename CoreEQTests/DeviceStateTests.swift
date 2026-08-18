@@ -38,9 +38,13 @@ final class DeviceStateTests: XCTestCase {
 
     /// Total response of a chain at `frequency`, the way the graph computes the
     /// curve it draws.
-    private func total(_ filters: [EQFilter], at frequency: Double, sampleRate: Double = 48_000) -> Double {
+    private func total(
+        _ filters: [EQFilter], at frequency: Double, sampleRate: Double = 48_000
+    ) -> Double {
         filters.reduce(0.0) {
-            $0 + Biquad(filter: $1, sampleRate: sampleRate).magnitudeDB(at: frequency, sampleRate: sampleRate)
+            $0
+                + Biquad(filter: $1, sampleRate: sampleRate).magnitudeDB(
+                    at: frequency, sampleRate: sampleRate)
         }
     }
 
@@ -55,8 +59,9 @@ final class DeviceStateTests: XCTestCase {
         manager.setPreamp(-3)
 
         manager.setOutputDevice(uid: "speakers")
-        XCTAssertEqual(manager.activeProfileName, BuiltInProfiles.defaultProfileName,
-                       "a device never seen before starts at the default, not at whatever was playing")
+        XCTAssertEqual(
+            manager.activeProfileName, BuiltInProfiles.defaultProfileName,
+            "a device never seen before starts at the default, not at whatever was playing")
         XCTAssertEqual(manager.currentPreamp, 0)
         XCTAssertFalse(manager.isModified)
 
@@ -82,8 +87,9 @@ final class DeviceStateTests: XCTestCase {
         XCTAssertEqual(second.currentPreamp, -2.5)
         XCTAssertEqual(second.tone.bass, 4)
 
-        XCTAssertEqual(makeManager(device: "speakers").activeProfileName,
-                       BuiltInProfiles.defaultProfileName)
+        XCTAssertEqual(
+            makeManager(device: "speakers").activeProfileName,
+            BuiltInProfiles.defaultProfileName)
     }
 
     func testSwitchingToTheSameDeviceChangesNothing() {
@@ -92,7 +98,8 @@ final class DeviceStateTests: XCTestCase {
         let before = manager.currentFilters
 
         manager.setOutputDevice(uid: "headphones")
-        XCTAssertEqual(manager.currentFilters, before, "a redundant switch must not reload and discard edits")
+        XCTAssertEqual(
+            manager.currentFilters, before, "a redundant switch must not reload and discard edits")
     }
 
     /// Presets are a shared library; only the selection follows the hardware.
@@ -281,7 +288,8 @@ final class DeviceStateTests: XCTestCase {
 
         manager.setAutoGain(true)
         XCTAssertTrue(manager.isAutoGain)
-        XCTAssertLessThan(manager.currentPreamp, -3, "auto did not pull the trim down for a lifted chain")
+        XCTAssertLessThan(
+            manager.currentPreamp, -3, "auto did not pull the trim down for a lifted chain")
     }
 
     /// The trim has to follow the chain, or it is only right at the moment it is
@@ -297,7 +305,8 @@ final class DeviceStateTests: XCTestCase {
         XCTAssertLessThan(afterBand, -0.5)
 
         manager.addFilter(kind: .highShelf, frequency: 8_000, gain: 8, q: 0.7)
-        XCTAssertLessThan(manager.currentPreamp, afterBand, "adding a boost did not deepen the trim")
+        XCTAssertLessThan(
+            manager.currentPreamp, afterBand, "adding a boost did not deepen the trim")
 
         manager.setTone(bass: 6)
         XCTAssertLessThan(manager.currentPreamp, afterBand)
@@ -314,10 +323,12 @@ final class DeviceStateTests: XCTestCase {
 
         manager.setAutoGain(false)
         XCTAssertFalse(manager.isAutoGain)
-        XCTAssertEqual(manager.currentPreamp, computed, "the trim jumped when auto was switched off")
+        XCTAssertEqual(
+            manager.currentPreamp, computed, "the trim jumped when auto was switched off")
 
         manager.setPreamp(-2)
-        XCTAssertEqual(manager.currentPreamp, -2, "the slider did not come back under the user's control")
+        XCTAssertEqual(
+            manager.currentPreamp, -2, "the slider did not come back under the user's control")
     }
 
     /// While auto is on the slider is disabled, so a write can only arrive from
@@ -421,7 +432,9 @@ final class DeviceStateTests: XCTestCase {
 
     func testAnUnmodifiedChainStoresNothing() {
         let manager = makeManager()
-        guard let id = manager.addFilter(frequency: 180, gain: 4) else { return XCTFail("filter not added") }
+        guard let id = manager.addFilter(frequency: 180, gain: 4) else {
+            return XCTFail("filter not added")
+        }
         XCTAssertNotNil(storedState()?.filters)
 
         manager.removeFilter(id: id)

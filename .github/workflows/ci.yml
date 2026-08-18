@@ -16,6 +16,9 @@ jobs:
       - name: Show toolchain
         run: xcodebuild -version && xcrun --show-sdk-version
 
+      - name: Check formatting
+        run: make lint
+
       - name: Run unit tests
         run: make test
 

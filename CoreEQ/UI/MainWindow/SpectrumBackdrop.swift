@@ -1,7 +1,5 @@
 import SwiftUI
 
-
-
 struct SpectrumBackdrop: View {
     @ObservedObject var spectrum: SpectrumAnalyzer
     let axis: ResponseAxis
@@ -16,7 +14,8 @@ struct SpectrumBackdrop: View {
 
             var line = Path()
             for (index, point) in points.enumerated() {
-                let position = CGPoint(x: axis.x(point.frequency), y: plotHeight * (1 - CGFloat(point.level)))
+                let position = CGPoint(
+                    x: axis.x(point.frequency), y: plotHeight * (1 - CGFloat(point.level)))
                 if index == 0 {
                     line.move(to: position)
                 } else {

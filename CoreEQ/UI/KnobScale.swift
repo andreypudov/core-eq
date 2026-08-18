@@ -68,12 +68,14 @@ struct KnobScale {
         KnobScale(
             range: range,
             isLogarithmic: true,
-            rungs: ladder(range, [
-                (upTo: 100, step: 1),
-                (upTo: 1_000, step: 5),
-                (upTo: 10_000, step: 50),
-                (upTo: .infinity, step: 100),
-            ]),
+            rungs: ladder(
+                range,
+                [
+                    (upTo: 100, step: 1),
+                    (upTo: 1_000, step: 5),
+                    (upTo: 10_000, step: 50),
+                    (upTo: .infinity, step: 100),
+                ]),
             rungsPerDetent: 1
         )
     }
@@ -135,7 +137,9 @@ struct KnobScale {
     /// it on the ladder in the direction asked, never backwards, and the rest
     /// follow from there.
     func stepped(_ value: Double, by steps: Int) -> Double {
-        guard steps != 0, !rungs.isEmpty, let nearest = nearestIndex(to: value) else { return value }
+        guard steps != 0, !rungs.isEmpty, let nearest = nearestIndex(to: value) else {
+            return value
+        }
         let epsilon = 1e-9
         let index: Int
 
@@ -191,7 +195,8 @@ struct KnobScale {
         var rungs = [range.lowerBound]
         var value = range.lowerBound
         while value < range.upperBound {
-            let step = resolutions.first { value < $0.upTo - 1e-9 }?.step
+            let step =
+                resolutions.first { value < $0.upTo - 1e-9 }?.step
                 ?? resolutions[resolutions.count - 1].step
             guard step > 0 else { break }
             let next = ((value / step).rounded() + 1) * step

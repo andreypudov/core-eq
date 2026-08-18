@@ -36,9 +36,13 @@ final class ProfileManagerTests: XCTestCase {
 
     /// Total response of a chain at `frequency`, the way the graph computes the
     /// curve it draws.
-    private func total(_ filters: [EQFilter], at frequency: Double, sampleRate: Double = 48_000) -> Double {
+    private func total(
+        _ filters: [EQFilter], at frequency: Double, sampleRate: Double = 48_000
+    ) -> Double {
         filters.reduce(0.0) {
-            $0 + Biquad(filter: $1, sampleRate: sampleRate).magnitudeDB(at: frequency, sampleRate: sampleRate)
+            $0
+                + Biquad(filter: $1, sampleRate: sampleRate).magnitudeDB(
+                    at: frequency, sampleRate: sampleRate)
         }
     }
 
@@ -91,7 +95,8 @@ final class ProfileManagerTests: XCTestCase {
         let manager = makeManager()
         XCTAssertTrue(manager.bandFilters.allSatisfy { $0.gain == 3.0 })
         XCTAssertTrue(manager.isModified)
-        XCTAssertNil(settings.legacyCustomGains, "the legacy key is consumed, not left to fight the new one")
+        XCTAssertNil(
+            settings.legacyCustomGains, "the legacy key is consumed, not left to fight the new one")
         XCTAssertNotNil(storedState()?.filters, "the migrated chain lands in the device's slot")
     }
 
@@ -109,16 +114,19 @@ final class ProfileManagerTests: XCTestCase {
             name: "Stale",
             filters: (0..<BuiltInProfiles.bandCount).map { EQFilter.band(slot: $0, gain: 1) }
         )
-        stale.filters[stale.filters.count - 2].frequency = 15_000   // the old value
+        stale.filters[stale.filters.count - 2].frequency = 15_000  // the old value
         settings.userProfiles = [stale]
 
         let restored = makeManager().library.user[0]
         XCTAssertEqual(restored.bandFilters.map(\.frequency), BuiltInProfiles.frequencies)
-        XCTAssertTrue(restored.bandFilters.allSatisfy { $0.gain == 1 }, "alignment must preserve gains")
+        XCTAssertTrue(
+            restored.bandFilters.allSatisfy { $0.gain == 1 }, "alignment must preserve gains")
     }
 
     func testStoredProfileWithMissingBandsIsFilledOutToTheLadder() {
-        settings.userProfiles = [EQProfile(name: "Short", filters: [EQFilter.band(slot: 0, gain: 2)])]
+        settings.userProfiles = [
+            EQProfile(name: "Short", filters: [EQFilter.band(slot: 0, gain: 2)])
+        ]
 
         let restored = makeManager().library.user[0]
         XCTAssertEqual(restored.filters.count, BuiltInProfiles.bandCount)
@@ -130,7 +138,9 @@ final class ProfileManagerTests: XCTestCase {
         let free = (0..<(BuiltInProfiles.maxFreeFilters + 5)).map {
             EQFilter(frequency: Double(100 + $0 * 10), gain: 1, q: 1)
         }
-        settings.userProfiles = [EQProfile(name: "Many", filters: BuiltInProfiles.emptyBandChain() + free)]
+        settings.userProfiles = [
+            EQProfile(name: "Many", filters: BuiltInProfiles.emptyBandChain() + free)
+        ]
 
         let restored = makeManager().library.user[0]
         XCTAssertEqual(restored.freeFilters.count, BuiltInProfiles.maxFreeFilters)
@@ -168,7 +178,8 @@ final class ProfileManagerTests: XCTestCase {
         let copy = manager.duplicateProfile(named: "Jazz")
 
         XCTAssertEqual(copy, "Jazz copy")
-        XCTAssertEqual(manager.profile(named: "Jazz copy")?.filters, manager.profile(named: "Jazz")?.filters)
+        XCTAssertEqual(
+            manager.profile(named: "Jazz copy")?.filters, manager.profile(named: "Jazz")?.filters)
     }
 
     func testRenameKeepsTheProfileActive() {
@@ -334,7 +345,8 @@ final class ProfileManagerTests: XCTestCase {
         guard let id = manager.addFilter() else { return XCTFail("filter not added") }
 
         manager.setFilterFrequency(99_999, id: id)
-        XCTAssertEqual(manager.freeFilters[0].frequency, BuiltInProfiles.filterFrequencyRange.upperBound)
+        XCTAssertEqual(
+            manager.freeFilters[0].frequency, BuiltInProfiles.filterFrequencyRange.upperBound)
 
         manager.setFilterQ(0, id: id)
         XCTAssertEqual(manager.freeFilters[0].q, BuiltInProfiles.filterQRange.lowerBound)
@@ -352,7 +364,9 @@ final class ProfileManagerTests: XCTestCase {
         }
 
         let colors = manager.freeFilters.map(\.colorIndex)
-        XCTAssertEqual(Set(colors).count, EQFilter.colorCount, "the palette is used up before any of it repeats")
+        XCTAssertEqual(
+            Set(colors).count, EQFilter.colorCount,
+            "the palette is used up before any of it repeats")
     }
 
     /// A colour freed by a removal is the next one handed out, rather than the
@@ -391,7 +405,9 @@ final class ProfileManagerTests: XCTestCase {
 
     func testRemovingAFilterLeavesTheLadderIntact() {
         let manager = makeManager()
-        guard let id = manager.addFilter(frequency: 180, gain: 4) else { return XCTFail("filter not added") }
+        guard let id = manager.addFilter(frequency: 180, gain: 4) else {
+            return XCTFail("filter not added")
+        }
 
         manager.removeFilter(id: id)
         XCTAssertTrue(manager.freeFilters.isEmpty)
@@ -402,7 +418,9 @@ final class ProfileManagerTests: XCTestCase {
     func testDisablingAFilterRemovesItFromTheResponse() {
         let manager = makeManager()
         manager.setActiveProfile(name: "Flat")
-        guard let id = manager.addFilter(frequency: 1_000, gain: 6) else { return XCTFail("filter not added") }
+        guard let id = manager.addFilter(frequency: 1_000, gain: 6) else {
+            return XCTFail("filter not added")
+        }
         XCTAssertEqual(total(manager.currentFilters, at: 1_000), 6, accuracy: 0.01)
 
         manager.setFilterEnabled(false, id: id)
@@ -414,12 +432,15 @@ final class ProfileManagerTests: XCTestCase {
     func testABandCanBeSwitchedOutOnItsOwn() {
         let manager = makeManager()
         manager.setActiveProfile(name: "Flat")
-        manager.setGain(6, forBandAt: 5)                   // 1 kHz
-        guard let id = manager.addFilter(frequency: 1_000, gain: 6) else { return XCTFail("not added") }
+        manager.setGain(6, forBandAt: 5)  // 1 kHz
+        guard let id = manager.addFilter(frequency: 1_000, gain: 6) else {
+            return XCTFail("not added")
+        }
         XCTAssertEqual(total(manager.currentFilters, at: 1_000), 12, accuracy: 0.01)
 
         manager.setFilterEnabled(false, id: id)
-        XCTAssertEqual(total(manager.currentFilters, at: 1_000), 6, accuracy: 0.01, "only the ladder remains")
+        XCTAssertEqual(
+            total(manager.currentFilters, at: 1_000), 6, accuracy: 0.01, "only the ladder remains")
     }
 
     /// The per-editor bypasses are gone, so a chain stored while one half was
@@ -434,7 +455,8 @@ final class ProfileManagerTests: XCTestCase {
         seed(DeviceEQState(profileName: "Flat", filters: chain))
 
         let manager = makeManager()
-        XCTAssertTrue(manager.bandFilters.allSatisfy(\.isEnabled), "the ladder came back switched off")
+        XCTAssertTrue(
+            manager.bandFilters.allSatisfy(\.isEnabled), "the ladder came back switched off")
         XCTAssertGreaterThan(total(manager.currentFilters, at: 1_000), 3)
     }
 
@@ -510,7 +532,9 @@ final class ProfileManagerTests: XCTestCase {
             )
         }
 
-        XCTAssertEqual(manager.bandFilters.count, BuiltInProfiles.bandCount, "the ladder keeps its eleven sliders")
+        XCTAssertEqual(
+            manager.bandFilters.count, BuiltInProfiles.bandCount,
+            "the ladder keeps its eleven sliders")
         XCTAssertEqual(manager.bandFilters[2].gain, 0, "the emptied slot is identity")
         let lifted = manager.freeFilters.first { $0.id == id }
         XCTAssertEqual(lifted?.frequency, BuiltInProfiles.frequencies[2])
@@ -557,7 +581,8 @@ final class ProfileManagerTests: XCTestCase {
         manager.setActiveProfile(name: "Flat")
 
         for probe in [32.0, 180.0, 1_000.0, 16_000.0] {
-            XCTAssertEqual(total(manager.currentFilters, at: probe), 0, accuracy: 1e-9, "at \(probe) Hz")
+            XCTAssertEqual(
+                total(manager.currentFilters, at: probe), 0, accuracy: 1e-9, "at \(probe) Hz")
         }
     }
 
@@ -645,8 +670,9 @@ final class ProfileManagerTests: XCTestCase {
         XCTAssertEqual(all.builtIn.count, BuiltInProfiles.all.count)
         XCTAssertEqual(all.user.map(\.name), ["Mine"])
 
-        XCTAssertEqual(manager.profiles(matching: "   ").builtIn.count, BuiltInProfiles.all.count,
-                       "whitespace is not a search")
+        XCTAssertEqual(
+            manager.profiles(matching: "   ").builtIn.count, BuiltInProfiles.all.count,
+            "whitespace is not a search")
     }
 
     /// The word people remember is rarely the first one, so the match is on any
@@ -665,8 +691,9 @@ final class ProfileManagerTests: XCTestCase {
         manager.addProfile(named: "Café")
 
         XCTAssertEqual(manager.profiles(matching: "JAZZ").builtIn.map(\.name), ["Jazz"])
-        XCTAssertEqual(manager.profiles(matching: "cafe").user.map(\.name), ["Café"],
-                       "a preset named Café has to answer to cafe")
+        XCTAssertEqual(
+            manager.profiles(matching: "cafe").user.map(\.name), ["Café"],
+            "a preset named Café has to answer to cafe")
     }
 
     func testSearchKeepsTheUserGroupSeparate() {

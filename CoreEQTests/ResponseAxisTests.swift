@@ -35,7 +35,8 @@ final class ResponseAxisTests: XCTestCase {
         var previous = -Double.infinity
         for frequency in stride(from: 20.0, through: 20_000.0, by: 25.0) {
             let fraction = axis.fraction(of: frequency)
-            XCTAssertGreaterThan(fraction, previous, "the axis folded back on itself at \(frequency) Hz")
+            XCTAssertGreaterThan(
+                fraction, previous, "the axis folded back on itself at \(frequency) Hz")
             previous = fraction
         }
     }
@@ -45,7 +46,8 @@ final class ResponseAxisTests: XCTestCase {
     func testFrequenciesBetweenRungsInterpolateLogarithmically() {
         let axis = axis()
         for index in 0..<(anchors.count - 1) {
-            let low = anchors[index], high = anchors[index + 1]
+            let low = anchors[index]
+            let high = anchors[index + 1]
             let middle = (low * high).squareRoot()
             let expected = (axis.fraction(of: low) + axis.fraction(of: high)) / 2
             XCTAssertEqual(axis.fraction(of: middle), expected, accuracy: 0.0001)
@@ -69,7 +71,8 @@ final class ResponseAxisTests: XCTestCase {
     func testItExtrapolatesPastTheOutermostBands() {
         let axis = axis()
         XCTAssertLessThan(axis.fraction(of: 20), axis.fraction(of: anchors[0]))
-        XCTAssertGreaterThan(axis.fraction(of: 20_000), axis.fraction(of: anchors[anchors.count - 2]))
+        XCTAssertGreaterThan(
+            axis.fraction(of: 20_000), axis.fraction(of: anchors[anchors.count - 2]))
     }
 
     /// The gutter is the strip the dB labels live in; the plot starts after it,
@@ -79,7 +82,8 @@ final class ResponseAxisTests: XCTestCase {
         let inset = axis(width: 880, gutter: 52)
 
         XCTAssertEqual(inset.plotWidth, 828)
-        XCTAssertEqual(inset.x(anchors[0]), 52 + CGFloat(plain.fraction(of: anchors[0])) * 828, accuracy: 0.01)
+        XCTAssertEqual(
+            inset.x(anchors[0]), 52 + CGFloat(plain.fraction(of: anchors[0])) * 828, accuracy: 0.01)
         XCTAssertEqual(inset.fraction(of: 1_000), plain.fraction(of: 1_000), accuracy: 0.0001)
     }
 

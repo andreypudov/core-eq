@@ -43,10 +43,10 @@ final class MenuRowView: NSView {
             guard isHighlighted != oldValue else { return }
             highlight.isHidden = !isHighlighted
             titleLabel.textColor = isHighlighted ? .selectedMenuItemTextColor : .labelColor
-            chevronView.contentTintColor = isHighlighted ? .selectedMenuItemTextColor : .secondaryLabelColor
-            markerView.layer?.backgroundColor = (
-                isHighlighted ? NSColor.selectedMenuItemTextColor : .secondaryLabelColor
-            ).cgColor
+            chevronView.contentTintColor =
+                isHighlighted ? .selectedMenuItemTextColor : .secondaryLabelColor
+            markerView.layer?.backgroundColor =
+                (isHighlighted ? NSColor.selectedMenuItemTextColor : .secondaryLabelColor).cgColor
         }
     }
 
@@ -56,11 +56,11 @@ final class MenuRowView: NSView {
         isHighlighted = highlighted
     }
 
-    /// - Parameters:
-    ///   - image: drawn in the leading gutter — a badge, or nothing.
-    ///   - gutter: width of that leading gutter; zero for a text-only row.
-    ///   - marker: a small dot after the title. Unsaved changes, and the same
-    ///     mark the window's sidebar and header use for the same fact.
+    /// The three parameters that are not self-evident: `image` is drawn in the
+    /// leading gutter — a badge, or nothing; `gutter` is the width of that
+    /// gutter, zero for a text-only row; and `marker` is a small dot after the
+    /// title, the same mark the window's sidebar and header use for unsaved
+    /// changes.
     init(
         title: String,
         image: NSImage? = nil,
@@ -122,8 +122,10 @@ final class MenuRowView: NSView {
             widthAnchor.constraint(equalToConstant: QuickEQMenuMetrics.contentWidth),
             heightAnchor.constraint(equalToConstant: height),
 
-            highlight.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MenuListMetrics.highlightInset),
-            highlight.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -MenuListMetrics.highlightInset),
+            highlight.leadingAnchor.constraint(
+                equalTo: leadingAnchor, constant: MenuListMetrics.highlightInset),
+            highlight.trailingAnchor.constraint(
+                equalTo: trailingAnchor, constant: -MenuListMetrics.highlightInset),
             highlight.topAnchor.constraint(equalTo: topAnchor, constant: 1),
             highlight.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
 
@@ -140,7 +142,8 @@ final class MenuRowView: NSView {
             markerView.centerYAnchor.constraint(equalTo: centerYAnchor),
             markerView.heightAnchor.constraint(equalTo: markerView.widthAnchor),
 
-            chevronView.leadingAnchor.constraint(greaterThanOrEqualTo: markerView.trailingAnchor, constant: 8),
+            chevronView.leadingAnchor.constraint(
+                greaterThanOrEqualTo: markerView.trailingAnchor, constant: 8),
             chevronView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
             chevronView.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
