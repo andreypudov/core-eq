@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var audioEngine = AudioEngine(settings: settings)
     private var menuBarController: MenuBarController?
     private var mainWindow: NSWindow?
+    /// Held because the toolbar's tracking separator needs the split view, and
+    /// the toolbar is asked for its items while the window is still being built.
+    private var splitViewController: NSSplitViewController?
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -80,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showMainWindow() {
         if mainWindow == nil {
             let splitViewController = NSSplitViewController()
+            self.splitViewController = splitViewController
 
             let sidebar = NSSplitViewItem(
                 sidebarWithViewController: NSHostingController(
@@ -232,10 +236,17 @@ extension AppDelegate: NSWindowDelegate {
 /// Toolbar for the main window: nothing but the tracking separator that keeps
 /// the titlebar's divider aligned with the split.
 ///
-/// The titlebar carries no title or controls — "Equalizer" heads the content
-/// column, with the preset menu and Reset beside it, against the graph they act
-/// on. The toolbar stays because the sidebar's full-height layout is defined
-/// against it.
+/// The titlebar carries no title or controls — the header at the top of the
+/// content column carries them, against the graph they act on. The toolbar stays
+/// because the sidebar's full-height layout is defined against it.
+///
+/// All three methods are implemented because `NSToolbar` treats them as
+/// required, whatever Swift's optional conformance suggests: assign a delegate
+/// missing `toolbar(_:itemForItemIdentifier:willBeInsertedIntoToolbar:)` and
+/// AppKit logs "invalid delegate … does not implement all required methods" and
+/// then *discards it* — `toolbar.delegate` reads back nil. The identifiers below
+/// are never asked for, no separator is made, and the toolbar the layout is
+/// defined against is empty.
 extension AppDelegate: NSToolbarDelegate {
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.sidebarTrackingSeparator]
@@ -243,5 +254,21 @@ extension AppDelegate: NSToolbarDelegate {
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.sidebarTrackingSeparator, .flexibleSpace]
+    }
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        guard itemIdentifier == .sidebarTrackingSeparator,
+              let splitViewController else { return nil }
+
+        // Divider zero: the one between the sidebar and the content column.
+        return NSTrackingSeparatorToolbarItem(
+            identifier: itemIdentifier,
+            splitView: splitViewController.splitView,
+            dividerIndex: 0
+        )
     }
 }

@@ -30,6 +30,10 @@ struct EqualizerDetailView: View {
     /// one highlights the other.
     @State private var selectedFilterID: UUID?
 
+    /// What the A/B control is showing. Mirrors `ProfileManager.abSlot` rather
+    /// than reading it directly — see `abSwitcher` for why.
+    @State private var selectedSlot: ABSlot = .a
+
     /// Which editor the lower area is showing. Remembered across launches.
     ///
     /// A tab changes the controls and nothing else: the preset, the chain, the
@@ -402,7 +406,7 @@ struct EqualizerDetailView: View {
     /// Comparing by memory is the alternative, and auditory memory is measured
     /// in seconds.
     private var abSwitcher: some View {
-        Picker("Comparison", selection: abSelection) {
+        Picker("Comparison", selection: $selectedSlot) {
             Text(ABSlot.a.label).tag(ABSlot.a)
             Text(ABSlot.b.label).tag(ABSlot.b)
         }
@@ -411,6 +415,24 @@ struct EqualizerDetailView: View {
         .fixedSize()
         .accessibilityLabel("Comparison slot")
         .help("Two versions of this preset — switch to compare them")
+        // Bound to local state and applied afterwards, rather than written
+        // straight into the manager through the binding.
+        //
+        // A segmented picker syncs its selection while SwiftUI is updating the
+        // view, so a binding whose setter swaps five published properties is
+        // publishing from inside that update — which SwiftUI reports as
+        // undefined behaviour, and is. `onChange` runs once the update has
+        // finished, which is the only safe moment to change the model.
+        //
+        // The second `onChange` carries the traffic the other way: a device
+        // switch loads that device's slot, and the control has to follow it.
+        .onChange(of: selectedSlot) { _, slot in
+            profileManager.setSlot(slot)
+        }
+        .onChange(of: profileManager.abSlot) { _, slot in
+            selectedSlot = slot
+        }
+        .onAppear { selectedSlot = profileManager.abSlot }
     }
 
     /// The tab strip, mounted on the editor block's own border.
@@ -511,13 +533,6 @@ struct EqualizerDetailView: View {
         Binding(
             get: { profileManager.bandFilters[safe: slot]?.gain ?? 0 },
             set: { profileManager.setGain($0, forBandAt: slot) }
-        )
-    }
-
-    private var abSelection: Binding<ABSlot> {
-        Binding(
-            get: { profileManager.abSlot },
-            set: { profileManager.setSlot($0) }
         )
     }
 

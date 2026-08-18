@@ -331,6 +331,49 @@ Custom biquads were chosen over wrapping Apple's EQ Audio Unit because they are
 trivially realtime-safe inside a HAL IO proc and have no format negotiation
 edge cases (the spec allows either).
 
+** A trap: NSToolbarDelegate's methods are required
+
+Swift presents all three =NSToolbarDelegate= methods as optional. =NSToolbar=
+does not: assign a delegate that omits
+=toolbar(_:itemForItemIdentifier:willBeInsertedIntoToolbar:)= and AppKit logs
+
+#+begin_example
+NERROR: invalid delegate <CoreEQ.AppDelegate: 0x…> (does not implement all
+required methods), and so can not be used!
+#+end_example
+
+and then *discards the delegate* — =toolbar.delegate= reads back nil. Measured,
+not inferred. The consequence is silent: the identifier methods are never called,
+no tracking separator is made, and the toolbar the sidebar's full-height layout
+is defined against sits empty.
+
+The item is built from the split view, and the toolbar is asked for its items
+while the window is still being assembled, so =AppDelegate= holds the
+=NSSplitViewController= rather than reaching for it through =mainWindow=, which is
+not assigned yet at that point.
+
+** A trap: publishing from inside a view update
+
+A segmented =Picker= synchronises its selection while SwiftUI is updating the
+view. Bind one to a =Binding= whose setter mutates an =ObservableObject= and the
+mutation happens *during* that update — SwiftUI reports “Publishing changes from
+within view updates is not allowed, this will cause undefined behavior”, and it
+means it.
+
+The A/B switcher hit this: its setter called =ProfileManager.setSlot=, which
+swaps five published properties at once. The fix is not to defer with
+=DispatchQueue.main.async=, which only moves the mutation somewhere unspecified —
+it is to bind the control to local =@State= and apply the change in
+=onChange=, which runs once the update has finished. A second =onChange= in the
+other direction keeps the control in step when the model changes on its own,
+which happens whenever the output device switches; =setSlot= ignores a request
+for the slot already live, so the two cannot chase each other.
+
+Two other =Picker=s exist. The editor tabs bind to =@AppStorage=, which is built
+for exactly this. The parametric type column uses =.menu= style, whose selection
+is written from a menu action rather than during layout. Neither has shown the
+warning, but a new segmented picker bound to the manager would.
+
 ** Threading model
 
 - The IO proc runs on the Core Audio realtime thread and *never blocks*:
