@@ -19,7 +19,10 @@ final class AudioDeviceList: ObservableObject {
         observe(kAudioHardwarePropertyDefaultOutputDevice)
     }
 
-    deinit {
+    /// Isolated for the same reason the listeners were installed on `.main`:
+    /// removing a Core Audio property listener has to name the same queue and
+    /// the same block it was added with, and both belong to this actor.
+    isolated deinit {
         for (selector, block) in listeners {
             var address = AudioDevices.systemAddress(selector)
             AudioObjectRemovePropertyListenerBlock(

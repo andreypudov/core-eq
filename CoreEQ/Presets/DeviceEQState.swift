@@ -44,7 +44,7 @@ struct WorkingState: Codable, Equatable {
     }
 
     /// Written before auto gain existed means the trim was set by hand.
-    init(from decoder: Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         profileName = try container.decode(String.self, forKey: .profileName)
         filters = try container.decodeIfPresent([EQFilter].self, forKey: .filters)
@@ -108,7 +108,7 @@ struct DeviceEQState: Codable, Equatable {
 
     /// A state written before A/B has neither key; both defaults are the truth
     /// about it — one slot, and it is A.
-    init(from decoder: Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         profileName = try container.decode(String.self, forKey: .profileName)
         filters = try container.decodeIfPresent([EQFilter].self, forKey: .filters)

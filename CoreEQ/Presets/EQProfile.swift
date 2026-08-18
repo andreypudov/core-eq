@@ -63,7 +63,7 @@ struct EQProfile: Codable, Equatable, Identifiable {
         case bands
     }
 
-    init(from decoder: Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
         preamp = try container.decodeIfPresent(Double.self, forKey: .preamp) ?? 0
@@ -78,7 +78,7 @@ struct EQProfile: Codable, Equatable, Identifiable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
         try container.encode(filters, forKey: .filters)

@@ -77,7 +77,7 @@ final class SpectrumAudioBufferTests: XCTestCase {
 
     func testZeroFrameWriteIsIgnored() {
         let buffer = SpectrumAudioBuffer(capacity: 4)
-        var empty: [Float] = []
+        let empty: [Float] = []
         empty.withUnsafeBufferPointer { pointer in
             buffer.write(
                 interleaved: pointer.baseAddress ?? UnsafePointer(bitPattern: 0x1000)!, frames: 0,

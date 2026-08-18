@@ -138,7 +138,7 @@ struct EQFilter: Codable, Equatable, Identifiable {
 
     /// Every stored key is optional with a sensible default, so a preset written
     /// by a future version that adds a field still loads here.
-    init(from decoder: Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         kind = try container.decodeIfPresent(Kind.self, forKey: .kind) ?? .bell
         frequency = try container.decode(Double.self, forKey: .frequency)

@@ -119,7 +119,11 @@ final class SpectrumAnalyzer: ObservableObject {
         }
     }
 
-    deinit {
+    /// Isolated, because both of these belong to the main actor: a `Timer` is
+    /// bound to the run loop it was scheduled on, and the FFT setup is a C
+    /// allocation this class is the sole owner of. A nonisolated deinit could run
+    /// on any thread, which is exactly what Swift 6 refuses to let it do.
+    isolated deinit {
         timer?.invalidate()
         if let fftSetup {
             vDSP_destroy_fftsetup(fftSetup)

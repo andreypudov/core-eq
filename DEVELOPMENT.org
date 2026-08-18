@@ -180,6 +180,46 @@ The app is currently *unsandboxed*. App Store distribution would require
 enabling the sandbox and revisiting the audio entitlements; direct
 (Developer ID) distribution does not.
 
+* Build settings that matter
+
+Beyond the Xcode template's defaults, four are set deliberately.
+
+- *=SWIFT_VERSION = 6.0=* — the Swift 6 language mode, which makes data-race
+  safety a compile-time property rather than a hope. It matters more here than in
+  most apps: everything is =@MainActor= except =EQProcessor.render=, which Core
+  Audio calls on a realtime thread, and the compiler now checks that boundary
+  rather than trusting the comments around it.
+
+  The migration cost two =deinit= fixes. =SpectrumAnalyzer= and =AudioDeviceList=
+  both cleaned up main-actor state from a nonisolated =deinit= — a `Timer` bound
+  to a run loop, a vDSP allocation, and Core Audio listener blocks — which can
+  run on any thread. Both are =isolated deinit= now, which is the honest
+  statement: that cleanup belongs to the main actor.
+
+- *=SWIFT_TREAT_WARNINGS_AS_ERRORS = YES=* — the codebase had no warnings, so
+  this cost nothing to adopt and everything to skip. It immediately caught two
+  =var= bindings in tests that were never mutated.
+
+- *=SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES=* — =any Decoder= rather than
+  bare =Decoder=. Required by a future language mode anyway; six call sites.
+
+- *=VALIDATE_PRODUCT = YES=* (Release only).
+
+*One thing measured and rejected.* =SWIFT_STRICT_MEMORY_SAFETY= produces 244
+findings, almost all in the audio path, where =UnsafePointer= work is the job
+rather than a mistake: the IO proc is handed raw buffers by Core Audio and must
+not allocate. Adopting it would mean annotating that code =@unsafe= to say what
+is already true, and the ratio of noise to insight is wrong. =MemberImportVisibility=
+is the same story at 38 findings, for less benefit.
+
+*A compiler bug worth remembering.* Passing an actor-isolated closure
+(=@MainActor (Double) -> Void=) as a parameter into a generic helper crashes
+=swift-frontend= while emitting the reabstraction thunk — only in a whole-module
+Release build, so a Debug build looks fine. =FilterRowView= therefore names
+*which* parameter a cell edits with an enum and writes its closures inline, where
+they inherit the view's own isolation and no thunk is produced. If a similar
+crash appears elsewhere, that is the shape to look for.
+
 * Formatting
 
 *swift-format*, Apple's own, which ships inside the Xcode toolchain: =xcrun

@@ -9,18 +9,21 @@ final class SettingsStoreTests: XCTestCase {
     private var defaults: UserDefaults!
     private var settings: SettingsStore!
 
-    override func setUp() {
-        super.setUp()
+    // `async` because a plain `setUp()` override is nonisolated, and this class
+    // is on the main actor: the async form inherits the class's isolation, so
+    // the fixtures can be built where the tests will use them.
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "coreeq.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         settings = SettingsStore(defaults: defaults)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
         settings = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     /// What a first launch sees. Every one of these is a decision: the

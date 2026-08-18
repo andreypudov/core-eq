@@ -129,15 +129,13 @@ struct FilterRowView: View {
         parameterCell(
             width: Theme.FilterRow.Column.frequency,
             scale: .filterFrequency,
-            value: \.frequency,
+            parameter: .frequency,
             unit: "Hz",
             // No thousands separator: this is a frequency, and "8,000 Hz" is
             // not how anyone writes one.
             format: .number.precision(.fractionLength(0)).grouping(.never),
             label: "Band \(index) frequency",
-            help: "Drag or scroll to set; double-click the knob to return to 1 kHz",
-            reset: { profileManager.setFilterFrequency(1_000, id: filter.id) },
-            commit: { profileManager.setFilterFrequency($0, id: filter.id) }
+            help: "Drag or scroll to set; double-click the knob to return to 1 kHz"
         )
     }
 
@@ -147,7 +145,7 @@ struct FilterRowView: View {
             parameterCell(
                 width: Theme.FilterRow.Column.gain,
                 scale: .filterGain,
-                value: \.gain,
+                parameter: .gain,
                 unit: "dB",
                 format: .number.precision(.fractionLength(1))
                     .sign(strategy: .always(includingZero: false)),
@@ -155,9 +153,7 @@ struct FilterRowView: View {
                 // grows out of the middle the way the sliders' fill does.
                 isBipolar: true,
                 label: "Band \(index) gain",
-                help: "Drag or scroll to set; double-click the knob to return to 0 dB",
-                reset: { profileManager.resetFilter(id: filter.id) },
-                commit: { profileManager.setFilterGain($0, id: filter.id) }
+                help: "Drag or scroll to set; double-click the knob to return to 0 dB"
             )
         } else {
             // High and low pass cut by slope alone, so there is no gain to show
@@ -171,13 +167,11 @@ struct FilterRowView: View {
         parameterCell(
             width: Theme.FilterRow.Column.q,
             scale: .filterQ,
-            value: \.q,
+            parameter: .q,
             unit: nil,
             format: .number.precision(.fractionLength(2)),
             label: "Band \(index) Q",
-            help: "Drag or scroll to set; double-click the knob to return to the default width",
-            reset: { profileManager.setFilterQ(BuiltInProfiles.defaultQ, id: filter.id) },
-            commit: { profileManager.setFilterQ($0, id: filter.id) }
+            help: "Drag or scroll to set; double-click the knob to return to the default width"
         )
     }
 
@@ -209,19 +203,37 @@ struct FilterRowView: View {
     /// Both dim while the band is switched off. They still work, because
     /// dialling a band in before letting it through is a reasonable way to
     /// work, but they are not describing anything anyone is hearing.
+    /// Which of a band's three numbers a cell edits.
+    ///
+    /// The cell used to take `reset` and `commit` closures. Under Swift 6 those
+    /// have to carry their actor isolation into a generic helper, and the
+    /// reabstraction thunk that produces crashed the optimiser outright in a
+    /// whole-module Release build. Naming the parameter instead keeps every
+    /// closure written inline in the view, where it inherits the view's own main
+    /// actor isolation and no thunk is needed.
+    private enum Parameter {
+        case frequency, gain, q
+
+        var keyPath: KeyPath<EQFilter, Double> {
+            switch self {
+            case .frequency: return \.frequency
+            case .gain: return \.gain
+            case .q: return \.q
+            }
+        }
+    }
+
     private func parameterCell(
         width: CGFloat,
         scale: KnobScale,
-        value: KeyPath<EQFilter, Double>,
+        parameter: Parameter,
         unit: String?,
         format: FloatingPointFormatStyle<Double>,
         isBipolar: Bool = false,
         label: String,
-        help: String,
-        reset: @escaping () -> Void,
-        commit: @escaping (Double) -> Void
+        help: String
     ) -> some View {
-        let binding = live(value, commit: commit)
+        let binding = live(parameter)
 
         return HStack(spacing: 6) {
             KnobControl(
@@ -230,7 +242,7 @@ struct FilterRowView: View {
                 tint: color,
                 isEnabled: isEnabled,
                 isBipolar: isBipolar,
-                onReset: reset
+                onReset: { reset(parameter) }
             )
             .frame(width: Theme.FilterRow.knobDiameter, height: Theme.FilterRow.knobDiameter)
             .accessibilityLabel(label)
@@ -259,17 +271,30 @@ struct FilterRowView: View {
     /// move one detent, and a scroll back the other way would land a detent
     /// short of where it began. That is exactly the drift this pass set out to
     /// remove; the ladder alone does not fix it.
-    private func live(
-        _ parameter: KeyPath<EQFilter, Double>,
-        commit: @escaping (Double) -> Void
-    ) -> Binding<Double> {
-        Binding(
+    private func live(_ parameter: Parameter) -> Binding<Double> {
+        let keyPath = parameter.keyPath
+        return Binding(
             get: {
-                profileManager.freeFilters.first { $0.id == filter.id }?[keyPath: parameter]
-                    ?? filter[keyPath: parameter]
+                profileManager.freeFilters.first { $0.id == filter.id }?[keyPath: keyPath]
+                    ?? filter[keyPath: keyPath]
             },
-            set: commit
+            set: { value in
+                switch parameter {
+                case .frequency: profileManager.setFilterFrequency(value, id: filter.id)
+                case .gain: profileManager.setFilterGain(value, id: filter.id)
+                case .q: profileManager.setFilterQ(value, id: filter.id)
+                }
+            }
         )
+    }
+
+    /// Double-clicking a knob returns its parameter to where a new band starts.
+    private func reset(_ parameter: Parameter) {
+        switch parameter {
+        case .frequency: profileManager.setFilterFrequency(1_000, id: filter.id)
+        case .gain: profileManager.resetFilter(id: filter.id)
+        case .q: profileManager.setFilterQ(BuiltInProfiles.defaultQ, id: filter.id)
+        }
     }
 
     private var enabledBinding: Binding<Bool> {

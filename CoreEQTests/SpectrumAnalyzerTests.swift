@@ -14,7 +14,7 @@ final class SpectrumAnalyzerTests: XCTestCase {
     }
 
     private func write(_ samples: [Float], to buffer: SpectrumAudioBuffer) {
-        var data = samples
+        let data = samples
         data.withUnsafeBufferPointer { pointer in
             guard let base = pointer.baseAddress else { return }
             buffer.write(interleaved: base, frames: samples.count, channels: 1)

@@ -70,7 +70,7 @@ final class AudioEngine: ObservableObject {
 
     private var defaultDeviceListener: AudioObjectPropertyListenerBlock?
     private var sampleRateListener: AudioObjectPropertyListenerBlock?
-    private var wakeObserver: NSObjectProtocol?
+    private var wakeObserver: (any NSObjectProtocol)?
     private var pendingRestart: DispatchWorkItem?
     private var retryCount = 0
 
