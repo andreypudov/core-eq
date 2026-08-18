@@ -97,10 +97,22 @@ toolchain if =xcode-select= points at the Command Line Tools):
 *** Tests
 
 =CoreEQTests= is a host-less logic bundle: it never launches the app or touches
-audio hardware, so it runs anywhere, including CI. It covers the filter math,
-the built-in profiles and Quick EQ weighting, =ProfileManager= (naming, rename,
-delete fallback, persistence, band-ladder alignment), and the analyzer's ring
-buffer.
+audio hardware, so it runs anywhere, including CI. Roughly one file per subject:
+
+- =BiquadTests=, =EQProcessorTests=, =AutoGainTests= — the maths, and what the
+  render path does with it.
+- =FilterChainTests=, =PresetLibraryTests=, =EQProfileTests= — the model as value
+  types, without a manager.
+- =ProfileManagerTests= — the live state: editing, presets, tone.
+- =DeviceStateTests= — what is remembered: per device, across a relaunch, and
+  between A and B.
+- =SettingsStoreTests=, =ThemeTests=, =ScrollAdjusterTests=, =KnobScaleTests=,
+  =SpectrumAnalyzerTests=, and the small format and colour files.
+
+*A warning about the runner.* =make test= builds incrementally, and a file
+rewritten quickly enough can be missed — the suite then runs and passes without
+the tests you just added. The count is the check: if the total does not move,
+the run is lying to you. =touch= the file and run again.
 
 Because the project uses =PBXFileSystemSynchronizedRootGroup=, the test target
 takes the whole =CoreEQ/= folder *minus* an exclusion list. A new source file
@@ -193,11 +205,13 @@ CoreEQ/
     AutoGain.swift          The trim that holds a preset at its original loudness
   Presets/
     EQFilter.swift          One filter: kind, frequency, gain, Q, ladder slot
-    EQProfile.swift         A named chain plus its preamp
+    EQProfile.swift         A named chain, its preamp, and its gain mode
+    FilterChain.swift       Chain arithmetic: the shape it holds, what tone does
     BuiltInProfiles.swift   Shipped presets + the band ladder they share
-    DeviceEQState.swift     What one output device was last playing
+    PresetLibrary.swift     The collection: naming, search, add / rename / delete
+    DeviceEQState.swift     What one output device was last playing, A and B
     QuickTone.swift         Bass / mid / treble weighting over the ladder
-    ProfileManager.swift    Active profile, working chain, per-device persistence
+    ProfileManager.swift    Orchestration: what is live, and keeping it in step
   UI/
     Theme.swift             Design tokens (accent, spacing, metrics)
     BandFormat.swift        Frequency and gain label formatting
@@ -209,8 +223,13 @@ CoreEQ/
       EqualizerSidebarView.swift Preset search + list, preset actions
       EqualizerDetailView.swift  Content column: header (device + its preset),
                                  graph, editors, preamp
-      FrequencyResponseView.swift Response curve, handles, spectrum backdrop
-      FilterListView.swift       Parametric editor: one row per added band
+      FrequencyResponseView.swift Response curve, handles, interaction
+      ResponseAxis.swift         Where a frequency sits — shared, and tested
+      SpectrumBackdrop.swift     The analyzer's output, behind the curve
+      FilterListView.swift       Parametric editor: the table and its titles
+      FilterRowView.swift        One band: swatch, kind, three knobs
+      ColorPalettePicker.swift   The eight colours a band can wear
+      ColumnGap.swift            The gap the titles and the rows share
       VerticalGainSlider.swift   Band gain slider
       GlobalGainView.swift       Preamp column beside the editors
       GainScale.swift            The dB scale both of those are read against
@@ -224,6 +243,7 @@ CoreEQ/
       GeneralSettingsView.swift Open at login, and room for more
       AboutSettingsView.swift   Mark, version, links, licence
       SettingsOpener.swift      Opens that window, at a chosen tab
+      SettingsRoute.swift       Which tab that is
     MenuBar/
       MenuBarController.swift NSStatusItem menu (presets, output, bypass, settings, quit)
       MenuHeaderView.swift    Title + on/off switch at the top of the menu
@@ -243,6 +263,19 @@ CoreEQ/
     AppIcon.icon/           Icon Composer document (macOS 26+ app icon)
     MenuBarIconTemplate.png (+@2x) Generated menu bar template (make icons)
 #+end_example
+
+*Where model logic lives.* =ProfileManager= is the only observable object in
+the model layer, and it is deliberately not where the thinking happens. The
+preset collection is =PresetLibrary=, chain arithmetic is =FilterChain=, and what
+a stored device slot *means* is =DeviceEQState.resolved(against:)=. All three are
+value types with no actor, no defaults and no dependencies, so they can be built
+and compared in a test directly — which is why =PresetLibraryTests= and
+=FilterChainTests= need no fixture at all.
+
+=PresetLibrary= is a struct rather than a second =ObservableObject= on purpose:
+SwiftUI does not follow nested observation, so an observable inside the manager
+would publish nothing to the views watching it. Held as a stored property, every
+mutation republishes for free.
 
 One top-level type per file, named after it — nested types stay with the
 type that owns them (=AudioEngine.Status=, =MenuRowView.Accessory=), and

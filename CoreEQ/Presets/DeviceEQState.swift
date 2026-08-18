@@ -149,3 +149,65 @@ struct DeviceEQState: Codable, Equatable {
         liveSlot = liveSlot.other
     }
 }
+
+extension DeviceEQState {
+    /// What this state means as something playable, read against the presets
+    /// that exist right now.
+    ///
+    /// Launch and a device switch both go through here. They used to carry a
+    /// copy of these rules each, which had already drifted: a slot holding an
+    /// explicit centred tone restored its edited chain on launch and the bare
+    /// preset on a switch. One reading, one behaviour.
+    struct Resolved {
+        var profileName: String
+        var filters: [EQFilter]
+        var preamp: Double
+        var bass: Double
+        var mid: Double
+        var treble: Double
+        var autoGain: Bool
+    }
+
+    func resolved(against profiles: [EQProfile]) -> Resolved {
+        // A preset that has since been deleted falls back to the default rather
+        // than to nothing, so a stale slot can never leave the app with no sound
+        // selected.
+        let profile = profiles.first { $0.name == profileName }
+            ?? profiles.first { $0.name == BuiltInProfiles.defaultProfileName }
+            ?? profiles[0]
+
+        var bass = 0.0, mid = 0.0, treble = 0.0
+        if let saved = tone, saved.count == 3 {
+            bass = saved[0].clamped(to: QuickTone.range)
+            mid = saved[1].clamped(to: QuickTone.range)
+            treble = saved[2].clamped(to: QuickTone.range)
+        }
+        let isToneNeutral = bass == 0 && mid == 0 && treble == 0
+
+        let chain: [EQFilter]
+        if !isToneNeutral {
+            // Tone positions win: the chain is derived from them, so the popover
+            // sliders and the audio cannot disagree about where the tone sits.
+            chain = FilterChain.applyingTone(bass: bass, mid: mid, treble: treble, to: profile.filters)
+        } else {
+            chain = filters.map(FilterChain.normalized) ?? profile.filters
+        }
+
+        // A computed trim is recomputed rather than trusted: the stored number
+        // was right for the chain as it stood, and the chain may have been
+        // normalised on the way in.
+        let trim = autoGain
+            ? AutoGain.trim(for: chain)
+            : preamp.clamped(to: BuiltInProfiles.preampRange)
+
+        return Resolved(
+            profileName: profile.name,
+            filters: chain,
+            preamp: trim,
+            bass: bass,
+            mid: mid,
+            treble: treble,
+            autoGain: autoGain
+        )
+    }
+}
