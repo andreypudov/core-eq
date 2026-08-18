@@ -180,6 +180,7 @@ CoreEQ/
     AppDelegate.swift       App lifecycle, main-window construction, wiring
     SettingsStore.swift     UserDefaults wrapper
     LoginItem.swift         Open-at-login, via SMAppService
+    EngineStatusBridge.swift Engine status, for the Settings scene
   Audio/
     AudioEngine.swift       Tap + aggregate device + IO proc, device-change handling
     AudioDevices.swift      Output device enumeration + default-device get/set
@@ -219,8 +220,10 @@ CoreEQ/
       AppMark.swift              Vector app mark for the sidebar
       DownwardPointer.swift      Tail shape under the gain readout
     Settings/
-      GeneralSettingsView.swift The Settings window's only pane
-      SettingsOpener.swift      Opens that window from the AppKit menu
+      SettingsView.swift        The window: General and About tabs
+      GeneralSettingsView.swift Open at login, and room for more
+      AboutSettingsView.swift   Mark, version, links, licence
+      SettingsOpener.swift      Opens that window, at a chosen tab
     MenuBar/
       MenuBarController.swift NSStatusItem menu (presets, output, bypass, settings, quit)
       MenuHeaderView.swift    Title + on/off switch at the top of the menu
@@ -378,6 +381,33 @@ Three consequences worth knowing:
   =SettingsLink= and =EnvironmentValues.openSettings= are the supported routes and
   both live inside SwiftUI, so =SettingsOpener= hosts a one-point transparent view
   in the status item's button and keeps the action out of its environment.
+
+  About is a tab of that window rather than =orderFrontStandardAboutPanel=. The
+  panel is free and reads the name, version and copyright out of the bundle, so
+  giving it up means owning those — =AboutSettingsView= reads the same two
+  Info.plist keys for exactly that reason. What it buys is one surface instead of
+  two, which matters more than usual here because an accessory app has no App
+  menu and every surface needs its own way in.
+
+  Both tabs are pinned to one size. A =TabView= sizes itself to whichever pane is
+  showing, and a form and a short About block are nowhere near the same height, so
+  switching made the window jump — which in a window this small is the most
+  noticeable thing about it. Apple's own Settings windows do resize between panes,
+  but between panes of comparable weight.
+
+  The System Audio Recording row reports the *engine*, not a permission API,
+  because there isn't one: nothing answers "may I tap system audio", and the only
+  ground truth is whether the tap was created. That also lets it distinguish a
+  refusal from a stopped engine instead of blaming the user for the latter.
+  =EngineStatusBridge= carries that one fact across the scene boundary — the
+  window is built by SwiftUI on its own schedule and cannot be handed an engine
+  the app delegate creates lazily.
+
+  =SettingsOpener.shared= is that way in for all three callers: the header's
+  gear, the sidebar's app mark, and the menu row. A scene cannot be handed an
+  argument, so =SettingsRoute= holds the destination tab and is set immediately
+  before the window opens — deliberately not persisted, so the gear always means
+  General and the app mark always means About.
 
   Two dead ends, both measured rather than assumed: a hosted =SettingsLink=
   contains no =NSButton= to =performClick=, because SwiftUI draws its own

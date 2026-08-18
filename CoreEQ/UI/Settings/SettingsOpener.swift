@@ -22,6 +22,11 @@ import os
 /// item's button rather than making a window of its own.
 @MainActor
 final class SettingsOpener {
+    /// One opener for the whole app: the window's gear, the sidebar's app mark,
+    /// and the status menu all reach the same window, and only one of them owns
+    /// a view that can capture the action.
+    static let shared = SettingsOpener()
+
     private var openSettings: (() -> Void)?
     private var host: NSView?
     private let logger = Logger(subsystem: "com.andreypudov.coreeq", category: "Settings")
@@ -45,7 +50,14 @@ final class SettingsOpener {
         host = capture
     }
 
-    func open() {
+    /// Opens the Settings window at `tab`.
+    ///
+    /// `openSettings` takes no argument, so the destination is set first and the
+    /// window reads it as it appears — two entry points, one window, one piece
+    /// of state.
+    func open(tab: SettingsTab = .general) {
+        SettingsRoute.shared.tab = tab
+
         // An accessory application is not frontmost when its status menu is
         // clicked, so the window would otherwise open behind whatever is.
         NSApp.activate(ignoringOtherApps: true)
@@ -56,6 +68,26 @@ final class SettingsOpener {
         }
         openSettings()
     }
+}
+
+/// The Settings window's two panes.
+enum SettingsTab: Hashable {
+    case general
+    case about
+}
+
+/// Which pane the Settings window should show.
+///
+/// A scene cannot be handed an argument, so the destination is put here before
+/// the window is asked to open. It is not persisted: the gear means General and
+/// the app mark means About, every time, rather than "wherever you were last".
+@MainActor
+final class SettingsRoute: ObservableObject {
+    static let shared = SettingsRoute()
+
+    @Published var tab: SettingsTab = .general
+
+    private init() {}
 }
 
 /// Hands its `openSettings` environment action to whoever installed it.

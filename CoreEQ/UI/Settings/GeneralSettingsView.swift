@@ -1,16 +1,19 @@
+import AppKit
 import SwiftUI
 
-/// The Settings window's only pane.
+/// What CoreEQ can be told.
 ///
-/// CoreEQ has no menu bar of its own — it is an accessory application, so there is
-/// no App menu — which is why this is reached from the status menu rather than
-/// from ⌘, like everywhere else on the system.
+/// Reached from the gear in the window's header, or from “Settings…” in the
+/// status menu — CoreEQ is an accessory application with no App menu, so there
+/// is no ⌘, to reach it with.
 struct GeneralSettingsView: View {
     /// Mirrors the system's answer rather than storing one of its own. Refreshed
-    /// whenever the window appears or the app is brought forward, because the
-    /// user can revoke the login item in System Settings while this is on screen.
+    /// whenever the app is brought forward, because the user can revoke the login
+    /// item in System Settings while this is on screen.
     @State private var opensAtLogin = LoginItem.isEnabled
     @State private var loginItemFailed = false
+
+    @ObservedObject private var engine = EngineStatusBridge.shared
 
     var body: some View {
         Form {
@@ -31,16 +34,93 @@ struct GeneralSettingsView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                LabeledContent("System Audio Recording") {
+                    HStack(spacing: 8) {
+                        Label(permission.title, systemImage: permission.symbol)
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(permission.isGranted ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+
+                        if !permission.isGranted {
+                            Button("Open System Settings…") { openPrivacySettings() }
+                        }
+                    }
+                }
+            } footer: {
+                Text(permission.explanation)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
-        .fixedSize(horizontal: false, vertical: true)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            // Coming back from System Settings is the likeliest way for this to
-            // have changed underneath us.
+            // Coming back from System Settings is the likeliest way for either of
+            // these to have changed underneath us.
             opensAtLogin = LoginItem.isEnabled
         }
     }
+
+    // MARK: - The permission
+
+    /// What CoreEQ can honestly say about the permission.
+    ///
+    /// There is no API that answers "may I tap system audio". The only ground
+    /// truth is whether the tap was created, so this reports the engine rather
+    /// than guessing — which also means it can distinguish "refused" from "not
+    /// running" instead of blaming the user for a stopped engine.
+    private enum Permission {
+        case granted
+        case refused
+        case notRunning
+
+        var title: String {
+            switch self {
+            case .granted: return "Granted"
+            case .refused: return "Not granted"
+            case .notRunning: return "Not running"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .granted: return "checkmark.circle"
+            case .refused: return "exclamationmark.triangle"
+            case .notRunning: return "pause.circle"
+            }
+        }
+
+        var isGranted: Bool { self == .granted }
+
+        var explanation: String {
+            switch self {
+            case .granted:
+                return "CoreEQ processes the sound you hear. Nothing is recorded, stored, or transmitted."
+            case .refused:
+                return "Without it CoreEQ cannot process system audio. Grant it under Privacy & Security → "
+                    + "Screen & System Audio Recording, then quit and reopen CoreEQ."
+            case .notRunning:
+                return "The equalizer is not processing at the moment, so there is nothing to report yet."
+            }
+        }
+    }
+
+    private var permission: Permission {
+        switch engine.status {
+        case .running: return .granted
+        case .failed: return .refused
+        case .stopped: return .notRunning
+        }
+    }
+
+    private func openPrivacySettings() {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        ) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    // MARK: - Login item
 
     private var loginItemBinding: Binding<Bool> {
         Binding(

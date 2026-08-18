@@ -107,6 +107,8 @@ struct EqualizerDetailView: View {
                 // window, so it belongs at the end of the row rather than inside
                 // any one section. Deliberately not dimmed with the rest when
                 // off — it is the way back on.
+                settingsButton
+
                 Toggle("", isOn: $audioEngine.isEnabled)
                     .toggleStyle(.power)
                     .labelsHidden()
@@ -338,6 +340,27 @@ struct EqualizerDetailView: View {
         // Room for the labels hanging off the top border, so they cut the stroke
         // rather than the graph above.
         .padding(.top, Theme.borderLabelHeight / 2)
+    }
+
+    /// The way into Settings from the window.
+    ///
+    /// Occasional controls belong here rather than in the status menu, which
+    /// should be a preset, a tone control and a way out. It sits *before* the
+    /// power button: that one governs everything in the window, so it keeps the
+    /// end of the row.
+    private var settingsButton: some View {
+        Button {
+            SettingsOpener.shared.open(tab: .general)
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .padding(3)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Settings")
+        .help("CoreEQ settings")
     }
 
     /// Two working states of one preset, and the switch between them.

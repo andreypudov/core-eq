@@ -12,7 +12,7 @@ struct CoreEQApp: App {
         // application, CoreEQ has no App menu to open it from, so the status
         // menu does — see `MenuBarController`.
         Settings {
-            GeneralSettingsView()
+            SettingsView()
         }
     }
 }

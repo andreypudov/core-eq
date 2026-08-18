@@ -150,8 +150,13 @@ Download the latest =CoreEQ-x.y.zip= from the *Releases* page, unzip, and move
 * Using CoreEQ
 
 *Menu bar* — master switch, output device, preset selection, Quick EQ tone
-controls, *Open Equalizer…*, *Settings…*, *About CoreEQ*, and *Quit*. CoreEQ has
-no menu bar of its own, so this is where those live.
+controls, *Open Equalizer…*, *Settings…*, and *Quit*. CoreEQ has no menu bar of
+its own, so this is where those live.
+
+*Settings* — a gear in the window's header, or *Settings…* in the menu. Two tabs:
+*General*, which holds *Open CoreEQ at login* and the status of the System Audio
+Recording permission, and *About*. Clicking the CoreEQ mark at the top of the
+sidebar opens About directly.
 
 *Window* — presets in the sidebar, with a search field and your own presets
 above the built-ins; the response graph, the *Graphic* / *Parametric* editors,

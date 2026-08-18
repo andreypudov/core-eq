@@ -31,12 +31,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// source, and stream configuration, twice, every time the menu was opened.
     private let outputs: AudioDeviceList
     private let openMainWindow: () -> Void
-    private let showAbout: () -> Void
 
-    /// Owned here because opening the Settings scene needs a SwiftUI view inside
-    /// a live window, and the status item's button is the one this class already
-    /// has. See `SettingsOpener`.
-    private let settingsOpener = SettingsOpener()
+    /// Installed here because opening the Settings scene needs a SwiftUI view
+    /// inside a live window, and the status item's button is the one that exists
+    /// for the app's whole life. Everything else — the window's gear, the
+    /// sidebar's app mark — reaches the same shared opener. See `SettingsOpener`.
+    private let settingsOpener = SettingsOpener.shared
 
     /// Kept between rebuilds so tone-slider changes can redraw the graph in
     /// place while the menu stays open.
@@ -64,14 +64,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         profileManager: ProfileManager,
         audioEngine: AudioEngine,
         outputs: AudioDeviceList,
-        openMainWindow: @escaping () -> Void,
-        showAbout: @escaping () -> Void
+        openMainWindow: @escaping () -> Void
     ) {
         self.profileManager = profileManager
         self.audioEngine = audioEngine
         self.outputs = outputs
         self.openMainWindow = openMainWindow
-        self.showAbout = showAbout
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -126,8 +124,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         // The tail every menu bar item in the system carries, and the only place
         // CoreEQ can carry it: as an accessory application it has no menu bar of
-        // its own, so there is no App menu to hold About, Settings, or Quit.
-        // Wi-Fi ends in "Wi-Fi Settings…" for the same reason.
+        // its own, so there is no App menu to hold Settings or Quit. Wi-Fi ends
+        // in "Wi-Fi Settings…" for the same reason.
+        //
+        // About is not here. It is a tab of the Settings window, reached by the
+        // gear in the main window or by clicking the app mark in its sidebar —
+        // this row stays because the window is optional and the setting most
+        // worth having, "Open at login", matters most to whoever never opens it.
         //
         // No key equivalents: a status menu's shortcuts only fire while the menu
         // is open, so ⌘, here would be a promise the app cannot keep.
@@ -136,12 +139,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         )
         settingsItem.target = self
         menu.addItem(settingsItem)
-
-        let aboutItem = NSMenuItem(
-            title: "About CoreEQ", action: #selector(showAboutItem(_:)), keyEquivalent: ""
-        )
-        aboutItem.target = self
-        menu.addItem(aboutItem)
 
         menu.addItem(.separator())
 
@@ -523,10 +520,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func openSettingsItem(_ sender: NSMenuItem) {
         settingsOpener.open()
-    }
-
-    @objc private func showAboutItem(_ sender: NSMenuItem) {
-        showAbout()
     }
 
     @objc private func quit(_ sender: NSMenuItem) {

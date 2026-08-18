@@ -17,6 +17,9 @@ struct EqualizerSidebarView: View {
     @State private var renameText = ""
     @FocusState private var renameFieldFocused: Bool
 
+    /// Whether the app mark is under the pointer — its only affordance.
+    @State private var isHoveringAppMark = false
+
     /// Preset the pointer is over, for the row's hover wash.
     @State private var hoveredPreset: String?
 
@@ -87,31 +90,54 @@ struct EqualizerSidebarView: View {
         }
     }
 
-    /// App mark and name, as an identity block rather than a control.
+    /// App mark and name — an identity block that is also the way into About.
+    ///
+    /// Clicking an app's identity to see the app's identity is coherent, and
+    /// unlike a link out to a web page it never takes anyone out of the app. It
+    /// is a shortcut rather than the only route — the gear in the header reaches
+    /// the same window — so it costs nothing if it is never found, which is what
+    /// makes a hidden affordance acceptable here.
+    ///
+    /// At rest it is not a button: no border, no chevron, nothing claiming to be
+    /// pressable. The hover wash and the pointing hand are the whole cue, which
+    /// is what a Mac gives for something clickable that is not shaped like a
+    /// control.
     private var appHeader: some View {
-        HStack(spacing: 10) {
-            AppMark()
-                .frame(width: 34, height: 34)
-                .accessibilityHidden(true)
+        Button {
+            SettingsOpener.shared.open(tab: .about)
+        } label: {
+            HStack(spacing: 10) {
+                AppMark()
+                    .frame(width: 34, height: 34)
+                    .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("CoreEQ")
-                    .font(.system(size: 14, weight: .semibold))
-                // States what CoreEQ does that Music.app's equalizer doesn't:
-                // it shapes every application's output, not one player's. Better
-                // here than an adjective — "professional" is a claim about the
-                // app, and the window is already making that case on its own.
-                Text("System-wide equalizer")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("CoreEQ")
+                        .font(.system(size: 14, weight: .semibold))
+                    // States what CoreEQ does that Music.app's equalizer doesn't:
+                    // it shapes every application's output, not one player's.
+                    Text("System-wide equalizer")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
             }
-
-            Spacer(minLength: 0)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isHoveringAppMark ? Color.primary.opacity(0.07) : Color.clear)
+            )
         }
-        .padding(.horizontal, 16)
+        .buttonStyle(.plain)
+        .onHover { isHoveringAppMark = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHoveringAppMark)
+        .accessibilityLabel("About CoreEQ")
+        .help("About CoreEQ")
+        .padding(.horizontal, 10)
         .padding(.top, 8)
-        // Closer to the divider than it was: the switch that used to sit between
-        // the two is in the window header now.
         .padding(.bottom, 12)
     }
 

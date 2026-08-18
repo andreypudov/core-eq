@@ -17,6 +17,7 @@
 			membershipExceptions = (
 				App/AppDelegate.swift,
 				App/CoreEQApp.swift,
+				App/EngineStatusBridge.swift,
 				Audio/AudioDeviceList.swift,
 				Audio/AudioDevices.swift,
 				Audio/AudioEngine.swift,
@@ -43,8 +44,10 @@
 				UI/MenuBar/QuickEQBodyView.swift,
 				UI/MenuBar/QuickEQMenuMetrics.swift,
 				UI/PowerToggleStyle.swift,
+				UI/Settings/AboutSettingsView.swift,
 				UI/Settings/GeneralSettingsView.swift,
 				UI/Settings/SettingsOpener.swift,
+				UI/Settings/SettingsView.swift,
 			);
 			target = 1A0000000000000000000010 /* CoreEQTests */;
 		};
