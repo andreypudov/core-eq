@@ -1,6 +1,7 @@
-import XCTest
+import Foundation
+import Testing
 
-final class KnobScaleTests: XCTestCase {
+struct KnobScaleTests {
     private let frequency = KnobScale.frequency(BuiltInProfiles.filterFrequencyRange)
     private let q = KnobScale.q(BuiltInProfiles.filterQRange)
     private let gain = KnobScale.linear(BuiltInProfiles.gainRange, step: 0.5)
@@ -11,7 +12,7 @@ final class KnobScaleTests: XCTestCase {
     /// then down by the same number of detents has to end where it started —
     /// in whatever mixture of batch sizes the trackpad delivers, since a flick
     /// arrives as several steps at once and a slow roll as one at a time.
-    func testSteppingUpAndBackDownReturnsToTheStartingValue() {
+    @Test func steppingUpAndBackDownReturnsToTheStartingValue() {
         for (name, scale, starts) in [
             // Every one of these is a Q the app itself produces: the default a
             // band is created with, the values built-in presets carry, and the
@@ -41,8 +42,8 @@ final class KnobScaleTests: XCTestCase {
                             remaining -= steps
                         }
 
-                        XCTAssertEqual(
-                            value, start, accuracy: 1e-9,
+                        #expect(
+                            value.isClose(to: start, within: 1e-9),
                             "\(name) drifted from \(start) after \(up) up and \(up) down in batches of \(batch)"
                         )
                     }
@@ -54,66 +55,66 @@ final class KnobScaleTests: XCTestCase {
     /// The round trip has to be exact rather than merely close: `EQFilter`
     /// compares with `==`, and a value a fraction away would leave a preset
     /// reporting unsaved changes that the user cannot see or undo.
-    func testTheReturnedValueIsBitForBitTheOneItStartedAs() {
+    @Test func theReturnedValueIsBitForBitTheOneItStartedAs() {
         let start = 0.7
         let moved = q.stepped(start, by: 4)
-        XCTAssertEqual(q.stepped(moved, by: -4), start)
+        #expect(q.stepped(moved, by: -4) == start)
     }
 
     // MARK: - Detents
 
-    func testAStepAlwaysMovesTheValue() {
+    @Test func aStepAlwaysMovesTheValue() {
         for scale in [q, frequency, gain] {
             for value in [scale.range.lowerBound, scale.range.upperBound / 2] {
-                XCTAssertGreaterThan(scale.stepped(value, by: 1), value)
+                #expect(scale.stepped(value, by: 1) > value)
             }
-            XCTAssertLessThan(scale.stepped(scale.range.upperBound, by: -1), scale.range.upperBound)
+            #expect(scale.stepped(scale.range.upperBound, by: -1) < scale.range.upperBound)
         }
     }
 
-    func testStepsStopAtTheEndsOfTheRange() {
-        XCTAssertEqual(q.stepped(q.range.upperBound, by: 50), q.range.upperBound)
-        XCTAssertEqual(
-            frequency.stepped(frequency.range.lowerBound, by: -50), frequency.range.lowerBound)
+    @Test func stepsStopAtTheEndsOfTheRange() {
+        #expect(q.stepped(q.range.upperBound, by: 50) == q.range.upperBound)
+        #expect(
+            frequency.stepped(frequency.range.lowerBound, by: -50) == frequency.range.lowerBound)
     }
 
     /// A detent is a useful size at any point on the scale: a twentieth of a Q,
     /// half a decibel, and a frequency step of a few percent — single hertz in
     /// the bass, hundreds at the top of the range.
-    func testResolutionFollowsTheValue() {
-        XCTAssertEqual(q.stepped(0.5, by: 1), 0.55, accuracy: 1e-9)
-        XCTAssertEqual(q.stepped(1.0, by: 1), 1.05, accuracy: 1e-9)
-        XCTAssertEqual(q.stepped(5.0, by: 1), 5.05, accuracy: 1e-9)
+    @Test func resolutionFollowsTheValue() {
+        #expect(q.stepped(0.5, by: 1).isClose(to: 0.55, within: 1e-9))
+        #expect(q.stepped(1.0, by: 1).isClose(to: 1.05, within: 1e-9))
+        #expect(q.stepped(5.0, by: 1).isClose(to: 5.05, within: 1e-9))
 
-        XCTAssertEqual(frequency.stepped(50, by: 1), 51, accuracy: 1e-9)
-        XCTAssertEqual(frequency.stepped(1_000, by: 1), 1_050, accuracy: 1e-9)
-        XCTAssertEqual(frequency.stepped(12_000, by: 1), 12_100, accuracy: 1e-9)
+        #expect(frequency.stepped(50, by: 1).isClose(to: 51, within: 1e-9))
+        #expect(frequency.stepped(1_000, by: 1).isClose(to: 1_050, within: 1e-9))
+        #expect(frequency.stepped(12_000, by: 1).isClose(to: 12_100, within: 1e-9))
 
-        XCTAssertEqual(gain.stepped(0, by: 1), 0.5, accuracy: 1e-9)
+        #expect(gain.stepped(0, by: 1).isClose(to: 0.5, within: 1e-9))
     }
 
     /// A value typed into the field sits between rungs. The first step has to
     /// move in the direction asked for rather than to the nearest rung, which
     /// could be behind it.
-    func testSteppingFromBetweenRungsMovesInTheDirectionAsked() {
-        XCTAssertEqual(frequency.stepped(1_234, by: 1), 1_250, accuracy: 1e-9)
-        XCTAssertEqual(frequency.stepped(1_234, by: -1), 1_200, accuracy: 1e-9)
+    @Test func steppingFromBetweenRungsMovesInTheDirectionAsked() {
+        #expect(frequency.stepped(1_234, by: 1).isClose(to: 1_250, within: 1e-9))
+        #expect(frequency.stepped(1_234, by: -1).isClose(to: 1_200, within: 1e-9))
     }
 
     // MARK: - Snapping
 
-    func testSnappingLandsOnARungInsideTheRange() {
-        XCTAssertEqual(frequency.snapped(1_234), 1_250, accuracy: 1e-9)
-        XCTAssertEqual(frequency.snapped(99_999), frequency.range.upperBound, accuracy: 1e-9)
-        XCTAssertEqual(q.snapped(0), q.range.lowerBound, accuracy: 1e-9)
-        XCTAssertEqual(gain.snapped(4.3), 4.5, accuracy: 1e-9)
+    @Test func snappingLandsOnARungInsideTheRange() {
+        #expect(frequency.snapped(1_234).isClose(to: 1_250, within: 1e-9))
+        #expect(frequency.snapped(99_999).isClose(to: frequency.range.upperBound, within: 1e-9))
+        #expect(q.snapped(0).isClose(to: q.range.lowerBound, within: 1e-9))
+        #expect(gain.snapped(4.3).isClose(to: 4.5, within: 1e-9))
     }
 
-    func testSnappingIsIdempotent() {
+    @Test func snappingIsIdempotent() {
         for scale in [q, frequency, gain] {
             for fraction in stride(from: 0.0, through: 1.0, by: 0.05) {
                 let once = scale.snapped(scale.value(at: fraction))
-                XCTAssertEqual(scale.snapped(once), once, accuracy: 1e-12)
+                #expect(scale.snapped(once).isClose(to: once, within: 1e-12))
             }
         }
     }
@@ -123,21 +124,21 @@ final class KnobScaleTests: XCTestCase {
     /// Frequency and Q are read logarithmically, so the middle of the sweep is
     /// the geometric middle of the range — a knob whose useful values all sit
     /// in its first few degrees is a knob nobody can set.
-    func testLogarithmicSweepPutsTheGeometricMiddleAtTheMiddle() {
-        XCTAssertEqual(frequency.fraction(of: 632.45), 0.5, accuracy: 0.01)
-        XCTAssertEqual(q.fraction(of: 1.0), 0.5, accuracy: 0.01)
+    @Test func logarithmicSweepPutsTheGeometricMiddleAtTheMiddle() {
+        #expect(frequency.fraction(of: 632.45).isClose(to: 0.5, within: 0.01))
+        #expect(q.fraction(of: 1.0).isClose(to: 0.5, within: 0.01))
     }
 
-    func testLinearSweepPutsZeroGainAtTheMiddle() {
-        XCTAssertEqual(gain.fraction(of: 0), 0.5, accuracy: 1e-9)
+    @Test func linearSweepPutsZeroGainAtTheMiddle() {
+        #expect(gain.fraction(of: 0).isClose(to: 0.5, within: 1e-9))
     }
 
-    func testTheSweepEndsAreTheRangeEnds() {
+    @Test func theSweepEndsAreTheRangeEnds() {
         for scale in [q, frequency, gain] {
-            XCTAssertEqual(scale.value(at: 0), scale.range.lowerBound, accuracy: 1e-9)
-            XCTAssertEqual(scale.value(at: 1), scale.range.upperBound, accuracy: 1e-9)
-            XCTAssertEqual(scale.fraction(of: scale.range.lowerBound), 0, accuracy: 1e-9)
-            XCTAssertEqual(scale.fraction(of: scale.range.upperBound), 1, accuracy: 1e-9)
+            #expect(scale.value(at: 0).isClose(to: scale.range.lowerBound, within: 1e-9))
+            #expect(scale.value(at: 1).isClose(to: scale.range.upperBound, within: 1e-9))
+            #expect(scale.fraction(of: scale.range.lowerBound).isClose(to: 0, within: 1e-9))
+            #expect(scale.fraction(of: scale.range.upperBound).isClose(to: 1, within: 1e-9))
         }
     }
 }

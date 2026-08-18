@@ -1,53 +1,49 @@
-import XCTest
+import Foundation
+import Testing
 
 /// Everything the app remembers between launches passes through here, so a
 /// silent failure in this file is a user's presets and per-device state
 /// disappearing.
-@MainActor
-final class SettingsStoreTests: XCTestCase {
-    private var suiteName = ""
-    private var defaults: UserDefaults!
-    private var settings: SettingsStore!
+@MainActor final class SettingsStoreTests {
+    private let store: TemporaryDefaults
+    private let defaults: UserDefaults
+    private let settings: SettingsStore
 
-    // `async` because a plain `setUp()` override is nonisolated, and this class
-    // is on the main actor: the async form inherits the class's isolation, so
-    // the fixtures can be built where the tests will use them.
-    override func setUp() async throws {
-        try await super.setUp()
-        suiteName = "coreeq.tests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+    // A class rather than a struct: `deinit` is what stands in for
+    // `tearDown()`, and only a class has one. It is `isolated` so it can reach
+    // the main-actor properties it has to clean up.
+    init() throws {
+        store = try #require(TemporaryDefaults())
+        defaults = store.values
         settings = SettingsStore(defaults: defaults)
     }
 
-    override func tearDown() async throws {
-        defaults.removePersistentDomain(forName: suiteName)
-        defaults = nil
-        settings = nil
-        try await super.tearDown()
+    isolated deinit {
+        store.remove()
     }
 
     /// What a first launch sees. Every one of these is a decision: the
     /// equalizer starts on, and nothing else is remembered yet.
-    func testAFreshInstallStartsEmptyAndEnabled() {
-        XCTAssertTrue(settings.isEnabled, "the equalizer should be on the first time it is opened")
-        XCTAssertNil(settings.activeProfileName)
-        XCTAssertNil(settings.workingFilters)
-        XCTAssertNil(settings.workingPreamp)
-        XCTAssertNil(settings.tone)
-        XCTAssertNil(settings.legacyCustomGains)
-        XCTAssertTrue(settings.userProfiles.isEmpty)
-        XCTAssertTrue(settings.deviceStates.isEmpty)
+    @Test func aFreshInstallStartsEmptyAndEnabled() {
+        #expect(settings.isEnabled, "the equalizer should be on the first time it is opened")
+        #expect(settings.activeProfileName == nil)
+        #expect(settings.workingFilters == nil)
+        #expect(settings.workingPreamp == nil)
+        #expect(settings.tone == nil)
+        #expect(settings.legacyCustomGains == nil)
+        #expect(settings.userProfiles.isEmpty)
+        #expect(settings.deviceStates.isEmpty)
     }
 
-    func testTheEnabledFlagRoundTrips() {
+    @Test func theEnabledFlagRoundTrips() {
         settings.isEnabled = false
-        XCTAssertFalse(SettingsStore(defaults: defaults).isEnabled)
+        #expect(!SettingsStore(defaults: defaults).isEnabled)
 
         settings.isEnabled = true
-        XCTAssertTrue(SettingsStore(defaults: defaults).isEnabled)
+        #expect(SettingsStore(defaults: defaults).isEnabled)
     }
 
-    func testUserProfilesRoundTrip() {
+    @Test func userProfilesRoundTrip() {
         let profile = EQProfile(
             name: "Late Night",
             filters: BuiltInProfiles.emptyBandChain() + [
@@ -58,18 +54,18 @@ final class SettingsStoreTests: XCTestCase {
         settings.userProfiles = [profile]
 
         let restored = SettingsStore(defaults: defaults).userProfiles
-        XCTAssertEqual(restored.count, 1)
-        XCTAssertEqual(restored.first?.name, "Late Night")
-        XCTAssertEqual(restored.first?.preamp, -2.5)
-        XCTAssertEqual(restored.first?.filters, profile.filters)
-        XCTAssertEqual(
-            restored.first?.freeFilters.first?.colorIndex, 2,
+        #expect(restored.count == 1)
+        #expect(restored.first?.name == "Late Night")
+        #expect(restored.first?.preamp == -2.5)
+        #expect(restored.first?.filters == profile.filters)
+        #expect(
+            restored.first?.freeFilters.first?.colorIndex == 2,
             "a band's colour is part of the preset")
     }
 
     /// The per-device slots are the whole point of `DeviceEQState`: two devices
     /// must not share a key, and each must come back as it went in.
-    func testDeviceStatesRoundTripPerDevice() {
+    @Test func deviceStatesRoundTripPerDevice() {
         var chain = BuiltInProfiles.emptyBandChain()
         chain[0].gain = 6
         settings.deviceStates = [
@@ -79,25 +75,25 @@ final class SettingsStoreTests: XCTestCase {
         ]
 
         let restored = SettingsStore(defaults: defaults).deviceStates
-        XCTAssertEqual(restored.count, 2)
-        XCTAssertEqual(restored["speakers"]?.profileName, "Rock")
-        XCTAssertEqual(restored["speakers"]?.preamp, -1)
-        XCTAssertEqual(restored["speakers"]?.tone, [1, 0, -1])
-        XCTAssertEqual(restored["speakers"]?.filters?.first?.gain, 6)
-        XCTAssertEqual(restored["headphones"]?.profileName, "Jazz")
-        XCTAssertNil(restored["headphones"]?.filters, "an unedited device stores no chain")
+        #expect(restored.count == 2)
+        #expect(restored["speakers"]?.profileName == "Rock")
+        #expect(restored["speakers"]?.preamp == -1)
+        #expect(restored["speakers"]?.tone == [1, 0, -1])
+        #expect(restored["speakers"]?.filters?.first?.gain == 6)
+        #expect(restored["headphones"]?.profileName == "Jazz")
+        #expect(restored["headphones"]?.filters == nil, "an unedited device stores no chain")
     }
 
     /// The no-device case is filed under the empty string, which no real UID
     /// can collide with — so it has to survive as a key.
-    func testTheNoDeviceSlotIsAValidKey() {
+    @Test func theNoDeviceSlotIsAValidKey() {
         settings.deviceStates = ["": DeviceEQState(profileName: "Flat", preamp: 3)]
-        XCTAssertEqual(SettingsStore(defaults: defaults).deviceStates[""]?.preamp, 3)
+        #expect(SettingsStore(defaults: defaults).deviceStates[""]?.preamp == 3)
     }
 
     /// Each legacy key can be written back as nil, because migration consumes
     /// them: a key that would not clear would migrate on every launch.
-    func testLegacyKeysCanBeCleared() {
+    @Test func legacyKeysCanBeCleared() {
         settings.activeProfileName = "Rock"
         settings.workingFilters = BuiltInProfiles.emptyBandChain()
         settings.workingPreamp = -3
@@ -111,21 +107,21 @@ final class SettingsStoreTests: XCTestCase {
         settings.legacyCustomGains = nil
 
         let reopened = SettingsStore(defaults: defaults)
-        XCTAssertNil(reopened.activeProfileName)
-        XCTAssertNil(reopened.workingFilters)
-        XCTAssertNil(reopened.workingPreamp)
-        XCTAssertNil(reopened.tone)
-        XCTAssertNil(reopened.legacyCustomGains)
+        #expect(reopened.activeProfileName == nil)
+        #expect(reopened.workingFilters == nil)
+        #expect(reopened.workingPreamp == nil)
+        #expect(reopened.tone == nil)
+        #expect(reopened.legacyCustomGains == nil)
     }
 
     /// Defaults are shared with anything else on the machine, and a corrupt or
     /// foreign value must not take the app down with it.
-    func testRubbishInDefaultsIsIgnoredRatherThanFatal() {
+    @Test func rubbishInDefaultsIsIgnoredRatherThanFatal() {
         defaults.set("not a profile at all", forKey: "userProfiles")
         defaults.set(Data([0x00, 0x01]), forKey: "deviceStates")
 
         let reopened = SettingsStore(defaults: defaults)
-        XCTAssertTrue(reopened.userProfiles.isEmpty)
-        XCTAssertTrue(reopened.deviceStates.isEmpty)
+        #expect(reopened.userProfiles.isEmpty)
+        #expect(reopened.deviceStates.isEmpty)
     }
 }

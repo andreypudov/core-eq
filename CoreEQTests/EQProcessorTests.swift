@@ -1,5 +1,6 @@
 import CoreAudio
-import XCTest
+import Foundation
+import Testing
 
 /// The audio path itself: what the user actually hears.
 ///
@@ -8,7 +9,7 @@ import XCTest
 /// drives it — an input buffer list in, an output buffer list out — so these
 /// exercise the real `render` entry point rather than some testable subset of
 /// it.
-final class EQProcessorTests: XCTestCase {
+struct EQProcessorTests {
     private let sampleRate = 48_000.0
 
     // MARK: - Driving the processor
@@ -87,7 +88,7 @@ final class EQProcessorTests: XCTestCase {
     /// Bypass has to be *bit-exact* passthrough, not merely inaudible: it is
     /// the control a listener uses to decide whether the equalizer is doing
     /// anything they want, and any processing at all would prejudice that.
-    func testBypassIsBitExactPassthrough() {
+    @Test func bypassIsBitExactPassthrough() {
         let processor = makeProcessor(
             filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)],
             preamp: -6
@@ -97,32 +98,32 @@ final class EQProcessorTests: XCTestCase {
         let input = sine(1_000, frames: 512)
         let output = renderSettled(processor, input)
 
-        XCTAssertEqual(output, input, "bypass altered the samples")
+        #expect(output == input, "bypass altered the samples")
     }
 
     /// An empty chain is not a special case in the processor — it is a chain of
     /// no filters — but it still has to leave the audio alone.
-    func testAnEmptyChainLeavesTheAudioAlone() {
+    @Test func anEmptyChainLeavesTheAudioAlone() {
         let processor = makeProcessor()
         let input = sine(1_000, frames: 512)
-        XCTAssertEqual(renderSettled(processor, input), input)
+        #expect(renderSettled(processor, input) == input)
     }
 
     /// A chain of 0 dB filters is identity in `Biquad`, so it must be identity
     /// here too — this is what makes "Flat" cost nothing.
-    func testAFlatChainLeavesTheAudioAlone() {
+    @Test func aFlatChainLeavesTheAudioAlone() {
         let processor = makeProcessor(filters: BuiltInProfiles.emptyBandChain())
         let input = sine(1_000, frames: 512)
 
         let output = renderSettled(processor, input)
         for (produced, expected) in zip(output, input) {
-            XCTAssertEqual(produced, expected, accuracy: 1e-6)
+            #expect(produced.isClose(to: expected, within: 1e-6))
         }
     }
 
     // MARK: - Filtering
 
-    func testABoostRaisesTheLevelAtItsOwnFrequency() {
+    @Test func aBoostRaisesTheLevelAtItsOwnFrequency() {
         let processor = makeProcessor(
             filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 6, q: 1)]
         )
@@ -130,46 +131,46 @@ final class EQProcessorTests: XCTestCase {
         let output = renderSettled(processor, input)
 
         let gain = 20 * log10(rms(output) / rms(input))
-        XCTAssertEqual(
-            gain, 6, accuracy: 0.5, "a +6 dB bell should lift its own frequency by ~6 dB")
+        #expect(
+            gain.isClose(to: 6, within: 0.5), "a +6 dB bell should lift its own frequency by ~6 dB")
     }
 
-    func testACutLowersTheLevelAtItsOwnFrequency() {
+    @Test func aCutLowersTheLevelAtItsOwnFrequency() {
         let processor = makeProcessor(
             filters: [EQFilter(kind: .bell, frequency: 1_000, gain: -6, q: 1)]
         )
         let input = sine(1_000, frames: 2_048)
         let output = renderSettled(processor, input)
 
-        XCTAssertEqual(20 * log10(rms(output) / rms(input)), -6, accuracy: 0.5)
+        #expect((20 * log10(rms(output) / rms(input))).isClose(to: -6, within: 0.5))
     }
 
     /// The point of a bell: it works on its own frequency and leaves the rest
     /// of the spectrum where it was.
-    func testABellLeavesDistantFrequenciesAlone() {
+    @Test func aBellLeavesDistantFrequenciesAlone() {
         let processor = makeProcessor(
             filters: [EQFilter(kind: .bell, frequency: 8_000, gain: 12, q: 2)]
         )
         let input = sine(200, frames: 2_048)
         let output = renderSettled(processor, input)
 
-        XCTAssertEqual(20 * log10(rms(output) / rms(input)), 0, accuracy: 0.5)
+        #expect((20 * log10(rms(output) / rms(input))).isClose(to: 0, within: 0.5))
     }
 
-    func testADisabledFilterDoesNothing() {
+    @Test func aDisabledFilterDoesNothing() {
         let processor = makeProcessor(
             filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1, isEnabled: false)]
         )
         let input = sine(1_000, frames: 2_048)
         let output = renderSettled(processor, input)
 
-        XCTAssertEqual(20 * log10(rms(output) / rms(input)), 0, accuracy: 0.2)
+        #expect((20 * log10(rms(output) / rms(input))).isClose(to: 0, within: 0.2))
     }
 
     /// Filters cascade, so their dB contributions add. Two +4 dB bells on the
     /// same frequency are +8 dB, which is exactly what the response curve draws
     /// and therefore what the user was promised.
-    func testFiltersOnTheSameFrequencyAdd() {
+    @Test func filtersOnTheSameFrequencyAdd() {
         let processor = makeProcessor(filters: [
             EQFilter(kind: .bell, frequency: 1_000, gain: 4, q: 1),
             EQFilter(kind: .bell, frequency: 1_000, gain: 4, q: 1),
@@ -177,13 +178,13 @@ final class EQProcessorTests: XCTestCase {
         let input = sine(1_000, frames: 2_048)
         let output = renderSettled(processor, input)
 
-        XCTAssertEqual(20 * log10(rms(output) / rms(input)), 8, accuracy: 0.6)
+        #expect((20 * log10(rms(output) / rms(input))).isClose(to: 8, within: 0.6))
     }
 
     /// The chain the processor runs is the same one the graph draws, so the
     /// level it produces has to match what `Biquad` predicts — otherwise the
     /// curve is decoration.
-    func testTheRenderedLevelMatchesTheDrawnCurve() {
+    @Test func theRenderedLevelMatchesTheDrawnCurve() {
         let chain = [
             EQFilter(kind: .lowShelf, frequency: 120, gain: 4, q: 0.7),
             EQFilter(kind: .bell, frequency: 1_000, gain: -5, q: 1.4),
@@ -200,32 +201,31 @@ final class EQProcessorTests: XCTestCase {
                     + Biquad(filter: $1, sampleRate: sampleRate)
                     .magnitudeDB(at: frequency, sampleRate: sampleRate)
             }
-            XCTAssertEqual(
-                measured, drawn, accuracy: 0.6,
-                "at \(frequency) Hz the audio and the curve disagree"
-            )
+            #expect(
+                measured.isClose(to: drawn, within: 0.6),
+                "at \(frequency) Hz the audio and the curve disagree")
         }
     }
 
     // MARK: - Preamp
 
-    func testThePreampScalesTheOutput() {
+    @Test func thePreampScalesTheOutput() {
         let processor = makeProcessor(preamp: -6)
         let input = sine(1_000, frames: 2_048)
         let output = renderSettled(processor, input)
 
-        XCTAssertEqual(20 * log10(rms(output) / rms(input)), -6, accuracy: 0.3)
+        #expect((20 * log10(rms(output) / rms(input))).isClose(to: -6, within: 0.3))
     }
 
     /// Bypass short-circuits the whole block, the trim included. This is what
     /// makes the master switch a true bypass rather than "the filters off":
     /// with it on, nothing at all is applied.
-    func testBypassSkipsThePreampToo() {
+    @Test func bypassSkipsThePreampToo() {
         let processor = makeProcessor(preamp: -12)
         processor.setBypassed(true)
 
         let input = sine(1_000, frames: 512)
-        XCTAssertEqual(renderSettled(processor, input), input)
+        #expect(renderSettled(processor, input) == input)
     }
 
     // MARK: - Smoothing
@@ -233,7 +233,7 @@ final class EQProcessorTests: XCTestCase {
     /// Gain changes ramp over ~50 ms rather than stepping, or every preset
     /// switch would click. The first buffer after a change must therefore be
     /// partway there, and a later one all the way.
-    func testGainChangesRampRatherThanStep() {
+    @Test func gainChangesRampRatherThanStep() {
         let processor = makeProcessor()
         // Short buffers for the ramp: 256 frames is 5 ms, a tenth of the
         // smoothing window, so the first one has to arrive part-way.
@@ -242,26 +242,25 @@ final class EQProcessorTests: XCTestCase {
 
         processor.setFilters([EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)])
         let first = render(processor, short)
-        XCTAssertLessThan(
-            20 * log10(rms(first) / rms(short)), 11,
-            "the new gain arrived in one step — that is a click"
-        )
+        #expect(
+            20 * log10(rms(first) / rms(short)) < 11,
+            "the new gain arrived in one step — that is a click")
 
         // Long buffers for the settled value: each pass restarts the sine at
         // phase zero, and a filter carrying state across that discontinuity
         // rings for a few samples. On 2048-frame buffers that is a rounding
         // error; on 256-frame ones it is most of the measurement.
         let settled = renderSettled(processor, sine(1_000, frames: 2_048), passes: 20)
-        XCTAssertEqual(
-            20 * log10(rms(settled) / rms(sine(1_000, frames: 2_048))), 12, accuracy: 0.5
-        )
+        #expect(
+            (20 * log10(rms(settled) / rms(sine(1_000, frames: 2_048)))).isClose(
+                to: 12, within: 0.5))
     }
 
     // MARK: - Buffers and channels
 
     /// Stereo comes in interleaved, and each channel carries its own filter
     /// state. Feeding silence to one channel must not silence the other.
-    func testChannelsAreFilteredIndependently() {
+    @Test func channelsAreFilteredIndependently() {
         let processor = makeProcessor(
             filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 6, q: 1)]
         )
@@ -276,13 +275,13 @@ final class EQProcessorTests: XCTestCase {
         let left = stride(from: 0, to: output.count, by: 2).map { output[$0] }
         let right = stride(from: 1, to: output.count, by: 2).map { output[$0] }
 
-        XCTAssertGreaterThan(rms(left), 0.1, "the left channel lost its signal")
-        XCTAssertEqual(rms(right), 0, accuracy: 1e-6, "silence leaked into the right channel")
+        #expect(rms(left) > 0.1, "the left channel lost its signal")
+        #expect(rms(right).isClose(to: 0, within: 1e-6), "silence leaked into the right channel")
     }
 
     /// A render that asks for more than the input holds must produce silence
     /// for the remainder rather than whatever the buffer happened to contain.
-    func testAShortInputIsPaddedWithSilence() {
+    @Test func aShortInputIsPaddedWithSilence() {
         let processor = makeProcessor()
         var input = [Float](repeating: 0.5, count: 64)
         var output = [Float](repeating: 99, count: 128)
@@ -309,17 +308,17 @@ final class EQProcessorTests: XCTestCase {
             }
         }
 
-        XCTAssertTrue(output[64...].allSatisfy { $0 == 0 }, "the tail was left as it was found")
+        #expect(output[64...].allSatisfy { $0 == 0 }, "the tail was left as it was found")
     }
 
-    func testAnEmptyRenderIsHarmless() {
+    @Test func anEmptyRenderIsHarmless() {
         let processor = makeProcessor()
-        XCTAssertEqual(render(processor, []), [])
+        #expect(render(processor, []) == [])
     }
 
     /// The chain is capped, and a chain longer than the cap must be truncated
     /// rather than overrun the fixed-size filter array.
-    func testTheChainIsCappedRatherThanOverrunning() {
+    @Test func theChainIsCappedRatherThanOverrunning() {
         let tooMany = (0..<(EQProcessor.maxFilters * 2)).map { index in
             EQFilter(kind: .bell, frequency: 100 + Double(index), gain: 1, q: 1)
         }
@@ -327,7 +326,7 @@ final class EQProcessorTests: XCTestCase {
 
         let input = sine(1_000, frames: 512)
         let output = renderSettled(processor, input)
-        XCTAssertTrue(output.allSatisfy { $0.isFinite }, "the render produced non-finite samples")
+        #expect(output.allSatisfy { $0.isFinite }, "the render produced non-finite samples")
     }
 
     // MARK: - Sample rate
@@ -335,7 +334,7 @@ final class EQProcessorTests: XCTestCase {
     /// The engine can be handed a new sample rate when the output device
     /// changes, and the coefficients have to be rebuilt for it — the same
     /// filter at 44.1 kHz and 48 kHz is not the same set of numbers.
-    func testChangingTheSampleRateRebuildsTheCoefficients() {
+    @Test func changingTheSampleRateRebuildsTheCoefficients() {
         let processor = EQProcessor()
         processor.setSampleRate(44_100)
         processor.setFilters([EQFilter(kind: .bell, frequency: 1_000, gain: 6, q: 1)])
@@ -347,15 +346,15 @@ final class EQProcessorTests: XCTestCase {
         // Both should land on +6 dB at their own rate; the point is that the
         // second is not still running the first rate's coefficients.
         let reference = sine(1_000, frames: 2_048)
-        XCTAssertEqual(20 * log10(rms(at44) / rms(reference)), 6, accuracy: 0.8)
-        XCTAssertEqual(20 * log10(rms(at48) / rms(reference)), 6, accuracy: 0.8)
+        #expect((20 * log10(rms(at44) / rms(reference))).isClose(to: 6, within: 0.8))
+        #expect((20 * log10(rms(at48) / rms(reference))).isClose(to: 6, within: 0.8))
     }
 
     // MARK: - The spectrum tap
 
     /// The analyzer draws what reaches the speakers, so the tap has to carry
     /// the *processed* output, not the input.
-    func testTheSpectrumTapCarriesTheProcessedOutput() {
+    @Test func theSpectrumTapCarriesTheProcessedOutput() {
         let processor = makeProcessor(
             filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)]
         )
@@ -364,8 +363,8 @@ final class EQProcessorTests: XCTestCase {
 
         var tapped = [Float](repeating: 0, count: 2_048)
         let written = processor.spectrumBuffer.snapshot(into: &tapped)
-        XCTAssertGreaterThan(written, 0, "nothing reached the spectrum buffer")
-        XCTAssertEqual(rms(tapped), rms(output), accuracy: 0.02)
-        XCTAssertGreaterThan(rms(tapped), rms(input) * 1.5, "the tap is carrying the input")
+        #expect(written > 0, "nothing reached the spectrum buffer")
+        #expect(rms(tapped).isClose(to: rms(output), within: 0.02))
+        #expect(rms(tapped) > rms(input) * 1.5, "the tap is carrying the input")
     }
 }

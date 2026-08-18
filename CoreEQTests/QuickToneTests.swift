@@ -1,37 +1,38 @@
-import XCTest
+import Foundation
+import Testing
 
-final class QuickToneTests: XCTestCase {
-    func testWeightsCoverEveryBand() {
+struct QuickToneTests {
+    @Test func weightsCoverEveryBand() {
         let count = BuiltInProfiles.frequencies.count
-        XCTAssertEqual(QuickTone.bassWeights.count, count)
-        XCTAssertEqual(QuickTone.midWeights.count, count)
-        XCTAssertEqual(QuickTone.trebleWeights.count, count)
+        #expect(QuickTone.bassWeights.count == count)
+        #expect(QuickTone.midWeights.count == count)
+        #expect(QuickTone.trebleWeights.count == count)
     }
 
-    func testNeutralControlsProduceNoOffset() {
-        XCTAssertTrue(QuickTone.offsets(bass: 0, mid: 0, treble: 0).allSatisfy { $0 == 0 })
+    @Test func neutralControlsProduceNoOffset() {
+        #expect(QuickTone.offsets(bass: 0, mid: 0, treble: 0).allSatisfy { $0 == 0 })
     }
 
-    func testBassOnlyLiftsTheLowEnd() {
+    @Test func bassOnlyLiftsTheLowEnd() {
         let offsets = QuickTone.offsets(bass: 6, mid: 0, treble: 0)
         let frequencies = BuiltInProfiles.frequencies
 
         let lowest = offsets[frequencies.firstIndex(of: 32)!]
         let highest = offsets[frequencies.firstIndex(of: 20_000)!]
-        XCTAssertGreaterThan(lowest, 0)
-        XCTAssertEqual(highest, 0, "a bass control must not touch 20 kHz")
+        #expect(lowest > 0)
+        #expect(highest == 0, "a bass control must not touch 20 kHz")
     }
 
-    func testTrebleOnlyLiftsTheTopEnd() {
+    @Test func trebleOnlyLiftsTheTopEnd() {
         let offsets = QuickTone.offsets(bass: 0, mid: 0, treble: 6)
         let frequencies = BuiltInProfiles.frequencies
 
-        XCTAssertEqual(
-            offsets[frequencies.firstIndex(of: 32)!], 0, "a treble control must not touch 32 Hz")
-        XCTAssertGreaterThan(offsets[frequencies.firstIndex(of: 20_000)!], 0)
+        #expect(
+            offsets[frequencies.firstIndex(of: 32)!] == 0, "a treble control must not touch 32 Hz")
+        #expect(offsets[frequencies.firstIndex(of: 20_000)!] > 0)
     }
 
-    func testOffsetsAreAdditive() {
+    @Test func offsetsAreAdditive() {
         let combined = QuickTone.offsets(bass: 4, mid: 2, treble: -3)
         let separate = zip(
             zip(
@@ -42,7 +43,7 @@ final class QuickToneTests: XCTestCase {
         ).map(+)
 
         for (lhs, rhs) in zip(combined, separate) {
-            XCTAssertEqual(lhs, rhs, accuracy: 1e-12)
+            #expect(lhs.isClose(to: rhs, within: 1e-12))
         }
     }
 }

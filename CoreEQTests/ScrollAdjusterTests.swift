@@ -1,5 +1,5 @@
 import AppKit
-import XCTest
+import Testing
 
 /// The scroll handling behind every knob, field, and band slider.
 ///
@@ -9,7 +9,8 @@ import XCTest
 /// trackpad, or one that scrolls the wrong way on a Mac set to natural
 /// scrolling.
 @MainActor
-final class ScrollAdjusterTests: XCTestCase {
+@Suite(.serialized)
+struct ScrollAdjusterTests {
     private func makeCatcher(
         pointsPerStep: CGFloat = 6
     ) -> (ScrollAdjuster.CatcherView, () -> [Int]) {
@@ -42,58 +43,58 @@ final class ScrollAdjusterTests: XCTestCase {
 
     // MARK: - Detents
 
-    func testOneWheelLineIsOneDetent() {
+    @Test func oneWheelLineIsOneDetent() {
         let (view, steps) = makeCatcher()
 
         view.scrollWheel(with: wheelEvent(lines: 1))
-        XCTAssertEqual(steps(), [1])
+        #expect(steps() == [1])
 
         view.scrollWheel(with: wheelEvent(lines: -1))
-        XCTAssertEqual(steps(), [1, -1])
+        #expect(steps() == [1, -1])
     }
 
     /// Precise deltas arrive as small numbers of points. Applying them directly
     /// would make the value jitter instead of clicking through the same detents
     /// a drag uses, so they accumulate until they make a whole one.
-    func testSmallTrackpadDeltasAccumulateIntoOneDetent() {
+    @Test func smallTrackpadDeltasAccumulateIntoOneDetent() {
         let (view, steps) = makeCatcher(pointsPerStep: 6)
 
         for _ in 0..<5 { view.scrollWheel(with: trackpadEvent(points: 1)) }
-        XCTAssertEqual(steps(), [], "five points of a six point detent moved the value")
+        #expect(steps() == [], "five points of a six point detent moved the value")
 
         view.scrollWheel(with: trackpadEvent(points: 1))
-        XCTAssertEqual(steps(), [1], "the sixth point should have completed the detent")
+        #expect(steps() == [1], "the sixth point should have completed the detent")
     }
 
     /// The leftover is kept, not discarded — otherwise a slow scroll would lose
     /// a fraction of a detent on every event and never arrive.
-    func testTheRemainderCarriesToTheNextEvent() {
+    @Test func theRemainderCarriesToTheNextEvent() {
         let (view, steps) = makeCatcher(pointsPerStep: 6)
 
         view.scrollWheel(with: trackpadEvent(points: 8))
-        XCTAssertEqual(steps(), [1])
+        #expect(steps() == [1])
 
         // 2 points were left over, so 4 more make the next detent.
         view.scrollWheel(with: trackpadEvent(points: 4))
-        XCTAssertEqual(steps(), [1, 1])
+        #expect(steps() == [1, 1])
     }
 
-    func testAFlickDeliversSeveralDetentsAtOnce() {
+    @Test func aFlickDeliversSeveralDetentsAtOnce() {
         let (view, steps) = makeCatcher(pointsPerStep: 6)
 
         view.scrollWheel(with: trackpadEvent(points: 30))
-        XCTAssertEqual(steps(), [5])
+        #expect(steps() == [5])
     }
 
     /// Scrolling back the way you came has to undo what it did, or every
     /// control drifts. This is the same property the value ladders guarantee,
     /// one layer down.
-    func testScrollingBackUndoesTheSameNumberOfDetents() {
+    @Test func scrollingBackUndoesTheSameNumberOfDetents() {
         let (view, steps) = makeCatcher(pointsPerStep: 6)
 
         view.scrollWheel(with: trackpadEvent(points: 18))
         view.scrollWheel(with: trackpadEvent(points: -18))
-        XCTAssertEqual(steps().reduce(0, +), 0, "a scroll and its reverse did not cancel")
+        #expect(steps().reduce(0, +) == 0, "a scroll and its reverse did not cancel")
     }
 
     // MARK: - What it refuses
@@ -101,32 +102,32 @@ final class ScrollAdjusterTests: XCTestCase {
     /// Momentum is the tail of a flick, arriving after the fingers have lifted.
     /// Acting on it keeps the value moving when the gesture is over, which
     /// reads as the control running away on its own.
-    func testMomentumIsIgnored() throws {
+    @Test func momentumIsIgnored() throws {
         let (view, steps) = makeCatcher()
         let cg = CGEvent(
             scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
             wheel1: 60, wheel2: 0, wheel3: 0
         )!
         cg.setIntegerValueField(.scrollWheelEventMomentumPhase, value: 2)  // .changed
-        let momentum = try XCTUnwrap(NSEvent(cgEvent: cg))
-        XCTAssertNotEqual(momentum.momentumPhase, [], "the event is not carrying momentum")
+        let momentum = try #require(NSEvent(cgEvent: cg))
+        #expect(momentum.momentumPhase != [], "the event is not carrying momentum")
 
         view.scrollWheel(with: momentum)
-        XCTAssertEqual(steps(), [], "the value kept moving after the fingers lifted")
+        #expect(steps() == [], "the value kept moving after the fingers lifted")
     }
 
-    func testADisabledCatcherIgnoresScrolling() {
+    @Test func aDisabledCatcherIgnoresScrolling() {
         let (view, steps) = makeCatcher()
         view.isEnabled = false
 
         view.scrollWheel(with: wheelEvent(lines: 3))
-        XCTAssertEqual(steps(), [])
+        #expect(steps() == [])
     }
 
     /// The catcher is visible to scroll events and invisible to every other
     /// kind, so the control underneath keeps its drag, its double-click, and
     /// its hover.
-    func testItIsInvisibleToEverythingButScrolling() {
+    @Test func itIsInvisibleToEverythingButScrolling() {
         // `hitTest` asks `NSApp` which event is being routed, and `NSApp` stays
         // nil until an application exists. In the app one always does; here it
         // has to be asked for — and only this test needs it, so the rest of the
@@ -134,9 +135,8 @@ final class ScrollAdjusterTests: XCTestCase {
         _ = NSApplication.shared
 
         let (view, _) = makeCatcher()
-        XCTAssertNil(
-            view.hitTest(NSPoint(x: 1, y: 1)),
-            "with no scroll event in flight the catcher must not take the click"
-        )
+        #expect(
+            view.hitTest(NSPoint(x: 1, y: 1)) == nil,
+            "with no scroll event in flight the catcher must not take the click")
     }
 }
