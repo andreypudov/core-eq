@@ -61,6 +61,11 @@ enum Theme {
     /// on the right for the scale that hangs off it, and nothing spare.
     static let globalGainWidth: CGFloat = 116
 
+    /// Height of a label mounted on a block's top border — the tab strip on the
+    /// editor, the title on the trim. The block reserves half of it above itself
+    /// so the label has somewhere to hang without overlapping the graph.
+    static let borderLabelHeight: CGFloat = 22
+
     /// Fixed height of the editing area, so switching tabs changes the controls
     /// and nothing else — no reflow, no jump in the graph above it.
     ///
@@ -136,9 +141,6 @@ enum Theme {
     /// preamp track starting and ending exactly level with the band tracks
     /// beside it.
     enum BandRow {
-        /// Heading row, fixed so the two blocks' headings occupy the same height
-        /// whether or not one of them carries a switch.
-        static let headingHeight: CGFloat = 20
         /// Caption under a track — a frequency in the strip, the value in the
         /// preamp column.
         static let labelHeight: CGFloat = 14
@@ -171,4 +173,5 @@ extension View {
                     .strokeBorder(Theme.blockBorder, lineWidth: 1)
             )
     }
+
 }

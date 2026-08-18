@@ -449,6 +449,16 @@ slot, and cleared.
   added, with its own kind, frequency, and Q. The Nyquist guard in =Biquad= sits
   at 0.47 × sample rate so the 20 kHz band stays active at a 44.1 kHz device
   sample rate.
+- *The editor is a tab view, and its tabs live on its border.* A tab belongs on
+  its container's edge: in the window header the switcher sat a window's height
+  from the block it changed, and inside that block's heading row it was a control
+  replacing its own container while sitting in it, which reads as a filter over
+  the contents rather than a choice of them. On the border it is also the block's
+  title, which is why neither editor carries a heading of its own — "Graphic" and
+  "Band Levels" were two names for one thing. =View.borderLabel= mounts it, and
+  lives beside =WindowBackground= because its whole trick is carrying that same
+  material so it cuts the stroke instead of patching over it.
+
 - *A band is moved into the parametric editor, never converted.* =Edit as
   Filter…= lifts a slot's filter out unchanged and leaves the slot at 0 dB,
   which is identity — the chain sums to exactly what it did before. The reverse

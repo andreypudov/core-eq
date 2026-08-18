@@ -26,15 +26,11 @@ struct GlobalGainView: View {
     private static let scaleGap: CGFloat = 6
 
     var body: some View {
-        // The same heading / track / caption rhythm a band column has — see
+        // The same track / caption rhythm a band column has — see
         // `Theme.BandRow` — so this track starts and ends exactly level with the
-        // band tracks beside it.
+        // band tracks beside it. The title is not in here: it is mounted on the
+        // block's own border, as the editor's tabs are on theirs.
         VStack(spacing: 2) {
-            Text("Preamp")
-                .font(.system(size: 13, weight: .semibold))
-                .frame(height: Theme.BandRow.headingHeight)
-                .accessibilityAddTraits(.isHeader)
-
             GeometryReader { proxy in
                 let trackHeight = max(
                     proxy.size.height - Theme.BandRow.chromeHeight,
@@ -88,6 +84,11 @@ struct GlobalGainView: View {
         // height, and so the track above has a height to grow into.
         .frame(maxHeight: .infinity)
         .contentBlock()
+        .borderLabel(alignment: .topLeading) {
+            Text("Preamp")
+                .font(.system(size: 12, weight: .semibold))
+                .accessibilityAddTraits(.isHeader)
+        }
         .opacity(isEnabled ? 1.0 : 0.5)
         .help("Output trim applied after the whole chain — use it to give back headroom a boosted preset takes")
     }

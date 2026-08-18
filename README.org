@@ -25,9 +25,9 @@ The *Graphic* editor is the professional ISO octave ladder — 32, 64, 125, 250,
 between 20 Hz and 20 kHz, each a bell, shelf, or pass filter with its own
 frequency, gain, and Q.
 
-Both tabs edit the same chain and the same graph: the sliders are eleven
-filters that happen to be locked to the ladder, and an added band is one that
-is not. Nothing is converted, approximated, or reconciled between the two
+The two editors are tabs on the editing area's own border, and both edit the
+same chain and the same graph: the sliders are eleven filters that happen to be
+locked to the ladder, and an added band is one that is not. Nothing is converted, approximated, or reconciled between the two
 views, so a change made in either is exact and reversible.
 
 ** Live frequency response, directly editable

@@ -76,8 +76,12 @@ final class ThemeTests: XCTestCase {
 
     /// The editing area is a fixed height so switching tabs moves nothing. It
     /// has to hold the column titles, at least one band, and the Add Band row.
+    ///
+    /// The blocks' own headings are gone — each block wears its title on its
+    /// border now — so the only chrome inside is the padding and the table's
+    /// column titles.
     func testTheEditorIsTallEnoughForTheTableItHolds() {
-        let chrome = Theme.blockPadding * 2 + Theme.BandRow.headingHeight + Theme.FilterRow.headerHeight
+        let chrome = Theme.blockPadding * 2 + Theme.FilterRow.headerHeight
         let addRow: CGFloat = 8 + 20
         XCTAssertGreaterThan(
             Theme.editorHeight - chrome - addRow, Theme.FilterRow.height,

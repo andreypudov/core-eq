@@ -25,46 +25,14 @@ struct FilterListView: View {
         // leftover height sat empty below the section — so a fourth band had to
         // be scrolled to while the space to show it was right there.
         VStack(alignment: .leading, spacing: 0) {
-            header
+            // No header: the tab on the block's border names this editor, and
+            // the switch for it sits on the same border.
             content
-                .padding(.top, 8)
                 .frame(maxHeight: .infinity, alignment: .top)
             addRow
         }
         .opacity(isEnabled ? 1.0 : 0.5)
         .animation(.easeInOut(duration: 0.18), value: profileManager.freeFilters.count)
-    }
-
-    // MARK: - Header
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            Text("Parametric Bands")
-                .font(.system(size: 13, weight: .semibold))
-                .accessibilityAddTraits(.isHeader)
-
-            Spacer(minLength: 12)
-
-            // The same switch the Graphic tab has over its sliders: hearing one
-            // half of the chain on its own is what teaches that both halves feed
-            // the one curve above.
-            //
-            // With no bands there is nothing for it to switch, so it is faded
-            // well past what `disabled` alone does — a switch that merely looks
-            // a little grey still looks like a switch you should be able to
-            // flick, and being unable to is then a fault rather than a fact.
-            Toggle("", isOn: freeFiltersEnabled)
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .labelsHidden()
-                .disabled(!isEnabled || !hasBands)
-                .opacity(hasBands ? 1 : 0.35)
-                .help(
-                    hasBands
-                        ? "Switch every parametric band off to hear the band levels on their own"
-                        : "Add a band to switch the parametric section on and off"
-                )
-        }
     }
 
     private var hasBands: Bool { !profileManager.freeFilters.isEmpty }

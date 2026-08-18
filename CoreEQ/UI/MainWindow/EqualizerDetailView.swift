@@ -81,15 +81,10 @@ struct EqualizerDetailView: View {
         // underneath the pop-up and collide with its chevron. Laid out in the
         // row, the sides can only push and truncate, never overlap.
         HStack(spacing: 12) {
-            Picker("Editor", selection: $tab) {
-                Text("Graphic").tag(EditorTab.graphic)
-                Text("Parametric").tag(EditorTab.parametric)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .accessibilityLabel("Editor")
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // The editor switcher used to sit here, a window's height away from
+            // the block it governs. It is on that block's border now.
+            Color.clear
+                .frame(maxWidth: .infinity)
 
             deviceControl
 
@@ -274,27 +269,11 @@ struct EqualizerDetailView: View {
     // MARK: - Band levels
 
     private var bandLevels: some View {
-        // Tight: the readout row above the sliders already supplies the gap
-        // between the heading and the tracks.
+        // No heading: the tab on the block's border names this, and its switch
+        // sits on the same border.
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 8) {
-                Text("Band Levels")
-                    .font(.system(size: 13, weight: .semibold))
-                    .accessibilityAddTraits(.isHeader)
-
-                Spacer(minLength: 12)
-
-                Toggle("", isOn: bandsEnabled)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .labelsHidden()
-                    .disabled(!audioEngine.isEnabled)
-                    .help("Switch the band levels off to hear the filters on their own")
-            }
-            .frame(height: Theme.BandRow.headingHeight)
-
-            // The tracks take whatever the heading and captions leave — the same
-            // arithmetic the Preamp column runs, so the two start and end level.
+            // The tracks take whatever the captions leave — the same arithmetic
+            // the Preamp column runs, so the two start and end level.
             GeometryReader { proxy in
                 let trackHeight = max(
                     proxy.size.height - Theme.BandRow.chromeHeight,
@@ -354,10 +333,53 @@ struct EqualizerDetailView: View {
             // the Global Gain column all read as one band of equal height.
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .contentBlock()
+            .borderLabel { editorTabs }
+            .borderLabel(alignment: .topTrailing) { editorPower }
 
             GlobalGainView(profileManager: profileManager, isEnabled: audioEngine.isEnabled)
         }
         .frame(height: Theme.editorHeight)
+        // Room for the labels hanging off the top border, so they cut the stroke
+        // rather than the graph above.
+        .padding(.top, Theme.borderLabelHeight / 2)
+    }
+
+    /// The tab strip, mounted on the editor block's own border.
+    ///
+    /// A tab belongs on its container's edge, not inside it. In the window
+    /// header it was a window's height from the thing it changed, and every
+    /// reach for it went to the editor first; in the block's heading row it was
+    /// worse — a control that replaces its own container while sitting in it,
+    /// which reads as a filter over the contents rather than a choice of
+    /// contents. On the border it is what it is, and it doubles as the block's
+    /// title, so "Graphic" stops competing with a heading that said "Band
+    /// Levels" about the same thing.
+    private var editorTabs: some View {
+        Picker("Editor", selection: $tab) {
+            Text("Graphic").tag(EditorTab.graphic)
+            Text("Parametric").tag(EditorTab.parametric)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .accessibilityLabel("Editor")
+    }
+
+    /// The switch for whichever half is showing — the ladder on the Graphic tab,
+    /// the added bands on the Parametric one. On the same border as the tab that
+    /// names them, so what it governs is never in doubt.
+    private var editorPower: some View {
+        Toggle("", isOn: tab == .graphic ? bandsEnabled : freeFiltersEnabled)
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .labelsHidden()
+            .disabled(!audioEngine.isEnabled)
+            .accessibilityLabel(tab == .graphic ? "Band levels" : "Parametric bands")
+            .help(
+                tab == .graphic
+                    ? "Switch the band levels off to hear the parametric bands on their own"
+                    : "Switch the parametric bands off to hear the band levels on their own"
+            )
     }
 
     private func gainAxis(trackHeight: CGFloat) -> some View {
@@ -443,6 +465,13 @@ struct EqualizerDetailView: View {
         Binding(
             get: { profileManager.areBandsEnabled },
             set: { profileManager.setBandsEnabled($0) }
+        )
+    }
+
+    private var freeFiltersEnabled: Binding<Bool> {
+        Binding(
+            get: { profileManager.areFreeFiltersEnabled },
+            set: { profileManager.setFreeFiltersEnabled($0) }
         )
     }
 }
