@@ -189,6 +189,7 @@ CoreEQ/
   EQ/
     EQProcessor.swift       Realtime biquad chain with parameter smoothing
     Biquad.swift            One RBJ biquad: coefficients + magnitude response
+    AutoGain.swift          The trim that holds a preset at its original loudness
   Presets/
     EQFilter.swift          One filter: kind, frequency, gain, Q, ladder slot
     EQProfile.swift         A named chain plus its preamp
@@ -458,6 +459,21 @@ slot, and cleared.
   "Band Levels" were two names for one thing. =View.borderLabel= mounts it, and
   lives beside =WindowBackground= because its whole trick is carrying that same
   material so it cuts the stroke instead of patching over it.
+
+- *Automatic gain is a mode of the trim, and it averages rather than peaks.*
+  =AutoGain.trim(for:)= samples the chain's response at 96 log-spaced points and
+  returns the negative of the mean: equal weight per octave, which is pink
+  weighting, which is roughly how music spends its energy. Peak-based trimming
+  was considered and rejected — the peak is never below the average, so using it
+  as a “ceiling” replaces the average in every case and leaves Bass Booster
+  audibly quieter than what it is being compared against. Clipping is therefore
+  not guaranteed away, and cannot be: CoreEQ sees the mix after every application
+  has set its own level, so the headroom is unknowable.
+
+  Every chain edit funnels through =ProfileManager.chainDidChange()=, which
+  recomputes the trim when the mode is on and then persists. One funnel rather
+  than a recomputation at each of the sixteen mutators, so a new way to edit the
+  chain cannot forget to keep the trim in step.
 
 - *A and B are two working states, not an undo.* Each holds a complete sound —
   preset, chain, trim, tone — so switching compares rather than reverts, and both

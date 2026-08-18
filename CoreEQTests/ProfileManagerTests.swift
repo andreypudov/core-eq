@@ -896,6 +896,129 @@ final class ProfileManagerTests: XCTestCase {
         XCTAssertEqual(manager.currentFilters, before)
     }
 
+    // MARK: - Automatic gain
+
+    func testTurningAutoOnTakesTheTrimOverImmediately() {
+        let manager = makeManager()
+        manager.setActiveProfile(name: "Flat")
+        for slot in 0..<BuiltInProfiles.bandCount { manager.setGain(6, forBandAt: slot) }
+        XCTAssertEqual(manager.currentPreamp, 0, "nothing should have touched the trim yet")
+
+        manager.setAutoGain(true)
+        XCTAssertTrue(manager.isAutoGain)
+        XCTAssertLessThan(manager.currentPreamp, -3, "auto did not pull the trim down for a lifted chain")
+    }
+
+    /// The trim has to follow the chain, or it is only right at the moment it is
+    /// switched on.
+    func testTheComputedTrimFollowsEveryKindOfEdit() {
+        let manager = makeManager()
+        manager.setActiveProfile(name: "Flat")
+        manager.setAutoGain(true)
+        XCTAssertEqual(manager.currentPreamp, 0, accuracy: 0.01)
+
+        manager.setGain(9, forBandAt: 5)
+        let afterBand = manager.currentPreamp
+        XCTAssertLessThan(afterBand, -0.5)
+
+        manager.addFilter(kind: .highShelf, frequency: 8_000, gain: 8, q: 0.7)
+        XCTAssertLessThan(manager.currentPreamp, afterBand, "adding a boost did not deepen the trim")
+
+        manager.setTone(bass: 6)
+        XCTAssertLessThan(manager.currentPreamp, afterBand)
+    }
+
+    /// Switching off has to be silent: the number stays where the computation
+    /// left it, and only then becomes the user's again.
+    func testTurningAutoOffKeepsTheValueAndReturnsTheControl() {
+        let manager = makeManager()
+        manager.setActiveProfile(name: "Flat")
+        manager.setGain(8, forBandAt: 4)
+        manager.setAutoGain(true)
+        let computed = manager.currentPreamp
+
+        manager.setAutoGain(false)
+        XCTAssertFalse(manager.isAutoGain)
+        XCTAssertEqual(manager.currentPreamp, computed, "the trim jumped when auto was switched off")
+
+        manager.setPreamp(-2)
+        XCTAssertEqual(manager.currentPreamp, -2, "the slider did not come back under the user's control")
+    }
+
+    /// While auto is on the slider is disabled, so a write can only arrive from
+    /// a caller that has not looked — and it must not be honoured.
+    func testTheTrimCannotBeSetByHandWhileAutoIsOn() {
+        let manager = makeManager()
+        manager.setGain(6, forBandAt: 0)
+        manager.setAutoGain(true)
+        let computed = manager.currentPreamp
+
+        manager.setPreamp(11)
+        XCTAssertEqual(manager.currentPreamp, computed)
+    }
+
+    /// The mode belongs to the sound, so it saves into the preset and comes back
+    /// with it.
+    func testAutoIsSavedIntoThePresetAndRestoredWithIt() {
+        let manager = makeManager()
+        manager.setActiveProfile(name: "Flat")
+        manager.setGain(7, forBandAt: 2)
+        manager.setAutoGain(true)
+        let name = manager.addProfile(named: "Auto Preset")
+        manager.saveChangesToActiveProfile()
+
+        XCTAssertEqual(manager.profile(named: name)?.autoGain, true)
+
+        manager.setActiveProfile(name: "Rock")
+        XCTAssertFalse(manager.isAutoGain, "a preset without auto did not turn it off")
+
+        manager.setActiveProfile(name: name)
+        XCTAssertTrue(manager.isAutoGain, "the preset did not bring its mode back")
+    }
+
+    func testAutoSurvivesRelaunchAndIsRecomputed() {
+        let first = makeManager()
+        first.setActiveProfile(name: "Flat")
+        first.setGain(9, forBandAt: 6)
+        first.setAutoGain(true)
+        let computed = first.currentPreamp
+
+        let second = makeManager()
+        XCTAssertTrue(second.isAutoGain)
+        XCTAssertEqual(second.currentPreamp, computed, accuracy: 0.01)
+    }
+
+    /// Turning the mode on changes the sound, so the header has to report the
+    /// preset as edited.
+    func testTurningAutoOnCountsAsAnEdit() {
+        let manager = makeManager()
+        manager.setActiveProfile(name: "Flat")
+        XCTAssertFalse(manager.isModified)
+
+        manager.setAutoGain(true)
+        XCTAssertTrue(manager.isModified)
+    }
+
+    /// Each slot carries its own mode, so A can be computed while B is held.
+    func testEachSlotCarriesItsOwnAutoSetting() {
+        let manager = makeManager()
+        manager.setActiveProfile(name: "Flat")
+        manager.setGain(8, forBandAt: 3)
+        manager.setAutoGain(true)
+
+        manager.setSlot(.b)
+        manager.setAutoGain(false)
+        manager.setPreamp(4)
+
+        manager.setSlot(.a)
+        XCTAssertTrue(manager.isAutoGain)
+        XCTAssertLessThan(manager.currentPreamp, 0)
+
+        manager.setSlot(.b)
+        XCTAssertFalse(manager.isAutoGain)
+        XCTAssertEqual(manager.currentPreamp, 4)
+    }
+
     // MARK: - Persistence
 
     func testUserProfilesSurviveRelaunch() {

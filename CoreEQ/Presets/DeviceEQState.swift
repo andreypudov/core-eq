@@ -26,12 +26,31 @@ struct WorkingState: Codable, Equatable {
     var preamp: Double
     /// `[bass, mid, treble]`, or nil when all three are centred.
     var tone: [Double]?
+    /// Whether the trim is being computed rather than held.
+    var autoGain: Bool
 
-    init(profileName: String, filters: [EQFilter]? = nil, preamp: Double = 0, tone: [Double]? = nil) {
+    init(
+        profileName: String,
+        filters: [EQFilter]? = nil,
+        preamp: Double = 0,
+        tone: [Double]? = nil,
+        autoGain: Bool = false
+    ) {
         self.profileName = profileName
         self.filters = filters
         self.preamp = preamp
         self.tone = tone
+        self.autoGain = autoGain
+    }
+
+    /// Written before auto gain existed means the trim was set by hand.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        profileName = try container.decode(String.self, forKey: .profileName)
+        filters = try container.decodeIfPresent([EQFilter].self, forKey: .filters)
+        preamp = try container.decodeIfPresent(Double.self, forKey: .preamp) ?? 0
+        tone = try container.decodeIfPresent([Double].self, forKey: .tone)
+        autoGain = try container.decodeIfPresent(Bool.self, forKey: .autoGain) ?? false
     }
 }
 
@@ -59,6 +78,7 @@ struct DeviceEQState: Codable, Equatable {
     var filters: [EQFilter]?
     var preamp: Double
     var tone: [Double]?
+    var autoGain: Bool
 
     /// The slot that is *not* being heard, or nil until the user has ever
     /// reached for the other one.
@@ -73,6 +93,7 @@ struct DeviceEQState: Codable, Equatable {
         filters: [EQFilter]? = nil,
         preamp: Double = 0,
         tone: [Double]? = nil,
+        autoGain: Bool = false,
         alternate: WorkingState? = nil,
         liveSlot: ABSlot = .a
     ) {
@@ -80,6 +101,7 @@ struct DeviceEQState: Codable, Equatable {
         self.filters = filters
         self.preamp = preamp
         self.tone = tone
+        self.autoGain = autoGain
         self.alternate = alternate
         self.liveSlot = liveSlot
     }
@@ -92,18 +114,25 @@ struct DeviceEQState: Codable, Equatable {
         filters = try container.decodeIfPresent([EQFilter].self, forKey: .filters)
         preamp = try container.decodeIfPresent(Double.self, forKey: .preamp) ?? 0
         tone = try container.decodeIfPresent([Double].self, forKey: .tone)
+        autoGain = try container.decodeIfPresent(Bool.self, forKey: .autoGain) ?? false
         alternate = try container.decodeIfPresent(WorkingState.self, forKey: .alternate)
         liveSlot = try container.decodeIfPresent(ABSlot.self, forKey: .liveSlot) ?? .a
     }
 
     /// The live slot as a value in its own right.
     var live: WorkingState {
-        get { WorkingState(profileName: profileName, filters: filters, preamp: preamp, tone: tone) }
+        get {
+            WorkingState(
+                profileName: profileName, filters: filters,
+                preamp: preamp, tone: tone, autoGain: autoGain
+            )
+        }
         set {
             profileName = newValue.profileName
             filters = newValue.filters
             preamp = newValue.preamp
             tone = newValue.tone
+            autoGain = newValue.autoGain
         }
     }
 

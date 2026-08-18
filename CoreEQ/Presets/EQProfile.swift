@@ -17,6 +17,12 @@ struct EQProfile: Codable, Equatable, Identifiable {
     /// describes.
     var preamp: Double = 0
 
+    /// Whether the trim is computed from the chain rather than set by hand.
+    ///
+    /// A property of the preset, not a preference: whether *this* sound wants
+    /// its loudness held constant is a decision about the sound.
+    var autoGain = false
+
     /// Built-in profiles ship with CoreEQ and can't be renamed, edited in place,
     /// or deleted. User profiles support the full set of sidebar actions.
     ///
@@ -36,15 +42,22 @@ struct EQProfile: Codable, Equatable, Identifiable {
         filters.filter { !$0.isBand }
     }
 
-    init(name: String, filters: [EQFilter], preamp: Double = 0, isBuiltIn: Bool = false) {
+    init(
+        name: String,
+        filters: [EQFilter],
+        preamp: Double = 0,
+        autoGain: Bool = false,
+        isBuiltIn: Bool = false
+    ) {
         self.name = name
         self.filters = filters
         self.preamp = preamp
+        self.autoGain = autoGain
         self.isBuiltIn = isBuiltIn
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, filters, preamp
+        case name, filters, preamp, autoGain
         /// Presets written before the chain model: a flat array of ladder bands
         /// in slot order, with no kind, enabled flag, or slot index.
         case bands

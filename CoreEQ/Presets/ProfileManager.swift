@@ -42,6 +42,9 @@ final class ProfileManager: ObservableObject {
     /// sliders can restore their positions.
     @Published private(set) var tone = ToneControls()
 
+    /// Whether the trim is being computed from the chain. See `AutoGain`.
+    @Published private(set) var isAutoGain = false
+
     /// Which of the two working states is being heard. See `ABSlot`.
     @Published private(set) var abSlot: ABSlot = .a
 
@@ -89,6 +92,7 @@ final class ProfileManager: ObservableObject {
         self.currentFilters = resolved.filters
         self.currentPreamp = resolved.preamp
         self.tone = resolved.tone
+        self.isAutoGain = resolved.autoGain
         self.abSlot = state.liveSlot
         self.alternate = state.alternate
     }
@@ -119,6 +123,7 @@ final class ProfileManager: ObservableObject {
         currentFilters = resolved.filters
         currentPreamp = resolved.preamp
         tone = resolved.tone
+        isAutoGain = resolved.autoGain
         abSlot = state.liveSlot
         alternate = state.alternate
     }
@@ -135,6 +140,7 @@ final class ProfileManager: ObservableObject {
         var filters: [EQFilter]
         var preamp: Double
         var tone: ToneControls
+        var autoGain: Bool
     }
 
     private static func resolve(_ state: DeviceEQState, against profiles: [EQProfile]) -> Resolved {
@@ -163,11 +169,19 @@ final class ProfileManager: ObservableObject {
             filters = state.filters.map(normalized) ?? profile.filters
         }
 
+        // A computed trim is recomputed rather than trusted: the stored number
+        // was right for the chain as it stood, and the chain may have been
+        // normalised on the way in.
+        let preamp = state.autoGain
+            ? AutoGain.trim(for: filters)
+            : state.preamp.clamped(to: BuiltInProfiles.preampRange)
+
         return Resolved(
             profileName: profile.name,
             filters: filters,
-            preamp: state.preamp.clamped(to: BuiltInProfiles.preampRange),
-            tone: tone
+            preamp: preamp,
+            tone: tone,
+            autoGain: state.autoGain
         )
     }
 
@@ -274,7 +288,10 @@ final class ProfileManager: ObservableObject {
         tone = ToneControls()
         currentFilters = profile.filters
         currentPreamp = profile.preamp
-        persistDeviceState()
+        // A preset carries whether its trim is computed, so selecting one adopts
+        // that too — `chainDidChange` then supplies the number.
+        isAutoGain = profile.autoGain
+        chainDidChange()
     }
 
     /// Creates a user preset from `filters` (the working chain by default) and
@@ -289,7 +306,8 @@ final class ProfileManager: ObservableObject {
         let profile = EQProfile(
             name: uniqueName(from: name),
             filters: filters ?? currentFilters,
-            preamp: preamp ?? currentPreamp
+            preamp: preamp ?? currentPreamp,
+            autoGain: isAutoGain
         )
         userProfiles.append(profile)
         persistUserProfiles()
@@ -356,9 +374,10 @@ final class ProfileManager: ObservableObject {
         guard let index = userProfiles.firstIndex(where: { $0.name == activeProfileName }) else { return }
         userProfiles[index].filters = currentFilters
         userProfiles[index].preamp = currentPreamp
+        userProfiles[index].autoGain = isAutoGain
         persistUserProfiles()
         tone = ToneControls()
-        persistDeviceState()
+        chainDidChange()
     }
 
     func canEditProfile(named name: String) -> Bool {
@@ -370,7 +389,7 @@ final class ProfileManager: ObservableObject {
     func setGain(_ gain: Double, forBandAt slot: Int) {
         guard slot < BuiltInProfiles.bandCount, currentFilters.indices.contains(slot) else { return }
         currentFilters[slot].gain = gain.clamped(to: BuiltInProfiles.gainRange)
-        persistDeviceState()
+        chainDidChange()
     }
 
     /// Restores a single band to the active profile's original value
@@ -381,7 +400,7 @@ final class ProfileManager: ObservableObject {
               currentFilters.indices.contains(slot),
               profileBands.indices.contains(slot) else { return }
         currentFilters[slot].gain = profileBands[slot].gain
-        persistDeviceState()
+        chainDidChange()
     }
 
     /// Switches the whole ladder on or off, for hearing what it contributes on
@@ -390,7 +409,7 @@ final class ProfileManager: ObservableObject {
         for slot in 0..<min(BuiltInProfiles.bandCount, currentFilters.count) {
             currentFilters[slot].isEnabled = isEnabled
         }
-        persistDeviceState()
+        chainDidChange()
     }
 
     var areBandsEnabled: Bool {
@@ -417,14 +436,14 @@ final class ProfileManager: ObservableObject {
             colorIndex: nextColorIndex
         )
         currentFilters.append(filter)
-        persistDeviceState()
+        chainDidChange()
         return filter.id
     }
 
     func removeFilter(id: UUID) {
         guard let index = indexOfFreeFilter(id: id) else { return }
         currentFilters.remove(at: index)
-        persistDeviceState()
+        chainDidChange()
     }
 
     func setFilterKind(_ kind: EQFilter.Kind, id: UUID) {
@@ -476,7 +495,7 @@ final class ProfileManager: ObservableObject {
         for index in BuiltInProfiles.bandCount..<currentFilters.count {
             currentFilters[index].isEnabled = isEnabled
         }
-        persistDeviceState()
+        chainDidChange()
     }
 
     var areFreeFiltersEnabled: Bool {
@@ -504,7 +523,7 @@ final class ProfileManager: ObservableObject {
         currentFilters[slot].gain = 0
         currentFilters[slot].isEnabled = true
         currentFilters.append(lifted)
-        persistDeviceState()
+        chainDidChange()
         return lifted.id
     }
 
@@ -534,6 +553,7 @@ final class ProfileManager: ObservableObject {
         currentFilters = resolved.filters
         currentPreamp = resolved.preamp
         tone = resolved.tone
+        isAutoGain = resolved.autoGain
 
         persistDeviceState()
     }
@@ -555,7 +575,7 @@ final class ProfileManager: ObservableObject {
             let base = profileBands[safe: slot]?.gain ?? 0
             currentFilters[slot].gain = (base + offsets[slot]).clamped(to: BuiltInProfiles.gainRange)
         }
-        persistDeviceState()
+        chainDidChange()
     }
 
     /// Restores the active profile's chain and re-centres the Quick EQ tone
@@ -565,13 +585,44 @@ final class ProfileManager: ObservableObject {
         let profile = activeProfile
         currentFilters = profile.filters
         currentPreamp = profile.preamp
-        persistDeviceState()
+        isAutoGain = profile.autoGain
+        chainDidChange()
     }
 
     // MARK: - Output trim
 
+    /// Sets the trim by hand. Ignored while the trim is being computed — the
+    /// control is disabled then, so this can only be reached by a caller that
+    /// has not looked.
     func setPreamp(_ dB: Double) {
+        guard !isAutoGain else { return }
         currentPreamp = dB.clamped(to: BuiltInProfiles.preampRange)
+        persistDeviceState()
+    }
+
+    /// Turns the computed trim on or off.
+    ///
+    /// Switching it on takes the trim over immediately, so the effect is audible
+    /// at the moment the user asks for it rather than at the next edit.
+    /// Switching it off leaves the number where the computation had it — the
+    /// slider becomes yours again at the value you were already hearing, which
+    /// is the only value that makes the transition silent.
+    func setAutoGain(_ isOn: Bool) {
+        guard isOn != isAutoGain else { return }
+        isAutoGain = isOn
+        if isOn { currentPreamp = AutoGain.trim(for: currentFilters) }
+        persistDeviceState()
+    }
+
+    /// Called by everything that changes the chain: recomputes the trim when it
+    /// is being computed, then files the result.
+    ///
+    /// One funnel rather than a recomputation at each of the sixteen call sites,
+    /// so a new way to edit the chain cannot forget to keep the trim in step.
+    private func chainDidChange() {
+        if isAutoGain {
+            currentPreamp = AutoGain.trim(for: currentFilters)
+        }
         persistDeviceState()
     }
 
@@ -583,7 +634,9 @@ final class ProfileManager: ObservableObject {
     /// per term.
     var isModified: Bool {
         let profile = activeProfile
-        return currentFilters != profile.filters || currentPreamp != profile.preamp
+        return currentFilters != profile.filters
+            || currentPreamp != profile.preamp
+            || isAutoGain != profile.autoGain
     }
 
     // MARK: - Private
@@ -597,7 +650,7 @@ final class ProfileManager: ObservableObject {
     private func updateFreeFilter(id: UUID, _ change: (inout EQFilter) -> Void) {
         guard let index = indexOfFreeFilter(id: id) else { return }
         change(&currentFilters[index])
-        persistDeviceState()
+        chainDidChange()
     }
 
     /// Files everything on screen under the current output device.
@@ -617,6 +670,7 @@ final class ProfileManager: ObservableObject {
             filters: isModified ? currentFilters : nil,
             preamp: currentPreamp,
             tone: tone.isNeutral ? nil : [tone.bass, tone.mid, tone.treble],
+            autoGain: isAutoGain,
             alternate: alternate,
             liveSlot: abSlot
         )

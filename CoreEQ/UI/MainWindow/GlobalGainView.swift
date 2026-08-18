@@ -25,6 +25,10 @@ struct GlobalGainView: View {
 
     private static let scaleGap: CGFloat = 6
 
+    /// How far left of the track the Auto toggle sits. Mirrors the room the
+    /// scale takes on the right, so the track stays on the block's centreline.
+    private static let autoGutter: CGFloat = 20
+
     var body: some View {
         // The same track / caption rhythm a band column has — see
         // `Theme.BandRow` — so this track starts and ends exactly level with the
@@ -47,9 +51,15 @@ struct GlobalGainView: View {
                         onReset: { profileManager.setPreamp(0) }
                     )
                     .frame(width: Theme.BandRow.columnWidth, height: trackHeight)
-                    // The scale is an overlay, so it costs no layout width: the
-                    // track keeps the block's centreline and the heading and
-                    // readout centre on it without being nudged.
+                    .disabled(profileManager.isAutoGain)
+                    // Auto on the left, the scale on the right, both as overlays
+                    // so neither costs layout width: the track keeps the block's
+                    // centreline and the caption centres on it without being
+                    // nudged, and the two sides balance each other.
+                    .overlay(alignment: .topLeading) {
+                        autoToggle(trackHeight: trackHeight)
+                            .offset(x: -Self.autoGutter)
+                    }
                     .overlay(alignment: .topLeading) {
                         GainScale(
                             range: BuiltInProfiles.preampRange,
@@ -69,7 +79,7 @@ struct GlobalGainView: View {
                     Text(BandFormat.gain(profileManager.currentPreamp))
                         .font(.system(size: 11, weight: .medium).monospacedDigit())
                         .foregroundStyle(
-                            profileManager.currentPreamp == 0
+                            profileManager.currentPreamp == 0 && !profileManager.isAutoGain
                                 ? AnyShapeStyle(.secondary)
                                 : AnyShapeStyle(Color.coreEQSignal)
                         )
@@ -91,6 +101,57 @@ struct GlobalGainView: View {
         }
         .opacity(isEnabled ? 1.0 : 0.5)
         .help("Output trim applied after the whole chain — use it to give back headroom a boosted preset takes")
+    }
+
+    /// The mode switch for the trim, standing on its side beside the track it
+    /// governs.
+    ///
+    /// Rotated because the column is 116 points wide and its one spare axis is
+    /// the vertical one — a horizontal label would have taken a row from the
+    /// rhythm this block shares with the band strip. Reading bottom to top is
+    /// the rotation with a convention behind it: book spines, chart axes, and
+    /// the vertical labels AppKit draws itself.
+    ///
+    /// While it is on, the slider is disabled rather than merely ignored: a
+    /// control that moves under the pointer and springs back is worse than one
+    /// that declines to move.
+    private func autoToggle(trackHeight: CGFloat) -> some View {
+        Button {
+            profileManager.setAutoGain(!profileManager.isAutoGain)
+        } label: {
+            Text("AUTO")
+                .font(.system(size: 9, weight: .semibold))
+                .kerning(0.6)
+                .rotationEffect(.degrees(-90))
+                .fixedSize()
+                .frame(width: 14, height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(profileManager.isAutoGain ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(
+                            profileManager.isAutoGain ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.12),
+                            lineWidth: 1
+                        )
+                )
+                .foregroundStyle(profileManager.isAutoGain ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        // Centred on the track, so it reads as belonging to it rather than to
+        // the caption or the border above.
+        .offset(y: (trackHeight - 44) / 2)
+        .accessibilityLabel("Automatic gain")
+        .accessibilityValue(profileManager.isAutoGain ? "On" : "Off")
+        .accessibilityAddTraits(profileManager.isAutoGain ? [.isSelected] : [])
+        .help(
+            profileManager.isAutoGain
+                ? "The trim is computed from the chain — switch off to set it by hand"
+                : "Compute the trim from the chain, so a boosted preset stays at the loudness it started from"
+        )
     }
 
     private var preamp: Binding<Double> {

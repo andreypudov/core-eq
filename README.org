@@ -51,6 +51,18 @@ Spotify — plus your own, managed from the sidebar. Built-ins are immutable;
 your presets can be renamed, duplicated, edited, and deleted. Switching is
 instantaneous and glitch-free.
 
+** Automatic gain
+
+The preamp can compute itself. Boosting makes a preset louder, and louder always
+sounds better — which makes any comparison a loudness test rather than a tone
+test. Switch *Auto* on beside the preamp and the trim follows the chain, holding
+the preset at the loudness it started from, so what you hear when you compare is
+the shaping.
+
+It is measured as the average lift across the audible range, weighted equally per
+octave. A preset that lifts one narrow band is corrected gently; one that lifts
+everything is corrected hard.
+
 ** A/B comparison
 
 Two working states of one preset, switched from the header. Each holds a
