@@ -403,19 +403,6 @@ final class ProfileManager: ObservableObject {
         chainDidChange()
     }
 
-    /// Switches the whole ladder on or off, for hearing what it contributes on
-    /// its own.
-    func setBandsEnabled(_ isEnabled: Bool) {
-        for slot in 0..<min(BuiltInProfiles.bandCount, currentFilters.count) {
-            currentFilters[slot].isEnabled = isEnabled
-        }
-        chainDidChange()
-    }
-
-    var areBandsEnabled: Bool {
-        bandFilters.contains(where: \.isEnabled)
-    }
-
     // MARK: - Free filters
 
     /// Adds a filter and returns its id. Refuses past `maxFreeFilters`, which
@@ -488,18 +475,6 @@ final class ProfileManager: ObservableObject {
     /// accidental reset is recoverable in a way an accidental delete is not.
     func resetFilter(id: UUID) {
         updateFreeFilter(id: id) { $0.gain = 0 }
-    }
-
-    /// Switches every free filter on or off, for hearing the ladder alone.
-    func setFreeFiltersEnabled(_ isEnabled: Bool) {
-        for index in BuiltInProfiles.bandCount..<currentFilters.count {
-            currentFilters[index].isEnabled = isEnabled
-        }
-        chainDidChange()
-    }
-
-    var areFreeFiltersEnabled: Bool {
-        freeFilters.contains(where: \.isEnabled)
     }
 
     /// Lifts a band out of the slider strip and into the filter list, where its
@@ -731,7 +706,11 @@ final class ProfileManager: ObservableObject {
         for filter in filters {
             if let slot = filter.band, bands.indices.contains(slot) {
                 bands[slot].gain = filter.gain.clamped(to: BuiltInProfiles.gainRange)
-                bands[slot].isEnabled = filter.isEnabled
+                // Deliberately *not* carried over: nothing can switch a ladder
+                // band off any more, so a chain saved while the graphic half was
+                // bypassed would be silent with no way back. A band at 0 dB is
+                // identity, which is what "off" meant for a rung anyway.
+                bands[slot].isEnabled = true
             } else if free.count < BuiltInProfiles.maxFreeFilters {
                 var loose = filter.unbound()
                 loose.frequency = loose.frequency.clamped(to: BuiltInProfiles.filterFrequencyRange)

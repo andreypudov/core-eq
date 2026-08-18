@@ -202,6 +202,7 @@ CoreEQ/
     BandFormat.swift        Frequency and gain label formatting
     BandColor.swift         Palette a parametric band is tagged with
     KnobScale.swift         Value ladders shared by the knobs and fields
+    PowerToggleStyle.swift  Bypasses, drawn as power buttons
     ScrollAdjuster.swift    Scroll-wheel / trackpad adjustment for any control
     MainWindow/
       EqualizerSidebarView.swift Preset search + list, preset actions
@@ -459,6 +460,32 @@ slot, and cleared.
   "Band Levels" were two names for one thing. =View.borderLabel= mounts it, and
   lives beside =WindowBackground= because its whole trick is carrying that same
   material so it cuts the stroke instead of patching over it.
+
+- *Bypasses are power buttons, and there are two kinds left.* A switch is the
+  control for a preference; these take part of the chain out of the signal, which
+  is a bypass, and the power glyph is what every equalizer already uses for one.
+  =PowerToggleStyle= is a =ToggleStyle= rather than a =Button= on purpose — a
+  button that merely looks like a toggle loses the state VoiceOver announces, the
+  keyboard behaviour, and the traits. Two weights: the master carries a tinted
+  well because it is the way back on and must be findable when the rest of the
+  window is dimmed; a band's is a plain glyph, because a well on every table row
+  would be a column of boxes competing with the values.
+
+  The menu bar keeps a native =NSSwitch=. That surface is the system's, not
+  CoreEQ's — the header is modelled on the Wi‑Fi menu's title-plus-toggle row —
+  so the vocabulary there is the menu's rather than the equalizer's.
+
+- *The per-editor bypasses are gone.* They existed to hear one half of the chain
+  alone, which A/B now does better and at matched loudness. Their real cost was
+  what they said: the architecture's claim is that Graphic and Parametric are two
+  views of *one* chain, and a bypass per half states the opposite. They were also
+  a trap, because the flag is saved — a half switched off and forgotten leaves
+  sliders that move, redraw the curve, and change nothing audible.
+
+  =normalized= now forces =isEnabled= true on every ladder filter. Without it a
+  chain stored while the graphic half was bypassed would come back silent with no
+  control left that could explain it, and a rung at 0 dB is identity anyway, which
+  is what "off" meant for a band.
 
 - *Automatic gain is a mode of the trim, and it averages rather than peaks.*
   =AutoGain.trim(for:)= samples the chain's response at 96 log-spaced points and

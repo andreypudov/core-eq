@@ -42,6 +42,7 @@
 				UI/MenuBar/MenuRowView.swift,
 				UI/MenuBar/QuickEQBodyView.swift,
 				UI/MenuBar/QuickEQMenuMetrics.swift,
+				UI/PowerToggleStyle.swift,
 				UI/Settings/GeneralSettingsView.swift,
 				UI/Settings/SettingsOpener.swift,
 			);

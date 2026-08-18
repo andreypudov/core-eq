@@ -223,12 +223,6 @@ struct FilterListView: View {
         }
     }
 
-    private var freeFiltersEnabled: Binding<Bool> {
-        Binding(
-            get: { profileManager.areFreeFiltersEnabled },
-            set: { profileManager.setFreeFiltersEnabled($0) }
-        )
-    }
 }
 
 /// One band: its colour and number, a switch, a kind menu, and three knobs each
@@ -356,8 +350,7 @@ struct FilterRowView: View {
 
     private var enableCell: some View {
         Toggle("", isOn: enabledBinding)
-            .toggleStyle(.switch)
-            .controlSize(.mini)
+            .toggleStyle(.bandPower)
             .labelsHidden()
             .disabled(!isEnabled)
             .accessibilityLabel("Band \(index) enabled")

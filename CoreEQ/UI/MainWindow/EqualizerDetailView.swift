@@ -108,8 +108,7 @@ struct EqualizerDetailView: View {
                 // any one section. Deliberately not dimmed with the rest when
                 // off — it is the way back on.
                 Toggle("", isOn: $audioEngine.isEnabled)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                    .toggleStyle(.power)
                     .labelsHidden()
                     .accessibilityLabel("Equalizer")
                     .help(audioEngine.isEnabled ? "Turn the equalizer off" : "Turn the equalizer on")
@@ -332,7 +331,6 @@ struct EqualizerDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .contentBlock()
             .borderLabel { editorTabs }
-            .borderLabel(alignment: .topTrailing) { editorPower }
 
             GlobalGainView(profileManager: profileManager, isEnabled: audioEngine.isEnabled)
         }
@@ -384,22 +382,6 @@ struct EqualizerDetailView: View {
         .accessibilityLabel("Editor")
     }
 
-    /// The switch for whichever half is showing — the ladder on the Graphic tab,
-    /// the added bands on the Parametric one. On the same border as the tab that
-    /// names them, so what it governs is never in doubt.
-    private var editorPower: some View {
-        Toggle("", isOn: tab == .graphic ? bandsEnabled : freeFiltersEnabled)
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-            .labelsHidden()
-            .disabled(!audioEngine.isEnabled)
-            .accessibilityLabel(tab == .graphic ? "Band levels" : "Parametric bands")
-            .help(
-                tab == .graphic
-                    ? "Switch the band levels off to hear the parametric bands on their own"
-                    : "Switch the parametric bands off to hear the band levels on their own"
-            )
-    }
 
     private func gainAxis(trackHeight: CGFloat) -> some View {
         GainScale(range: BuiltInProfiles.gainRange, trackHeight: trackHeight, side: .leading)
@@ -480,13 +462,6 @@ struct EqualizerDetailView: View {
         )
     }
 
-    private var bandsEnabled: Binding<Bool> {
-        Binding(
-            get: { profileManager.areBandsEnabled },
-            set: { profileManager.setBandsEnabled($0) }
-        )
-    }
-
     private var abSelection: Binding<ABSlot> {
         Binding(
             get: { profileManager.abSlot },
@@ -494,10 +469,4 @@ struct EqualizerDetailView: View {
         )
     }
 
-    private var freeFiltersEnabled: Binding<Bool> {
-        Binding(
-            get: { profileManager.areFreeFiltersEnabled },
-            set: { profileManager.setFreeFiltersEnabled($0) }
-        )
-    }
 }

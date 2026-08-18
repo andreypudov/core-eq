@@ -409,18 +409,33 @@ final class ProfileManagerTests: XCTestCase {
         XCTAssertEqual(total(manager.currentFilters, at: 1_000), 0, accuracy: 1e-9)
     }
 
-    func testSectionTogglesSwitchEachHalfOfTheChain() {
+    /// A parametric band can still be taken out one at a time — that is the
+    /// bypass that survived, and the useful one.
+    func testABandCanBeSwitchedOutOnItsOwn() {
         let manager = makeManager()
         manager.setActiveProfile(name: "Flat")
         manager.setGain(6, forBandAt: 5)                   // 1 kHz
-        manager.addFilter(frequency: 1_000, gain: 6)
+        guard let id = manager.addFilter(frequency: 1_000, gain: 6) else { return XCTFail("not added") }
+        XCTAssertEqual(total(manager.currentFilters, at: 1_000), 12, accuracy: 0.01)
 
-        manager.setBandsEnabled(false)
-        XCTAssertEqual(total(manager.currentFilters, at: 1_000), 6, accuracy: 0.01, "only the filter remains")
-
-        manager.setBandsEnabled(true)
-        manager.setFreeFiltersEnabled(false)
+        manager.setFilterEnabled(false, id: id)
         XCTAssertEqual(total(manager.currentFilters, at: 1_000), 6, accuracy: 0.01, "only the ladder remains")
+    }
+
+    /// The per-editor bypasses are gone, so a chain stored while one half was
+    /// switched off has to come back audible — otherwise the update leaves a
+    /// silent equalizer and no control that could explain it.
+    func testALadderStoredWhileBypassedComesBackOn() {
+        var chain = BuiltInProfiles.emptyBandChain()
+        for slot in chain.indices {
+            chain[slot].gain = 4
+            chain[slot].isEnabled = false
+        }
+        seed(DeviceEQState(profileName: "Flat", filters: chain))
+
+        let manager = makeManager()
+        XCTAssertTrue(manager.bandFilters.allSatisfy(\.isEnabled), "the ladder came back switched off")
+        XCTAssertGreaterThan(total(manager.currentFilters, at: 1_000), 3)
     }
 
     // MARK: - Global gain
