@@ -74,12 +74,12 @@ struct EqualizerDetailView: View {
     /// and the sidebar already lists every preset with the active one ticked.
     /// Naming both again here was furniture.
     private var header: some View {
-        // Three columns: the editor switcher, the device, and the state of what
-        // is loaded. The device keeps the column's centreline by giving the two
-        // sides equal, flexible halves — *not* by floating over them, which is
-        // what let the engine warning slide underneath the pop-up and collide
-        // with its chevron. Laid out in the row, the sides can only push and
-        // truncate, never overlap.
+        // Three columns: the editor switcher, the device with the preset playing
+        // on it, and the state of what is loaded. The device keeps the column's
+        // centreline by giving the two sides equal, flexible halves — *not* by
+        // floating over them, which is what let the engine warning slide
+        // underneath the pop-up and collide with its chevron. Laid out in the
+        // row, the sides can only push and truncate, never overlap.
         HStack(spacing: 12) {
             Picker("Editor", selection: $tab) {
                 Text("Graphic").tag(EditorTab.graphic)
@@ -106,8 +106,6 @@ struct EqualizerDetailView: View {
                         .accessibilityLabel(warning)
                 }
 
-                presetStatus
-
                 Button("Revert") { profileManager.resetToActiveProfile() }
                     .disabled(!profileManager.isModified)
                     .help("Discard changes and return to the saved preset")
@@ -128,46 +126,93 @@ struct EqualizerDetailView: View {
         .frame(height: Theme.headerHeight)
     }
 
-    /// What is loaded, and whether it has been changed since — beside the
-    /// button that undoes those changes.
+    /// Where the sound is going, and what it sounds like there.
     ///
-    /// The header used to carry a bare "Reset" whose object was named nowhere
-    /// on this side of the window: the preset was in the sidebar, which can be
-    /// scrolled, and the fact that anything had been edited was a dot down
-    /// there too. An action reads better next to the thing it acts on.
-    private var presetStatus: some View {
-        HStack(spacing: 5) {
-            Text(profileManager.activeProfileName)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            // The same mark the sidebar row uses for the same fact.
-            if profileManager.isModified {
-                Circle()
-                    .fill(.secondary)
-                    .frame(width: 5, height: 5)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Preset")
-        .accessibilityValue(
-            profileManager.isModified
-                ? "\(profileManager.activeProfileName), edited"
-                : profileManager.activeProfileName
-        )
-    }
-
-    /// The device, as a pop-up while there is something to choose between and
-    /// plain text when there isn't.
+    /// Two lines in one control, because they are one fact. Since per-device
+    /// state landed, the preset, the unsaved edits and the trim have all followed
+    /// the output device — and the window had nowhere that said so. The preset
+    /// was named on the other side of the header, as far from the device as the
+    /// row allows, which is the opposite of the truth.
+    ///
+    /// Under the device's own name, the preset reads as a property of it, which
+    /// is what it is. Switching outputs changes both lines together, so the cause
+    /// and the effect arrive in the same glance.
     @ViewBuilder
     private var deviceControl: some View {
         if outputs.hasChoice {
-            devicePicker
+            Menu {
+                ForEach(outputs.devices) { device in
+                    Button {
+                        outputs.select(device.id)
+                    } label: {
+                        // One line per row: an NSMenuItem has no subtitle, and
+                        // SwiftUI offers no way to ask for one. Showing each
+                        // device's own preset here would explain the second line
+                        // below, and wants a spike against a real menu before it
+                        // is designed around.
+                        Label(device.name, systemImage: device.symbolName)
+                    }
+                }
+            } label: {
+                deviceLines
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: Theme.outputControlWidth)
+            .accessibilityLabel("Output device")
+            .accessibilityValue(deviceAccessibilityValue)
         } else {
-            deviceName
+            // One output, or none: state it rather than offering a choice the
+            // machine cannot honour.
+            deviceLines
+                .frame(width: Theme.outputControlWidth)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Output device")
+                .accessibilityValue(deviceAccessibilityValue)
         }
+    }
+
+    private var deviceLines: some View {
+        HStack(spacing: 7) {
+            Image(systemName: outputs.defaultDeviceSymbolName)
+                .font(.system(size: 13))
+                .foregroundStyle(outputs.devices.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(outputs.defaultDeviceName)
+                    .font(.system(size: 13))
+                    .foregroundStyle(outputs.devices.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                HStack(spacing: 4) {
+                    Text(profileManager.activeProfileName)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    // The same mark the sidebar row uses for the same fact, in
+                    // the colour the window gives to anything that came from the
+                    // filters rather than from chrome.
+                    if profileManager.isModified {
+                        Circle()
+                            .fill(Color.coreEQSignal)
+                            .frame(width: 4, height: 4)
+                    }
+                }
+            }
+        }
+        // Status, not a second control: the preset is chosen in the sidebar, and
+        // a line that looked clickable here would promise something this button
+        // does not do.
+        .allowsHitTesting(false)
+    }
+
+    private var deviceAccessibilityValue: String {
+        let preset = profileManager.isModified
+            ? "\(profileManager.activeProfileName), edited"
+            : profileManager.activeProfileName
+        return "\(outputs.defaultDeviceName), playing \(preset)"
     }
 
     // MARK: - Graph
@@ -375,41 +420,6 @@ struct EqualizerDetailView: View {
         }
     }
 
-    // MARK: - Output
-
-    private var devicePicker: some View {
-        Picker("Output Device", selection: outputSelection) {
-            ForEach(outputs.devices) { device in
-                Label(device.name, systemImage: device.symbolName).tag(Optional(device.id))
-            }
-        }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        // Large is the system's own bigger pop-up metrics — taller, roomier
-        // inside — rather than a small button padded out by hand.
-        .controlSize(.large)
-        .frame(width: Theme.outputControlWidth)
-        .accessibilityLabel("Output device")
-        .accessibilityValue(outputs.defaultDeviceName)
-    }
-
-    /// The single output, or the lack of any: the same icon and name the pop-up
-    /// would carry, without the button chrome that would promise a choice the
-    /// machine can't offer. The leading inset stands in for the pop-up's own, so
-    /// the name starts where it did when a second device was plugged in.
-    private var deviceName: some View {
-        Label(outputs.defaultDeviceName, systemImage: outputs.defaultDeviceSymbolName)
-            .font(.system(size: 13))
-            .foregroundStyle(outputs.devices.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-            .labelStyle(.titleAndIcon)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .frame(width: Theme.outputControlWidth, alignment: .center)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Output device")
-            .accessibilityValue(outputs.defaultDeviceName)
-    }
-
     /// Nil while the engine is processing normally — a healthy engine needs no
     /// chrome in a window meant to look like a system utility.
     private var engineWarning: String? {
@@ -421,13 +431,6 @@ struct EqualizerDetailView: View {
     }
 
     // MARK: - Bindings
-
-    private var outputSelection: Binding<AudioDeviceID?> {
-        Binding(
-            get: { outputs.defaultDeviceID },
-            set: { if let id = $0 { outputs.select(id) } }
-        )
-    }
 
     private func gainBinding(at slot: Int) -> Binding<Double> {
         Binding(

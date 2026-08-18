@@ -132,9 +132,16 @@ Download the latest =CoreEQ-x.y.zip= from the *Releases* page, unzip, and move
 controls, *Open Equalizer…*, *Settings…*, *About CoreEQ*, and *Quit*. CoreEQ has
 no menu bar of its own, so this is where those live.
 
-*Window* — presets in the sidebar; the response graph, the *Graphic* /
-*Parametric* editors, and the preamp on the right. The output device and the
-master switch sit in the header beside the active preset's name.
+*Window* — presets in the sidebar, with a search field and your own presets
+above the built-ins; the response graph, the *Graphic* / *Parametric* editors,
+and the preamp on the right. The output device sits in the centre of the header
+and names the preset playing on it underneath, with a dot when that preset has
+unsaved changes; *Revert* and the master switch are at the end.
+
+CoreEQ has no volume control. Its one level control is the *preamp*, which is
+the same thing a hardware equalizer calls Level: makeup gain for what the curve
+took away. Volume belongs to macOS, which offers it in the menu bar, on the
+keyboard, and in Sound settings.
 
 Right-click a preset for *New Preset*, *Rename*, *Duplicate*, *Save Changes*,
 *Reset to Preset*, and *Delete*. Right-click a band slider for *Edit as

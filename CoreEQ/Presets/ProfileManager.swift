@@ -208,6 +208,28 @@ final class ProfileManager: ObservableObject {
         profile(named: activeProfileName) ?? builtInProfiles[0]
     }
 
+    /// The two groups the sidebar lists, filtered by what was typed into its
+    /// search field.
+    ///
+    /// Substring rather than prefix matching, so "boost" finds Bass Booster and
+    /// Treble Booster — a list of twenty-odd names is searched by the word you
+    /// remember, which is rarely the first one. Case and diacritics are ignored
+    /// so a preset named "Café" answers to "cafe".
+    ///
+    /// Lives here rather than in the sidebar because it is a question about the
+    /// preset library, and because a view is a place tests cannot reach.
+    func profiles(matching term: String) -> (user: [EQProfile], builtIn: [EQProfile]) {
+        let trimmed = term.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return (userProfiles, builtInProfiles) }
+
+        func matching(_ profiles: [EQProfile]) -> [EQProfile] {
+            profiles.filter {
+                $0.name.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            }
+        }
+        return (matching(userProfiles), matching(builtInProfiles))
+    }
+
     func profile(named name: String) -> EQProfile? {
         // Built-ins are searched first and are the common case; only a user
         // preset pays for the second pass.

@@ -11,6 +11,9 @@ import SwiftUI
 struct EqualizerSidebarView: View {
     @ObservedObject var profileManager: ProfileManager
 
+    /// Filters the list. Empty means everything, in sections.
+    @State private var search = ""
+
     @State private var renameText = ""
     @FocusState private var renameFieldFocused: Bool
 
@@ -30,19 +33,33 @@ struct EqualizerSidebarView: View {
 
             Divider()
                 .padding(.horizontal, 16)
-                .padding(.top, 4)
-                .padding(.bottom, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+
+            searchField
 
             ScrollViewReader { scroll in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        caption("Presets")
-                        ForEach(profileManager.builtInProfiles) { presetRow($0) }
+                        if matches.user.isEmpty && matches.builtIn.isEmpty {
+                            Text("No presets match “\(search)”.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 10)
+                                .padding(.top, 8)
+                        }
 
-                        if !profileManager.userProfiles.isEmpty {
+                        // The user's own first: they are the ones worth finding,
+                        // and there are two of them against twenty-two built-ins.
+                        if !matches.user.isEmpty {
                             caption("My Presets")
-                                .padding(.top, 12)
-                            ForEach(profileManager.userProfiles) { presetRow($0) }
+                            ForEach(matches.user) { presetRow($0) }
+                        }
+
+                        if !matches.builtIn.isEmpty {
+                            caption("Built-in")
+                                .padding(.top, matches.user.isEmpty ? 0 : 12)
+                            ForEach(matches.builtIn) { presetRow($0) }
                         }
                     }
                     .padding(.horizontal, 10)
@@ -96,6 +113,42 @@ struct EqualizerSidebarView: View {
         // Closer to the divider than it was: the switch that used to sit between
         // the two is in the window header now.
         .padding(.bottom, 12)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            TextField("Search", text: $search)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+
+            if !search.isEmpty {
+                Button {
+                    search = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+        )
+        .padding(.horizontal, 14)
+        .padding(.bottom, 10)
+    }
+
+    private var matches: (user: [EQProfile], builtIn: [EQProfile]) {
+        profileManager.profiles(matching: search)
     }
 
     private func caption(_ text: String) -> some View {

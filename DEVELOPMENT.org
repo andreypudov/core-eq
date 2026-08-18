@@ -203,8 +203,9 @@ CoreEQ/
     KnobScale.swift         Value ladders shared by the knobs and fields
     ScrollAdjuster.swift    Scroll-wheel / trackpad adjustment for any control
     MainWindow/
-      EqualizerSidebarView.swift Preset list + preset actions
-      EqualizerDetailView.swift  Content column: header, graph, editors, preamp
+      EqualizerSidebarView.swift Preset search + list, preset actions
+      EqualizerDetailView.swift  Content column: header (device + its preset),
+                                 graph, editors, preamp
       FrequencyResponseView.swift Response curve, handles, spectrum backdrop
       FilterListView.swift       Parametric editor: one row per added band
       VerticalGainSlider.swift   Band gain slider
@@ -390,6 +391,31 @@ and so needs no helper bundle. It deliberately stores nothing: macOS owns the
 state, the user can revoke it in System Settings → General → Login Items while
 CoreEQ is not running, and a cached =Bool= would then be describing a world that
 no longer exists.
+
+** Why there is no volume control
+
+Twice now a volume slider has been added and removed, so the reasoning is here to
+stop it happening a third time.
+
+Every actual equalizer has exactly one level control and it is not a volume. A
+hardware graphic EQ — dbx 231, Klark Teknik DN360, Behringer Ultragraph — has its
+band faders and then a *Level* fader; parametric units (API 550, Pultec EQP-1A)
+have an output gain. Plugin EQs match: Pro-Q has Output Gain, Logic's Channel EQ
+has Global Gain. In-app equalizers match too: Apple Music and VLC have bands and a
+preamp. That control is makeup gain for what the curve took away, and CoreEQ has
+it — =EQProfile.preamp=.
+
+Listening volume lives downstream, in another box: the amplifier, the monitor
+controller, the master fader. The macOS apps that *do* ship a volume slider —
+eqMac, Boom, SoundSource — are audio control centres rather than equalizers, and
+their sliders are their own gain (often a boost past 100%), not a mirror of the
+system's.
+
+CoreEQ's would have been a mirror: a third copy of a control already on the menu
+bar, the keyboard, and in Sound settings, sitting next to a gain control that
+isn't the system's and looks identical. If a *boost* beyond the system maximum is
+ever wanted, that is a different feature, and it belongs in =EQProcessor= as gain
+rather than as a proxy for =kAudioDevicePropertyVolumeScalar=.
 
 ** Persistence
 

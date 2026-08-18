@@ -737,6 +737,55 @@ final class ProfileManagerTests: XCTestCase {
         XCTAssertEqual(onLaunch.currentFilters[3].gain, 7, "the edited chain is what was stored")
     }
 
+    // MARK: - Searching the library
+
+    func testAnEmptySearchReturnsEverythingInTwoGroups() {
+        let manager = makeManager()
+        manager.addProfile(named: "Mine")
+
+        let all = manager.profiles(matching: "")
+        XCTAssertEqual(all.builtIn.count, BuiltInProfiles.all.count)
+        XCTAssertEqual(all.user.map(\.name), ["Mine"])
+
+        XCTAssertEqual(manager.profiles(matching: "   ").builtIn.count, BuiltInProfiles.all.count,
+                       "whitespace is not a search")
+    }
+
+    /// The word people remember is rarely the first one, so the match is on any
+    /// part of the name.
+    func testSearchMatchesAnyPartOfTheName() {
+        let manager = makeManager()
+        let names = manager.profiles(matching: "boost").builtIn.map(\.name)
+
+        XCTAssertTrue(names.contains("Bass Booster"))
+        XCTAssertTrue(names.contains("Treble Booster"))
+        XCTAssertFalse(names.contains("Flat"))
+    }
+
+    func testSearchIgnoresCaseAndDiacritics() {
+        let manager = makeManager()
+        manager.addProfile(named: "Café")
+
+        XCTAssertEqual(manager.profiles(matching: "JAZZ").builtIn.map(\.name), ["Jazz"])
+        XCTAssertEqual(manager.profiles(matching: "cafe").user.map(\.name), ["Café"],
+                       "a preset named Café has to answer to cafe")
+    }
+
+    func testSearchKeepsTheUserGroupSeparate() {
+        let manager = makeManager()
+        manager.addProfile(named: "Rock Loud")
+
+        let found = manager.profiles(matching: "rock")
+        XCTAssertEqual(found.user.map(\.name), ["Rock Loud"])
+        XCTAssertEqual(found.builtIn.map(\.name), ["Rock"])
+    }
+
+    func testSearchCanMatchNothing() {
+        let found = makeManager().profiles(matching: "zzzz")
+        XCTAssertTrue(found.user.isEmpty)
+        XCTAssertTrue(found.builtIn.isEmpty)
+    }
+
     // MARK: - Persistence
 
     func testUserProfilesSurviveRelaunch() {
