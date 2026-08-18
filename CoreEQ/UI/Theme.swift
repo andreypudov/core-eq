@@ -53,6 +53,16 @@ enum Theme {
     /// of shifting every time the device changes.
     static let outputControlWidth: CGFloat = 220
 
+    /// Width kept for the Revert button beside the output control, and mirrored
+    /// on its other side.
+    ///
+    /// Reserved whether or not the button is showing. Revert exists only while
+    /// there is something to revert, and letting it come and go would slide the
+    /// device control sideways the moment a slider is touched — moving the thing
+    /// the user is reading while they read it. Measured: a small bezelled button
+    /// titled "Revert" is 54 points.
+    static let revertSlotWidth: CGFloat = 58
+
     /// Height of the header row, set by the output control — which carries two
     /// lines now: the device, and the preset playing on it.
     static let headerHeight: CGFloat = 42

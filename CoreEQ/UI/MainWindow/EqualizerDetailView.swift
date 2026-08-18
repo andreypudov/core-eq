@@ -74,17 +74,18 @@ struct EqualizerDetailView: View {
     /// and the sidebar already lists every preset with the active one ticked.
     /// Naming both again here was furniture.
     private var header: some View {
-        // Three columns: the editor switcher, the device with the preset playing
-        // on it, and the state of what is loaded. The device keeps the column's
-        // centreline by giving the two sides equal, flexible halves — *not* by
-        // floating over them, which is what let the engine warning slide
-        // underneath the pop-up and collide with its chevron. Laid out in the
-        // row, the sides can only push and truncate, never overlap.
+        // Three columns: the comparison switch, the device with the preset
+        // playing on it and the way back to that preset, and the app's own
+        // controls. The centre keeps the column's centreline by giving the two
+        // sides equal, flexible halves — *not* by floating over them, which is
+        // what let the engine warning slide underneath the pop-up and collide
+        // with its chevron. Laid out in the row, the sides can only push and
+        // truncate, never overlap.
         HStack(spacing: 12) {
             abSwitcher
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            deviceControl
+            deviceAndRevert
 
             HStack(spacing: 10) {
                 // The symbol alone, with the sentence in its tooltip. A rare
@@ -99,16 +100,12 @@ struct EqualizerDetailView: View {
                         .accessibilityLabel(warning)
                 }
 
-                Button("Revert") { profileManager.resetToActiveProfile() }
-                    .disabled(!profileManager.isModified)
-                    .help("Discard changes and return to the saved preset")
+                settingsButton
 
                 // Furthest right, and unlabelled: it governs everything in the
                 // window, so it belongs at the end of the row rather than inside
                 // any one section. Deliberately not dimmed with the rest when
                 // off — it is the way back on.
-                settingsButton
-
                 Toggle("", isOn: $audioEngine.isEnabled)
                     .toggleStyle(.power)
                     .labelsHidden()
@@ -118,6 +115,38 @@ struct EqualizerDetailView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(height: Theme.headerHeight)
+    }
+
+    /// The device, the preset playing on it, and the way back to that preset as
+    /// it was saved.
+    ///
+    /// Revert sits here rather than at the end of the row because this is where
+    /// its object is named. It used to be an inch away from the gear and the
+    /// power button, with nothing beside it saying what it would undo.
+    ///
+    /// The empty cell on the left is the same width as the button on the right,
+    /// so the device control stays on the column's centreline whether or not
+    /// there is anything to revert — otherwise it would slide sideways by half a
+    /// button the moment a slider was touched.
+    private var deviceAndRevert: some View {
+        HStack(spacing: 8) {
+            Color.clear
+                .frame(width: Theme.revertSlotWidth, height: 1)
+                .accessibilityHidden(true)
+
+            deviceControl
+
+            Button("Revert") { profileManager.resetToActiveProfile() }
+                .controlSize(.small)
+                .frame(width: Theme.revertSlotWidth, alignment: .leading)
+                .help("Discard changes and return to the saved preset")
+                // Hidden rather than removed: the slot is held either way, and
+                // fading keeps the row still while the button comes and goes.
+                .opacity(profileManager.isModified ? 1 : 0)
+                .disabled(!profileManager.isModified)
+                .accessibilityHidden(!profileManager.isModified)
+                .animation(.easeInOut(duration: 0.15), value: profileManager.isModified)
+        }
     }
 
     /// Where the sound is going, and what it sounds like there.
