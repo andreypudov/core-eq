@@ -81,10 +81,8 @@ struct EqualizerDetailView: View {
         // underneath the pop-up and collide with its chevron. Laid out in the
         // row, the sides can only push and truncate, never overlap.
         HStack(spacing: 12) {
-            // The editor switcher used to sit here, a window's height away from
-            // the block it governs. It is on that block's border now.
-            Color.clear
-                .frame(maxWidth: .infinity)
+            abSwitcher
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             deviceControl
 
@@ -344,6 +342,27 @@ struct EqualizerDetailView: View {
         .padding(.top, Theme.borderLabelHeight / 2)
     }
 
+    /// Two working states of one preset, and the switch between them.
+    ///
+    /// It takes the slot the editor tabs used to hold. Both belong to the same
+    /// row only in the sense that this is where the window says what you are
+    /// listening to: A and B are complete sounds — preset, chain, trim, tone —
+    /// so this sits beside the preset rather than inside either editor.
+    ///
+    /// Comparing by memory is the alternative, and auditory memory is measured
+    /// in seconds.
+    private var abSwitcher: some View {
+        Picker("Comparison", selection: abSelection) {
+            Text(ABSlot.a.label).tag(ABSlot.a)
+            Text(ABSlot.b.label).tag(ABSlot.b)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .accessibilityLabel("Comparison slot")
+        .help("Two versions of this preset — switch to compare them")
+    }
+
     /// The tab strip, mounted on the editor block's own border.
     ///
     /// A tab belongs on its container's edge, not inside it. In the window
@@ -465,6 +484,13 @@ struct EqualizerDetailView: View {
         Binding(
             get: { profileManager.areBandsEnabled },
             set: { profileManager.setBandsEnabled($0) }
+        )
+    }
+
+    private var abSelection: Binding<ABSlot> {
+        Binding(
+            get: { profileManager.abSlot },
+            set: { profileManager.setSlot($0) }
         )
     }
 

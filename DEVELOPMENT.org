@@ -459,6 +459,15 @@ slot, and cleared.
   lives beside =WindowBackground= because its whole trick is carrying that same
   material so it cuts the stroke instead of patching over it.
 
+- *A and B are two working states, not an undo.* Each holds a complete sound —
+  preset, chain, trim, tone — so switching compares rather than reverts, and both
+  belong to the output device like everything else unsaved. A slot reached for
+  the first time starts as a copy of the one it replaces: the first switch has to
+  be silent, or the control's opening move is to change the thing it exists to
+  compare. In =DeviceEQState= the live slot stays at the top level and the other
+  sits in =alternate=, which is what lets a state written before A/B decode
+  unchanged — no alternate, and A live.
+
 - *A band is moved into the parametric editor, never converted.* =Edit as
   Filter…= lifts a slot's filter out unchanged and leaves the slot at 0 dB,
   which is identity — the chain sums to exactly what it did before. The reverse

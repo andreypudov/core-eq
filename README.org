@@ -51,6 +51,15 @@ Spotify — plus your own, managed from the sidebar. Built-ins are immutable;
 your presets can be renamed, duplicated, edited, and deleted. Switching is
 instantaneous and glitch-free.
 
+** A/B comparison
+
+Two working states of one preset, switched from the header. Each holds a
+complete sound — the preset, the chain, the trim, and the tone — so A/B compares
+two versions rather than undoing one, and the pair belongs to the output device
+like everything else you have not saved. Reaching for the other slot the first
+time changes nothing: it starts as a copy of what you were hearing, and the first
+difference is one you made.
+
 ** Per-device settings
 
 The preset in use, any unsaved edits to it, and the preamp follow the *output

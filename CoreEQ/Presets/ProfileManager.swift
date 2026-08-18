@@ -42,6 +42,13 @@ final class ProfileManager: ObservableObject {
     /// sliders can restore their positions.
     @Published private(set) var tone = ToneControls()
 
+    /// Which of the two working states is being heard. See `ABSlot`.
+    @Published private(set) var abSlot: ABSlot = .a
+
+    /// The state not currently being heard, kept so switching back is exact.
+    /// Nil until the user has reached for the other slot once.
+    private var alternate: WorkingState?
+
     /// The preset the sidebar should be showing as an editable text field, or
     /// nil when no rename is in progress.
     ///
@@ -82,6 +89,8 @@ final class ProfileManager: ObservableObject {
         self.currentFilters = resolved.filters
         self.currentPreamp = resolved.preamp
         self.tone = resolved.tone
+        self.abSlot = state.liveSlot
+        self.alternate = state.alternate
     }
 
     // MARK: - Output device
@@ -110,6 +119,8 @@ final class ProfileManager: ObservableObject {
         currentFilters = resolved.filters
         currentPreamp = resolved.preamp
         tone = resolved.tone
+        abSlot = state.liveSlot
+        alternate = state.alternate
     }
 
     /// A stored slot as something playable: what a device's saved state means
@@ -497,6 +508,36 @@ final class ProfileManager: ObservableObject {
         return lifted.id
     }
 
+    // MARK: - A/B
+
+    /// Puts the other working state in front.
+    ///
+    /// Both slots hold a complete sound — preset, chain, trim, tone — so this is
+    /// a comparison rather than an undo: everything about what you were hearing
+    /// is kept, and comes back untouched when you switch again.
+    ///
+    /// A slot reached for the first time starts as a copy of the one it replaces,
+    /// which is what makes the first switch silent. Starting it at Flat would
+    /// mean the first thing A/B ever did was change the sound, and the point of
+    /// the control is to change nothing until you ask it to.
+    func setSlot(_ slot: ABSlot) {
+        guard slot != abSlot else { return }
+
+        var state = currentDeviceState()
+        state.swapSlots()
+
+        abSlot = state.liveSlot
+        alternate = state.alternate
+
+        let resolved = Self.resolve(state, against: profiles)
+        activeProfileName = resolved.profileName
+        currentFilters = resolved.filters
+        currentPreamp = resolved.preamp
+        tone = resolved.tone
+
+        persistDeviceState()
+    }
+
     // MARK: - Quick EQ tone
 
     /// Updates one or more Quick EQ tone positions and re-derives the band gains
@@ -565,24 +606,45 @@ final class ProfileManager: ObservableObject {
     /// that changes the sound without being remembered alongside the rest.
     private func persistDeviceState() {
         var states = settings.deviceStates
-        states[Self.slot(for: outputDeviceUID)] = DeviceEQState(
+        states[Self.slot(for: outputDeviceUID)] = currentDeviceState()
+        settings.deviceStates = states
+    }
+
+    /// Everything on screen, as the device's slot would store it.
+    private func currentDeviceState() -> DeviceEQState {
+        DeviceEQState(
             profileName: activeProfileName,
             filters: isModified ? currentFilters : nil,
             preamp: currentPreamp,
-            tone: tone.isNeutral ? nil : [tone.bass, tone.mid, tone.treble]
+            tone: tone.isNeutral ? nil : [tone.bass, tone.mid, tone.treble],
+            alternate: alternate,
+            liveSlot: abSlot
         )
-        settings.deviceStates = states
     }
 
     /// Follows a preset rename into every device that had it selected, so the
     /// other devices don't silently fall back to Flat next time they're used.
     private func renameInDeviceStates(from name: String, to newName: String) {
         var states = settings.deviceStates
-        for (key, var state) in states where state.profileName == name {
-            state.profileName = newName
-            states[key] = state
+        for (key, var state) in states {
+            var changed = false
+            if state.profileName == name {
+                state.profileName = newName
+                changed = true
+            }
+            // The slot nobody is listening to refers to presets by name as well,
+            // and would otherwise fall back to Flat the next time it came round.
+            if state.alternate?.profileName == name {
+                state.alternate?.profileName = newName
+                changed = true
+            }
+            if changed { states[key] = state }
         }
         settings.deviceStates = states
+
+        if alternate?.profileName == name {
+            alternate?.profileName = newName
+        }
     }
 
     private func persistUserProfiles() {

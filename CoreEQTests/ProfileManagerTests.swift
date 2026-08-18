@@ -786,6 +786,116 @@ final class ProfileManagerTests: XCTestCase {
         XCTAssertTrue(found.builtIn.isEmpty)
     }
 
+    // MARK: - A/B
+
+    /// The first reach for the other slot must change nothing. A comparison that
+    /// begins by altering the sound has already lost the thing it compares.
+    func testSwitchingToAnUnusedSlotIsSilent() {
+        let manager = makeManager()
+        manager.setActiveProfile(name: "Jazz")
+        manager.setGain(6, forBandAt: 2)
+        let before = manager.currentFilters
+
+        manager.setSlot(.b)
+
+        XCTAssertEqual(manager.abSlot, .b)
+        XCTAssertEqual(manager.currentFilters, before, "reaching for B changed what was playing")
+        XCTAssertEqual(manager.activeProfileName, "Jazz")
+    }
+
+    func testEachSlotKeepsItsOwnSound() {
+        let manager = makeManager()
+        manager.setActiveProfile(name: "Flat")
+        manager.setGain(6, forBandAt: 2)
+        let a = manager.currentFilters
+
+        manager.setSlot(.b)
+        manager.setGain(-6, forBandAt: 2)
+        let b = manager.currentFilters
+        XCTAssertNotEqual(a, b)
+
+        manager.setSlot(.a)
+        XCTAssertEqual(manager.currentFilters, a, "A did not come back as it was left")
+
+        manager.setSlot(.b)
+        XCTAssertEqual(manager.currentFilters, b, "B did not come back as it was left")
+    }
+
+    /// A slot holds a whole sound, not just a chain: preset, trim and tone go
+    /// with it.
+    func testASlotCarriesThePresetAndTheTrim() {
+        let manager = makeManager()
+        manager.setActiveProfile(name: "Rock")
+        manager.setPreamp(-4)
+
+        manager.setSlot(.b)
+        manager.setActiveProfile(name: "Jazz")
+        manager.setPreamp(2)
+
+        manager.setSlot(.a)
+        XCTAssertEqual(manager.activeProfileName, "Rock")
+        XCTAssertEqual(manager.currentPreamp, -4)
+
+        manager.setSlot(.b)
+        XCTAssertEqual(manager.activeProfileName, "Jazz")
+        XCTAssertEqual(manager.currentPreamp, 2)
+    }
+
+    func testTheComparisonSurvivesRelaunch() {
+        let first = makeManager()
+        first.setActiveProfile(name: "Flat")
+        first.setGain(5, forBandAt: 0)
+        first.setSlot(.b)
+        first.setGain(-5, forBandAt: 0)
+
+        let second = makeManager()
+        XCTAssertEqual(second.abSlot, .b)
+        XCTAssertEqual(second.bandFilters[0].gain, -5)
+
+        second.setSlot(.a)
+        XCTAssertEqual(second.bandFilters[0].gain, 5, "the other slot did not survive the relaunch")
+    }
+
+    /// Each device has its own pair: a comparison set up on headphones is still
+    /// there when headphones come back.
+    func testTheComparisonBelongsToTheDevice() {
+        let manager = makeManager(device: "speakers")
+        manager.setActiveProfile(name: "Flat")
+        manager.setSlot(.b)
+        manager.setGain(7, forBandAt: 3)
+
+        manager.setOutputDevice(uid: "headphones")
+        XCTAssertEqual(manager.abSlot, .a, "a device never seen before starts on A")
+
+        manager.setOutputDevice(uid: "speakers")
+        XCTAssertEqual(manager.abSlot, .b)
+        XCTAssertEqual(manager.bandFilters[3].gain, 7)
+    }
+
+    /// Renaming has to follow the preset into the slot nobody is listening to,
+    /// or that slot silently falls back to Flat the next time it comes round.
+    func testRenamingFollowsThePresetIntoTheOtherSlot() {
+        let manager = makeManager()
+        let name = manager.addProfile(named: "Mine")
+        manager.setSlot(.b)
+        manager.setActiveProfile(name: "Rock")
+
+        XCTAssertEqual(manager.renameProfile(named: name, to: "Renamed"), "Renamed")
+
+        manager.setSlot(.a)
+        XCTAssertEqual(manager.activeProfileName, "Renamed")
+    }
+
+    func testSwitchingToTheSlotAlreadyLiveDoesNothing() {
+        let manager = makeManager()
+        manager.setGain(3, forBandAt: 1)
+        let before = manager.currentFilters
+
+        manager.setSlot(.a)
+        XCTAssertEqual(manager.abSlot, .a)
+        XCTAssertEqual(manager.currentFilters, before)
+    }
+
     // MARK: - Persistence
 
     func testUserProfilesSurviveRelaunch() {
