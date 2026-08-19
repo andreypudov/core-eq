@@ -34,7 +34,7 @@ struct WorkingState: Codable, Equatable {
         filters: [EQFilter]? = nil,
         preamp: Double = 0,
         tone: [Double]? = nil,
-        autoGain: Bool = false
+        autoGain: Bool = true
     ) {
         self.profileName = profileName
         self.filters = filters
@@ -50,7 +50,7 @@ struct WorkingState: Codable, Equatable {
         filters = try container.decodeIfPresent([EQFilter].self, forKey: .filters)
         preamp = try container.decodeIfPresent(Double.self, forKey: .preamp) ?? 0
         tone = try container.decodeIfPresent([Double].self, forKey: .tone)
-        autoGain = try container.decodeIfPresent(Bool.self, forKey: .autoGain) ?? false
+        autoGain = try container.decodeIfPresent(Bool.self, forKey: .autoGain) ?? true
     }
 }
 
@@ -93,7 +93,7 @@ struct DeviceEQState: Codable, Equatable {
         filters: [EQFilter]? = nil,
         preamp: Double = 0,
         tone: [Double]? = nil,
-        autoGain: Bool = false,
+        autoGain: Bool = true,
         alternate: WorkingState? = nil,
         liveSlot: ABSlot = .a
     ) {
@@ -114,7 +114,7 @@ struct DeviceEQState: Codable, Equatable {
         filters = try container.decodeIfPresent([EQFilter].self, forKey: .filters)
         preamp = try container.decodeIfPresent(Double.self, forKey: .preamp) ?? 0
         tone = try container.decodeIfPresent([Double].self, forKey: .tone)
-        autoGain = try container.decodeIfPresent(Bool.self, forKey: .autoGain) ?? false
+        autoGain = try container.decodeIfPresent(Bool.self, forKey: .autoGain) ?? true
         alternate = try container.decodeIfPresent(WorkingState.self, forKey: .alternate)
         liveSlot = try container.decodeIfPresent(ABSlot.self, forKey: .liveSlot) ?? .a
     }

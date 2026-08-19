@@ -54,6 +54,7 @@ import Testing
         let manager = makeManager(device: "headphones")
         manager.setActiveProfile(name: "Rock")
         manager.setGain(6, forBandAt: 0)
+        manager.setAutoGain(false)
         manager.setPreamp(-3)
 
         manager.setOutputDevice(uid: "speakers")
@@ -77,6 +78,7 @@ import Testing
     @Test func deviceStateSurvivesRelaunch() {
         let first = makeManager(device: "headphones")
         first.setActiveProfile(name: "Rock")
+        first.setAutoGain(false)
         first.setPreamp(-2.5)
         first.setTone(bass: 4)
 
@@ -134,7 +136,11 @@ import Testing
 
         let manager = makeManager(device: "headphones")
         #expect(manager.activeProfileName == "Rock")
-        #expect(manager.currentPreamp == -4)
+        // The preset comes across; the trim does not. A migrated state adopts
+        // the computed mode like any other, and the number it lands on is the
+        // one the chain asks for rather than the one stored beside it.
+        #expect(manager.isAutoGain)
+        #expect(manager.currentPreamp == AutoGain.trim(for: manager.currentFilters))
         #expect(settings.activeProfileName == nil, "the legacy keys are consumed once")
         #expect(storedState(device: "headphones")?.profileName == "Rock")
     }
@@ -206,10 +212,12 @@ import Testing
     @Test func aSlotCarriesThePresetAndTheTrim() {
         let manager = makeManager()
         manager.setActiveProfile(name: "Rock")
+        manager.setAutoGain(false)
         manager.setPreamp(-4)
 
         manager.setSlot(.b)
         manager.setActiveProfile(name: "Jazz")
+        manager.setAutoGain(false)
         manager.setPreamp(2)
 
         manager.setSlot(.a)
@@ -281,6 +289,7 @@ import Testing
     @Test func turningAutoOnTakesTheTrimOverImmediately() {
         let manager = makeManager()
         manager.setActiveProfile(name: "Flat")
+        manager.setAutoGain(false)
         for slot in 0..<BuiltInProfiles.bandCount { manager.setGain(6, forBandAt: slot) }
         #expect(manager.currentPreamp == 0, "nothing should have touched the trim yet")
 
@@ -345,16 +354,22 @@ import Testing
         manager.setActiveProfile(name: "Flat")
         manager.setGain(7, forBandAt: 2)
         manager.setAutoGain(true)
-        let name = manager.addProfile(named: "Auto Preset")
+        let auto = manager.addProfile(named: "Auto Preset")
         manager.saveChangesToActiveProfile()
+        #expect(manager.profile(named: auto)?.autoGain == true)
 
-        #expect(manager.profile(named: name)?.autoGain == true)
+        // Every built-in computes its trim, so the preset that proves the mode
+        // travels has to be one saved with it off.
+        manager.setAutoGain(false)
+        let manual = manager.addProfile(named: "Manual Preset")
+        manager.saveChangesToActiveProfile()
+        #expect(manager.profile(named: manual)?.autoGain == false)
 
-        manager.setActiveProfile(name: "Rock")
-        #expect(!manager.isAutoGain, "a preset without auto did not turn it off")
-
-        manager.setActiveProfile(name: name)
+        manager.setActiveProfile(name: auto)
         #expect(manager.isAutoGain, "the preset did not bring its mode back")
+
+        manager.setActiveProfile(name: manual)
+        #expect(!manager.isAutoGain, "a preset saved without auto did not turn it off")
     }
 
     @Test func autoSurvivesRelaunchAndIsRecomputed() {
@@ -369,15 +384,19 @@ import Testing
         #expect(second.currentPreamp.isClose(to: computed, within: 0.01))
     }
 
-    /// Turning the mode on changes the sound, so the header has to report the
-    /// preset as edited.
-    @Test func turningAutoOnCountsAsAnEdit() {
+    /// The mode is part of the sound, so departing from the one the preset asks
+    /// for has to report as edited. Every built-in computes its trim, so the
+    /// departure is turning it off.
+    @Test func changingTheAutoModeCountsAsAnEdit() {
         let manager = makeManager()
         manager.setActiveProfile(name: "Flat")
         #expect(!manager.isModified)
 
-        manager.setAutoGain(true)
+        manager.setAutoGain(false)
         #expect(manager.isModified)
+
+        manager.setAutoGain(true)
+        #expect(!manager.isModified, "returning to the preset's own mode is not an edit")
     }
 
     /// Each slot carries its own mode, so A can be computed while B is held.

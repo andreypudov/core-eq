@@ -21,7 +21,13 @@ struct EQProfile: Codable, Equatable, Identifiable {
     ///
     /// A property of the preset, not a preference: whether *this* sound wants
     /// its loudness held constant is a decision about the sound.
-    var autoGain = false
+    ///
+    /// On unless a preset says otherwise. Nineteen of the twenty-two built-ins
+    /// lift the chain on average, so without it each one wins any comparison
+    /// against Flat on loudness alone, and choosing a preset is a volume change
+    /// dressed as a tone change. `AutoGain` only ever attenuates, so this cannot
+    /// make a preset clip that would not have clipped anyway.
+    var autoGain = true
 
     /// Built-in profiles ship with CoreEQ and can't be renamed, edited in place,
     /// or deleted. User profiles support the full set of sidebar actions.
@@ -46,7 +52,7 @@ struct EQProfile: Codable, Equatable, Identifiable {
         name: String,
         filters: [EQFilter],
         preamp: Double = 0,
-        autoGain: Bool = false,
+        autoGain: Bool = true,
         isBuiltIn: Bool = false
     ) {
         self.name = name
@@ -67,6 +73,7 @@ struct EQProfile: Codable, Equatable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
         preamp = try container.decodeIfPresent(Double.self, forKey: .preamp) ?? 0
+        autoGain = try container.decodeIfPresent(Bool.self, forKey: .autoGain) ?? true
 
         if let filters = try container.decodeIfPresent([EQFilter].self, forKey: .filters) {
             self.filters = filters
@@ -83,6 +90,7 @@ struct EQProfile: Codable, Equatable, Identifiable {
         try container.encode(name, forKey: .name)
         try container.encode(filters, forKey: .filters)
         try container.encode(preamp, forKey: .preamp)
+        try container.encode(autoGain, forKey: .autoGain)
     }
 
     /// The shape of a band in presets saved by CoreEQ 1.x. Read once, at

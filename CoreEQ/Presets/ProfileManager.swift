@@ -540,9 +540,14 @@ final class ProfileManager: ObservableObject {
     /// per term.
     var isModified: Bool {
         let profile = activeProfile
-        return currentFilters != profile.filters
-            || currentPreamp != profile.preamp
-            || isAutoGain != profile.autoGain
+        if currentFilters != profile.filters { return true }
+        if isAutoGain != profile.autoGain { return true }
+        // With Auto on the trim is derived from the chain, so it says nothing
+        // the chain has not already been compared for. Comparing it against the
+        // preset's stored number would mark every computed preset as edited the
+        // moment it was selected — the number on screen is what the preset asks
+        // for, not a departure from it.
+        return isAutoGain ? false : currentPreamp != profile.preamp
     }
 
     // MARK: - Private

@@ -29,6 +29,14 @@ import Foundation
 /// every application has already set its own level. What this does is remove the
 /// systematic part of the problem, which is a boosted chain asking for more
 /// than it was given.
+///
+/// It also never boosts. A chain that cuts on average has a negative mean, and
+/// cancelling it would mean lifting everything the preset left alone — Bass
+/// Reducer measured +2.27 dB, applied broadband to frequencies it never touched,
+/// on material already mastered near full scale. That trades a real risk for a
+/// cosmetic one: matching a reducer to source loudness undoes what the preset
+/// was chosen to do. So the correction is one-directional, which is what makes
+/// it safe to leave on.
 enum AutoGain {
     /// Where the response is sampled. The trim is a broadband average, so the
     /// exact rate barely moves it — the two common rates differ by hundredths of
@@ -46,9 +54,10 @@ enum AutoGain {
 
     /// The trim, in dB, that cancels `filters`' average lift.
     ///
-    /// Clamped to what the trim can actually hold: a chain asking for more
-    /// correction than ±12 dB gets all the app has, and the number on screen
-    /// stays a number the slider could have reached by hand.
+    /// Never positive — see the note above on why the correction only ever
+    /// attenuates — and clamped to what the trim can actually hold: a chain
+    /// asking for more correction than the preamp range gets all the app has,
+    /// and the number on screen stays one the slider could have reached by hand.
     static func trim(for filters: [EQFilter], sampleRate: Double = referenceSampleRate) -> Double {
         guard !filters.isEmpty else { return 0 }
 
@@ -68,6 +77,6 @@ enum AutoGain {
         }
 
         let average = total / Double(sampleCount)
-        return (-average).clamped(to: BuiltInProfiles.preampRange)
+        return min(0, -average).clamped(to: BuiltInProfiles.preampRange)
     }
 }

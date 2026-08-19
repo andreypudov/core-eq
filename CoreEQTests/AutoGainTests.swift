@@ -15,9 +15,24 @@ struct AutoGainTests {
     }
 
     /// The sign is the whole point: boosting has to pull the trim down.
-    @Test func boostTrimsDownAndCutTrimsUp() {
+    @Test func boostTrimsDown() {
         #expect(AutoGain.trim(for: chain([6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6])) < -3)
-        #expect(AutoGain.trim(for: chain([-6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6])) > 3)
+    }
+
+    /// The correction only ever attenuates, which is what makes it safe to leave
+    /// on: cancelling a cut means lifting every frequency the preset left alone,
+    /// broadband, over material that may already be at full scale.
+    @Test func aCutIsNotCorrectedBackUp() {
+        #expect(AutoGain.trim(for: chain([-6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6])) == 0)
+        #expect(AutoGain.trim(for: chain([0, 0, 0, 0, -8, 0, 0, 0, 0, 0, 0])) == 0)
+    }
+
+    @Test func everyBuiltInAsksForAttenuationOrNothing() {
+        for profile in BuiltInProfiles.all {
+            #expect(
+                AutoGain.trim(for: profile.filters) <= 0,
+                "\(profile.name) would be boosted by a mode that is on by default")
+        }
     }
 
     /// A chain lifted by the same amount everywhere is the one case with an

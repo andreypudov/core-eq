@@ -458,6 +458,8 @@ import Testing
         manager.setActiveProfile(name: "Flat")
         #expect(!manager.isModified)
 
+        // The trim is only settable by hand once the computed mode is off.
+        manager.setAutoGain(false)
         manager.setPreamp(99)
         #expect(manager.currentPreamp == BuiltInProfiles.preampRange.upperBound)
         #expect(manager.isModified, "the trim changes the sound, so it is an unsaved change")
@@ -469,13 +471,15 @@ import Testing
     @Test func preampIsSavedIntoAndRestoredFromAPreset() {
         let manager = makeManager()
         let name = manager.addProfile(named: "Trimmed")
+        manager.setAutoGain(false)
         manager.setPreamp(-4.5)
         manager.saveChangesToActiveProfile()
         #expect(!manager.isModified)
         #expect(manager.profile(named: name)?.preamp == -4.5)
 
         manager.setActiveProfile(name: "Rock")
-        #expect(manager.currentPreamp == 0, "a preset carries its own trim, and Rock has none")
+        #expect(manager.isAutoGain, "a built-in computes its own trim")
+        #expect(manager.currentPreamp < 0, "Rock lifts the chain, so its trim pulls back")
 
         manager.setActiveProfile(name: name)
         #expect(manager.currentPreamp == -4.5)
@@ -484,6 +488,7 @@ import Testing
     @Test func preampSurvivesRelaunchAndRoundTripsThroughJSON() throws {
         let first = makeManager()
         first.setActiveProfile(name: "Flat")
+        first.setAutoGain(false)
         first.setPreamp(2.5)
         #expect(makeManager().currentPreamp == 2.5)
 
@@ -495,12 +500,13 @@ import Testing
     @Test func resetToActiveProfileRestoresThePreamp() {
         let manager = makeManager()
         manager.setActiveProfile(name: "Rock")
+        manager.setAutoGain(false)
         manager.setPreamp(-5)
 
         manager.resetToActiveProfile()
-        #expect(manager.currentPreamp == 0)
+        #expect(manager.isAutoGain, "reset restores the preset's mode as well as its numbers")
+        #expect(manager.currentPreamp == AutoGain.trim(for: manager.currentFilters))
         #expect(!manager.isModified)
-        #expect(storedState()?.preamp == 0)
     }
 
     // MARK: - Edit as filter
