@@ -190,10 +190,9 @@ final class AudioEngine: ObservableObject {
         let processor = self.processor
         var newProcID: AudioDeviceIOProcID?
         try check(
-            AudioDeviceCreateIOProcIDWithBlock(&newProcID, aggregateID, nil) {
-                _, input, _, output, _ in
-                processor.render(input: input, output: output)
-            }, "creating the IO proc")
+            AudioDeviceCreateIOProcIDWithBlock(
+                &newProcID, aggregateID, nil, Self.ioBlock(for: processor)),
+            "creating the IO proc")
         ioProcID = newProcID
 
         try check(AudioDeviceStart(aggregateID, newProcID), "starting the aggregate device")
@@ -204,6 +203,26 @@ final class AudioEngine: ObservableObject {
 
         status = .running(deviceName: outputName)
         logger.info("Engine running on \(outputName, privacy: .public)")
+    }
+
+    /// The block Core Audio calls on its realtime IO thread.
+    ///
+    /// `nonisolated`, and a separate function, for one reason: a closure written
+    /// inline in `startEngine` is formed inside a `@MainActor` type and inherits
+    /// that isolation, so the compiler emits an executor check at every call.
+    /// Core Audio then calls it from `com.apple.audio.IOThread.client`, the
+    /// check fails, and `dispatch_assert_queue` traps the process the moment
+    /// audio starts flowing. Swift 5 emitted no such check, which is why this
+    /// only became a crash on the move to Swift 6 — the code had always been
+    /// wrong about which thread it runs on, and the language started saying so.
+    ///
+    /// Building it here, outside the actor, is what makes it nonisolated. It
+    /// cannot be fixed by marking the inline closure `@Sendable`: that was
+    /// tried, it compiles, and it still traps.
+    private nonisolated static func ioBlock(for processor: EQProcessor) -> AudioDeviceIOBlock {
+        { _, input, _, output, _ in
+            processor.render(input: input, output: output)
+        }
     }
 
     private func teardownEngine() {

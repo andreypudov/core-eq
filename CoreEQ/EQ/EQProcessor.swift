@@ -17,7 +17,15 @@ import os
 ///
 /// Filters are RBJ audio-cookbook biquads, processed in transposed direct form
 /// II with per-filter, per-channel state.
-final class EQProcessor {
+///
+/// `@unchecked Sendable` because that split is the whole design: every mutable
+/// field is either written only from the main thread and read only behind the
+/// staging lock, or touched only by the render thread. The compiler cannot see
+/// a rule enforced by an unfair lock and a documented thread contract, so this
+/// asserts it — and it has to be asserted, because the IO block that calls
+/// `render` must not inherit the main-actor isolation of the engine that
+/// creates it.
+final class EQProcessor: @unchecked Sendable {
     /// Eleven ladder slots plus `BuiltInProfiles.maxFreeFilters`, with room left
     /// for automatically generated processing later. Each filter is one more
     /// pass over the buffer in `processChannel`, so this is a real budget.
