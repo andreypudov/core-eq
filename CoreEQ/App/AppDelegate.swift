@@ -178,8 +178,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // window. The opening size is capped to the visible frame so the
             // window always arrives fully on screen, including on a laptop
             // display.
-            // Header, editing area, and padding come to ~380 pt; the rest is the
-            // graph, which has a 120 pt floor.
+            // Header, editing area, and padding come to ~400 pt — the strip
+            // spends 40 of that on `Theme.BandRow.chromeHeight`, a value row
+            // above each track and a caption below. The rest is the graph,
+            // which has a 120 pt floor.
             window.contentMinSize = NSSize(width: 960, height: 540)
             let visible =
                 (NSScreen.main?.visibleFrame.size).map {

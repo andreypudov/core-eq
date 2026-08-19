@@ -14,6 +14,13 @@ struct EqualizerSidebarView: View {
     /// Filters the list. Empty means everything, in sections.
     @State private var search = ""
 
+    /// Whether the search field holds the keyboard.
+    ///
+    /// Tracked so that choosing a preset can hand it back: the click is the end
+    /// of the search, and a caret still blinking in the field afterwards claims
+    /// the typing continues.
+    @FocusState private var searchFieldFocused: Bool
+
     @State private var renameText = ""
     @FocusState private var renameFieldFocused: Bool
 
@@ -146,12 +153,22 @@ struct EqualizerSidebarView: View {
     private var searchField: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundStyle(.secondary)
 
             TextField("Search", text: $search)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12))
+                // The same 13 pt the preset rows are set in: the field states
+                // what the list below it is showing, so the two should read as
+                // one control, and System Settings sizes its own sidebar search
+                // to its rows the same way.
+                .font(.system(size: 13))
+                .focused($searchFieldFocused)
+                // Escape leaves the search as it was found.
+                .onExitCommand {
+                    search = ""
+                    searchFieldFocused = false
+                }
 
             if !search.isEmpty {
                 Button {
@@ -166,9 +183,9 @@ struct EqualizerSidebarView: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(Color.primary.opacity(0.06))
         )
         .padding(.horizontal, 14)
@@ -248,6 +265,7 @@ struct EqualizerSidebarView: View {
         .onTapGesture {
             guard !isRenaming else { return }
             if profileManager.profileAwaitingRename != nil { commitRename() }
+            searchFieldFocused = false
             profileManager.setActiveProfile(name: profile.name)
         }
         .onHover { isInside in

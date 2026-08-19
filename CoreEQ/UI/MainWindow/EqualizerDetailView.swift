@@ -336,9 +336,10 @@ struct EqualizerDetailView: View {
                             .fill(Theme.blockBorder)
                             .frame(height: 1)
                             .offset(
-                                y: VerticalGainSlider.knobCenterY(
-                                    for: 0, in: trackHeight, range: BuiltInProfiles.gainRange
-                                )
+                                y: Theme.BandRow.topChromeHeight
+                                    + VerticalGainSlider.knobCenterY(
+                                        for: 0, in: trackHeight, range: BuiltInProfiles.gainRange
+                                    )
                             )
                     }
                 }
@@ -369,6 +370,8 @@ struct EqualizerDetailView: View {
             // Both blocks fill the row, so the Graphic and Parametric tabs and
             // the Global Gain column all read as one band of equal height.
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Clears the tabs hanging into the block above this.
+            .padding(.top, Theme.borderLabelClearance)
             .contentBlock()
             .borderLabel { editorTabs }
 
@@ -464,6 +467,8 @@ struct EqualizerDetailView: View {
     private func gainAxis(trackHeight: CGFloat) -> some View {
         GainScale(range: BuiltInProfiles.gainRange, trackHeight: trackHeight, side: .leading)
             .frame(width: Theme.axisGutter, alignment: .trailing)
+            // Clears the value row, so the scale still reads against the track.
+            .padding(.top, Theme.BandRow.topChromeHeight)
     }
 
     private func bandControl(at slot: Int, trackHeight: CGFloat) -> some View {
@@ -471,6 +476,23 @@ struct EqualizerDetailView: View {
         let isActive = draggingBand == slot || hoveredBand == slot
 
         return VStack(spacing: 6) {
+            // What the slider is set to, always readable — the strip used to
+            // answer this only while the pointer was on the curve above.
+            //
+            // The frequency's own colour, not the signal colour: these two read
+            // as the pair of captions belonging to one column, and a row of
+            // eleven accented numbers would out-shout the curve above that they
+            // describe. Zero drops a step further back, so a flat strip stays a
+            // quiet line rather than eleven numbers competing with the ones that
+            // moved.
+            Text(BandFormat.gain(band.gain))
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .foregroundStyle(
+                    band.gain == 0 ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary)
+                )
+                .frame(height: Theme.BandRow.valueHeight)
+                .accessibilityHidden(true)
+
             VerticalGainSlider(
                 value: gainBinding(at: slot),
                 range: BuiltInProfiles.gainRange,

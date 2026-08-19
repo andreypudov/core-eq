@@ -25,9 +25,9 @@ struct GlobalGainView: View {
 
     private static let scaleGap: CGFloat = 6
 
-    /// How far left of the track the Auto toggle sits. Mirrors the room the
-    /// scale takes on the right, so the track stays on the block's centreline.
-    private static let autoGutter: CGFloat = 20
+    /// Width of the Auto switch — the word plus a little, centred under the
+    /// track it governs.
+    private static let autoWidth: CGFloat = 46
 
     var body: some View {
         // The same track / caption rhythm a band column has — see
@@ -41,6 +41,24 @@ struct GlobalGainView: View {
                     Theme.BandRow.minSliderHeight
                 )
                 VStack(spacing: 6) {
+                    // On the same line as the band values, in the same font and
+                    // the same colours, so the trim reads as one more number in
+                    // that row rather than as a caption belonging to this block
+                    // alone.
+                    //
+                    // Auto keeps it at full strength even at 0 dB: the trim is
+                    // being computed then, and dimming it would say the control
+                    // is idle at the moment it is doing the most work.
+                    Text(BandFormat.gain(profileManager.currentPreamp))
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .foregroundStyle(
+                            profileManager.currentPreamp == 0 && !profileManager.isAutoGain
+                                ? AnyShapeStyle(.tertiary)
+                                : AnyShapeStyle(.secondary)
+                        )
+                        .frame(height: Theme.BandRow.valueHeight)
+                        .accessibilityHidden(true)
+
                     VerticalGainSlider(
                         value: preamp,
                         range: BuiltInProfiles.preampRange,
@@ -52,14 +70,9 @@ struct GlobalGainView: View {
                     )
                     .frame(width: Theme.BandRow.columnWidth, height: trackHeight)
                     .disabled(profileManager.isAutoGain)
-                    // Auto on the left, the scale on the right, both as overlays
-                    // so neither costs layout width: the track keeps the block's
-                    // centreline and the caption centres on it without being
-                    // nudged, and the two sides balance each other.
-                    .overlay(alignment: .topLeading) {
-                        autoToggle(trackHeight: trackHeight)
-                            .offset(x: -Self.autoGutter)
-                    }
+                    // The scale is an overlay so it costs no layout width: the
+                    // track keeps the block's centreline and the rows above and
+                    // below centre on it without being nudged.
                     .overlay(alignment: .topLeading) {
                         GainScale(
                             range: BuiltInProfiles.preampRange,
@@ -75,17 +88,10 @@ struct GlobalGainView: View {
                     .accessibilityValue(
                         String(format: "%+.1f decibels", profileManager.currentPreamp))
 
-                    // Where a band column carries its frequency; same font, so
-                    // the two captions sit on one line.
-                    Text(BandFormat.gain(profileManager.currentPreamp))
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
-                        .foregroundStyle(
-                            profileManager.currentPreamp == 0 && !profileManager.isAutoGain
-                                ? AnyShapeStyle(.secondary)
-                                : AnyShapeStyle(Color.coreEQSignal)
-                        )
-                        .frame(height: Theme.BandRow.labelHeight)
-                        .accessibilityHidden(true)
+                    // The row a band column spends on its frequency. This
+                    // column has no frequency to name, which is what makes room
+                    // for the mode switch.
+                    autoToggle
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -94,8 +100,12 @@ struct GlobalGainView: View {
         // Fills the row so this block and the editor beside it are the same
         // height, and so the track above has a height to grow into.
         .frame(maxHeight: .infinity)
+        // The same clearance the editor block gives its tabs. Both blocks lose
+        // it from the top, so the tracks stay level.
+        .padding(.top, Theme.borderLabelClearance)
         .contentBlock()
-        .borderLabel(alignment: .topLeading) {
+        // Centred on the block's top border, over the track it names.
+        .borderLabel {
             Text("Preamp")
                 .font(.system(size: 12, weight: .semibold))
                 .accessibilityAddTraits(.isHeader)
@@ -106,28 +116,27 @@ struct GlobalGainView: View {
         )
     }
 
-    /// The mode switch for the trim, standing on its side beside the track it
-    /// governs.
+    /// The mode switch for the trim, in the row a band column spends naming its
+    /// frequency.
     ///
-    /// Rotated because the column is 116 points wide and its one spare axis is
-    /// the vertical one — a horizontal label would have taken a row from the
-    /// rhythm this block shares with the band strip. Reading bottom to top is
-    /// the rotation with a convention behind it: book spines, chart axes, and
-    /// the vertical labels AppKit draws itself.
+    /// It stood on its side until every column gained a value row above its
+    /// track: with the trim's own value moved up there, this row came free, and
+    /// a switch that reads left to right needs no excuse made for it.
     ///
     /// While it is on, the slider is disabled rather than merely ignored: a
     /// control that moves under the pointer and springs back is worse than one
     /// that declines to move.
-    private func autoToggle(trackHeight: CGFloat) -> some View {
+    private var autoToggle: some View {
         Button {
             profileManager.setAutoGain(!profileManager.isAutoGain)
         } label: {
             Text("AUTO")
                 .font(.system(size: 9, weight: .semibold))
                 .kerning(0.6)
-                .rotationEffect(.degrees(-90))
-                .fixedSize()
-                .frame(width: 14, height: 44)
+                // Sized to the word, not to the column: a switch stretched the
+                // full width would read as a bar across the bottom of the block
+                // rather than as one control.
+                .frame(width: Self.autoWidth, height: Theme.BandRow.labelHeight)
                 .background(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(
@@ -150,9 +159,6 @@ struct GlobalGainView: View {
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        // Centred on the track, so it reads as belonging to it rather than to
-        // the caption or the border above.
-        .offset(y: (trackHeight - 44) / 2)
         .accessibilityLabel("Automatic gain")
         .accessibilityValue(profileManager.isAutoGain ? "On" : "Off")
         .accessibilityAddTraits(profileManager.isAutoGain ? [.isSelected] : [])

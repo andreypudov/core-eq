@@ -76,6 +76,14 @@ enum Theme {
     /// editor, the title on the trim. The block reserves half of it above itself
     /// so the label has somewhere to hang without overlapping the graph.
     static let borderLabelHeight: CGFloat = 22
+    /// How far a border label hangs down into the block it is mounted on.
+    ///
+    /// Content adds this to its own padding so the gap is measured from the
+    /// bottom of the label rather than from the border — otherwise a tab sits
+    /// directly on the first row of the thing it names, one point clear of it.
+    /// Every block carrying a label adds the same amount, which is also what
+    /// keeps the band tracks and the preamp track level.
+    static var borderLabelClearance: CGFloat { borderLabelHeight / 2 }
 
     /// Fixed height of the editing area, so switching tabs changes the controls
     /// and nothing else — no reflow, no jump in the graph above it.
@@ -147,18 +155,23 @@ enum Theme {
 
     /// The vertical rhythm the Band Levels and Preamp blocks share.
     ///
-    /// Both are a heading, a strip of reserved space for the gain bubble, a
-    /// track, and a caption. Driving both from these numbers is what keeps the
-    /// preamp track starting and ending exactly level with the band tracks
-    /// beside it.
+    /// Both are a value, a track, and a caption. Driving both from these numbers
+    /// is what keeps the preamp track starting and ending exactly level with the
+    /// band tracks beside it — and what let the Auto switch stand up straight:
+    /// the preamp spends its caption row on Auto because its value moved to the
+    /// top row every column now has.
     enum BandRow {
-        /// Caption under a track — a frequency in the strip, the value in the
-        /// preamp column.
+        /// Caption under a track — a frequency in the strip, the Auto switch in
+        /// the preamp column.
         static let labelHeight: CGFloat = 14
-        /// Everything in the column that isn't the track: the caption and the
-        /// gap above it. Nothing is reserved above the track — a band's value
-        /// is drawn at its own handle, over the track, so it costs no layout.
-        static var chromeHeight: CGFloat { 6 + labelHeight }
+        /// Value above a track. Every column carries one, so the numbers form a
+        /// single line across the top of the strip and the preamp reads on it.
+        static let valueHeight: CGFloat = 14
+        /// The value row and the gap under it.
+        static var topChromeHeight: CGFloat { valueHeight + 6 }
+        /// Everything in the column that isn't the track: a value above, a
+        /// caption below, and the gap on either side of the track.
+        static var chromeHeight: CGFloat { topChromeHeight + 6 + labelHeight }
         /// Floor for the track when the window is at its shortest.
         static let minSliderHeight: CGFloat = 96
 
