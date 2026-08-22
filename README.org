@@ -27,8 +27,9 @@ frequency, gain, and Q.
 
 The two editors are tabs on the editing area's own border, and both edit the
 same chain and the same graph: the sliders are eleven filters that happen to be
-locked to the ladder, and an added band is one that is not. Nothing is converted, approximated, or reconciled between the two
-views, so a change made in either is exact and reversible.
+locked to the ladder, and an added band is one that is not. Nothing is
+converted, approximated, or reconciled between the two views, so a change made
+in either is exact and reversible.
 
 ** Live frequency response, directly editable
 
@@ -53,15 +54,22 @@ instantaneous and glitch-free.
 
 ** Automatic gain
 
-The preamp can compute itself. Boosting makes a preset louder, and louder always
-sounds better — which makes any comparison a loudness test rather than a tone
-test. Switch *Auto* on beside the preamp and the trim follows the chain, holding
-the preset at the loudness it started from, so what you hear when you compare is
-the shaping.
+The preamp computes itself, and does so by default. Boosting makes a preset
+louder, and louder always sounds better — which would make every comparison a
+loudness test rather than a tone test. With *Auto* on, the trim follows the
+chain and holds the preset at the loudness it started from, so what you hear
+when you compare two presets is the shaping.
 
-It is measured as the average lift across the audible range, weighted equally per
-octave. A preset that lifts one narrow band is corrected gently; one that lifts
-everything is corrected hard.
+It is measured as the average lift across the audible range, weighted equally
+per octave. A preset that lifts one narrow band is corrected gently; one that
+lifts everything is corrected hard. Nineteen of the twenty-two built-ins lift
+the chain on average, so most arrive with a small trim already applied.
+
+The correction only ever attenuates. Cancelling a *cut* would mean raising
+every frequency the preset deliberately left alone, which is a way to make
+something clip that would not have clipped otherwise — so a preset that mostly
+cuts is left quieter, as it was meant to be. Switch *Auto* off, below the
+preamp slider, to set the trim by hand.
 
 ** A/B comparison
 
@@ -162,7 +170,9 @@ sidebar opens About directly.
 above the built-ins; the response graph, the *Graphic* / *Parametric* editors,
 and the preamp on the right. The output device sits in the centre of the header
 and names the preset playing on it underneath, with a dot when that preset has
-unsaved changes; *Revert* and the master switch are at the end.
+unsaved changes; where the machine has more than one output, that control is
+also how you choose between them. *Revert* sits beside it — next to the preset
+it would discard — and the gear and the master switch close the row.
 
 CoreEQ has no volume control. Its one level control is the *preamp*, which is
 the same thing a hardware equalizer calls Level: makeup gain for what the curve
