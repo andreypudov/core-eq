@@ -15,12 +15,11 @@ import SwiftUI
 /// by index (see `EQFilter.colorIndex`), so a preset written today still opens
 /// if the palette is ever extended.
 ///
-/// One caveat, now that the curve is amber (`Theme.signal`) rather than green:
-/// `.orange` sits close enough to it that an orange band's node can be hard to
-/// pick out of the line it stands on. Swapping that entry for `.brown` would fix
-/// it without shifting any index — but it would also silently repaint every
-/// band a user has already tagged orange, so it is a decision to take
-/// deliberately rather than a tidy-up to slip in.
+/// All eight stay usable because `Theme.signal` is a warm neutral: a coloured
+/// curve always swallowed whichever entry was its neighbour — green did it to a
+/// green band, and the amber that replaced it did the same to an orange one —
+/// which is why the curve gave up having a hue at all. Adding a ninth colour
+/// here needs no thought about the line it will stand on.
 enum BandColor: Int, CaseIterable, Identifiable {
     case green, blue, purple, pink, orange, teal, indigo, red
 

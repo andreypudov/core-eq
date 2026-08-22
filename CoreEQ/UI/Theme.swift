@@ -4,31 +4,39 @@ import SwiftUI
 /// The app's design tokens, in one place so the sidebar, the graph, and the
 /// band row can't drift apart.
 enum Theme {
-    /// The colour of CoreEQ's *data* — the response curve, its handles, and the
-    /// values those handles carry. Fixed rather than the user's accent, the way
-    /// Activity Monitor's graphs and Battery's charts are fixed: a reading
-    /// shouldn't change meaning because someone picked a different accent.
+    /// The colour of CoreEQ's *data* — the response curve, its fill, the
+    /// ladder's nodes, and the slider handles. Fixed rather than the user's
+    /// accent, the way Activity Monitor's graphs and Battery's charts are fixed:
+    /// a reading shouldn't change meaning because someone picked a different
+    /// accent.
     ///
     /// Controls are deliberately *not* this colour. Switches, sliders, the tab
     /// switcher, and list selection all take the system accent, so the window
     /// says "system utility" first and "CoreEQ" second.
     ///
-    /// It used to be `Color.green`, which said the same thing and did the
-    /// opposite: on a Mac with the green accent — the default on none of them,
-    /// but common — the curve, the selected tab, the sidebar selection and every
-    /// switch were one colour, and the accent stopped distinguishing anything.
-    /// Amber belongs to no accent, so the separation is now real.
+    /// A warm neutral rather than a hue, and that is the point. The eight
+    /// `BandColor` entries already cover the wheel, so any coloured curve
+    /// swallows whichever band colour is its neighbour: green did it to a green
+    /// band, amber did it to an orange one sitting on the line. Neutral makes
+    /// the curve the measurement and colour the labelling, so no palette entry
+    /// can collide with it — including ones added later.
     ///
-    /// Two values, because one cannot serve both grounds: measured against the
-    /// window's own background, `#E8A33D` scores 7.2:1 on the dark appearance and
-    /// 2.0:1 on the light one. `ThemeTests` holds both above the 3:1 that
-    /// graphical objects need.
+    /// Warm, not grey: both values run red > green > blue, so the line keeps the
+    /// window's temperature rather than reading as chrome. And neutral is not
+    /// faint — the spectrum behind it is drawn at 5% and 13% of `primary`, so a
+    /// 1.5 pt line at eleven-to-one stands well clear of it.
+    ///
+    /// Two values, because one cannot serve both grounds. Measured against the
+    /// window's own background: 11.8:1 on the dark appearance and 12.0:1 on the
+    /// light one, where the amber they replace scored 7.7:1 and 5.4:1. Pure
+    /// white would have been 14:1 and glaring. `ThemeTests` holds both above the
+    /// 3:1 that graphical objects need.
     static let signal = Color(
         nsColor: NSColor(name: "CoreEQSignal") { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return isDark
-                ? NSColor(srgbRed: 0.910, green: 0.639, blue: 0.239, alpha: 1)  // #E8A33D
-                : NSColor(srgbRed: 0.588, green: 0.365, blue: 0.071, alpha: 1)  // #965D12
+                ? NSColor(srgbRed: 0.871, green: 0.847, blue: 0.816, alpha: 1)  // #DED8D0
+                : NSColor(srgbRed: 0.239, green: 0.208, blue: 0.180, alpha: 1)  // #3D352E
         })
 
     /// Border shared by every block and by the plot, so the plot reads as one of
