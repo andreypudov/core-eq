@@ -451,6 +451,53 @@ import Testing
         #expect(total(manager.currentFilters, at: 1_000) > 3)
     }
 
+    /// The ladder is always exactly `bandCount` long, whatever has been done to
+    /// the chain.
+    ///
+    /// The slider strip indexes straight into `bandFilters[slot]`, so a chain
+    /// that ever came back short would be an out-of-range crash rather than a
+    /// wrong number. `FilterChain.normalized` and `PresetLibrary` are what
+    /// guarantee it; this is what would notice if either stopped.
+    @Test func theLadderIsNeverShortWhateverHappensToTheChain() throws {
+        let manager = makeManager()
+
+        func check(_ what: String) {
+            #expect(
+                manager.bandFilters.count == BuiltInProfiles.bandCount,
+                "the ladder is \(manager.bandFilters.count) long after \(what)")
+        }
+
+        check("launch")
+        for profile in manager.profiles {
+            manager.setActiveProfile(name: profile.name)
+            check("selecting \(profile.name)")
+        }
+
+        manager.setGain(6, forBandAt: 0)
+        check("a band edit")
+        manager.setTone(bass: 8, mid: -4, treble: 3)
+        check("the tone controls")
+        _ = manager.addFilter()
+        check("adding a filter")
+        let lifted = try #require(manager.editBandAsFilter(slot: 2))
+        check("lifting a band out")
+        manager.removeFilter(id: lifted)
+        check("putting it back")
+        manager.setSlot(.b)
+        check("switching to B")
+        manager.resetToActiveProfile()
+        check("a revert")
+
+        // The same promise on the way in: a preset saved short must not be able
+        // to shorten the strip.
+        var short = EQProfile(name: "Short", filters: [EQFilter.band(slot: 0, gain: 4)])
+        short.isBuiltIn = false
+        settings.userProfiles = [short]
+        let reloaded = makeManager()
+        reloaded.setActiveProfile(name: "Short")
+        #expect(reloaded.bandFilters.count == BuiltInProfiles.bandCount)
+    }
+
     // MARK: - Global gain
 
     @Test func preampIsClampedAndCountsAsAnEdit() {

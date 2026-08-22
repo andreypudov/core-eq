@@ -497,6 +497,11 @@ struct EqualizerDetailView: View {
     }
 
     private func bandControl(at slot: Int, trackHeight: CGFloat) -> some View {
+        // Indexed directly rather than defensively: the ladder is always
+        // `bandCount` long, whatever the chain has been through — normalisation
+        // on the way in from disk guarantees it, and
+        // `theLadderIsNeverShortWhateverHappensToTheChain` is what would notice
+        // if that ever stopped being true.
         let band = profileManager.bandFilters[slot]
         let isActive = draggingBand == slot || hoveredBand == slot
 

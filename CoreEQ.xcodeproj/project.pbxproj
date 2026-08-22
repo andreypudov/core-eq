@@ -35,6 +35,7 @@
 				UI/MainWindow/GainScale.swift,
 				UI/MainWindow/GlobalGainView.swift,
 				UI/MainWindow/KnobControl.swift,
+				UI/MainWindow/PopUpMenuButton.swift,
 				UI/MainWindow/SpectrumBackdrop.swift,
 				UI/MainWindow/ValueField.swift,
 				UI/MainWindow/VerticalGainSlider.swift,
