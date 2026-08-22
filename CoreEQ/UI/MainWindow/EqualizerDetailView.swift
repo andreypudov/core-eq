@@ -167,30 +167,22 @@ struct EqualizerDetailView: View {
     @ViewBuilder
     private var deviceControl: some View {
         if outputs.hasChoice {
-            Menu {
-                ForEach(outputs.devices) { device in
-                    Button {
-                        outputs.select(device.id)
-                    } label: {
-                        // One line per row: an NSMenuItem has no subtitle, and
-                        // SwiftUI offers no way to ask for one. Showing each
-                        // device's own preset here would explain the second line
-                        // below, and wants a spike against a real menu before it
-                        // is designed around.
-                        Label(device.name, systemImage: device.symbolName)
-                    }
-                }
+            // A `Button` with a real `NSMenu`, not a SwiftUI `Menu`: see
+            // `PopUpMenuButton` for what a `Menu` does to a two-line label, and
+            // what happened to the click when that was worked around.
+            PopUpMenuButton {
+                outputMenu()
             } label: {
-                deviceLines
+                deviceLines(showsChevron: true)
             }
-            .menuStyle(.borderlessButton)
             .frame(width: Theme.outputControlWidth)
+            .accessibilityElement(children: .combine)
             .accessibilityLabel("Output device")
             .accessibilityValue(deviceAccessibilityValue)
         } else {
             // One output, or none: state it rather than offering a choice the
             // machine cannot honour.
-            deviceLines
+            deviceLines(showsChevron: false)
                 .frame(width: Theme.outputControlWidth)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Output device")
@@ -198,7 +190,27 @@ struct EqualizerDetailView: View {
         }
     }
 
-    private var deviceLines: some View {
+    /// The outputs, with the current one ticked.
+    ///
+    /// One line per row. `NSMenuItem` does have a `subtitle` on macOS 14, so
+    /// each device could name its own preset here — worth doing, but it needs a
+    /// way to read another device's stored preset, which `ProfileManager` does
+    /// not expose yet.
+    private func outputMenu() -> NSMenu {
+        let menu = NSMenu()
+        for device in outputs.devices {
+            let item = ActionMenuItem(title: device.name) { [outputs] in
+                outputs.select(device.id)
+            }
+            item.image = NSImage(
+                systemSymbolName: device.symbolName, accessibilityDescription: nil)
+            item.state = device.id == outputs.defaultDeviceID ? .on : .off
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    private func deviceLines(showsChevron: Bool) -> some View {
         HStack(spacing: 7) {
             Image(systemName: outputs.defaultDeviceSymbolName)
                 .font(.system(size: 13))
@@ -232,11 +244,24 @@ struct EqualizerDetailView: View {
                     }
                 }
             }
+
+            if showsChevron {
+                Spacer(minLength: 4)
+                // The menu's own indicator is suppressed, so the control has to
+                // say it is one.
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
         }
-        // Status, not a second control: the preset is chosen in the sidebar, and
-        // a line that looked clickable here would promise something this button
-        // does not do.
-        .allowsHitTesting(false)
+        // The inset every button has around its title. It is what the hover
+        // highlight is drawn around, and what keeps the text off the edge of the
+        // target — a control whose hit area stops at its own glyphs is the thing
+        // this padding exists to prevent looking like. Applied here rather than
+        // in the button, so the single-device version keeps the same metrics and
+        // the row does not shift when a second device appears.
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
     }
 
     private var deviceAccessibilityValue: String {
