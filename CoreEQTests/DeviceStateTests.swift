@@ -284,6 +284,42 @@ import Testing
         #expect(manager.currentFilters == before)
     }
 
+    /// Unplugging headphones, as Core Audio actually reports it: the default
+    /// output is briefly nothing at all before the fallback device appears.
+    ///
+    /// The gap used to be treated as a device change, which swapped the working
+    /// state into the slot keyed on no device — so the preset on screen was
+    /// replaced by whatever had been filed there, and Revert appeared for an
+    /// edit nobody made.
+    @Test func aMomentaryGapBetweenDevicesIsNotADeviceChange() {
+        let manager = makeManager(device: "headphones")
+        manager.setActiveProfile(name: "Acoustic")
+        #expect(!manager.isModified)
+
+        manager.setOutputDevice(uid: nil)
+        #expect(manager.activeProfileName == "Acoustic", "the gap changed the preset")
+        #expect(!manager.isModified, "the gap read as an edit")
+
+        manager.setOutputDevice(uid: "speakers")
+        #expect(!manager.isModified)
+    }
+
+    /// The other half of the same fault: the chain being listened to must not be
+    /// filed under no device on the way past.
+    @Test func theGapDoesNotFileStateUnderNoDevice() {
+        let manager = makeManager(device: "headphones")
+        manager.setActiveProfile(name: "Acoustic")
+        manager.setGain(7, forBandAt: 3)
+
+        manager.setOutputDevice(uid: nil)
+        manager.setOutputDevice(uid: "speakers")
+
+        #expect(
+            storedState()?.filters == nil,
+            "an edit made on headphones was filed under no device at all")
+        #expect(storedState(device: "headphones")?.filters != nil, "and lost from the device")
+    }
+
     // MARK: - Automatic gain
 
     @Test func turningAutoOnTakesTheTrimOverImmediately() {

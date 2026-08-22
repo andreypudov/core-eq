@@ -104,6 +104,17 @@ final class ProfileManager: ObservableObject {
     /// happened to be playing would make the first switch stick in a way the
     /// user never asked for.
     func setOutputDevice(uid: String?) {
+        // Nil is the absence of a device, not a different one. Pull a jack and
+        // the system default is briefly nothing at all before the fallback
+        // appears, and treating that gap as a device change swaps the whole
+        // working state into the no-device slot: the preset on screen is
+        // replaced by whatever was last filed there, and the chain being
+        // listened to is filed away under no device — which is how a slot keyed
+        // on nothing ends up holding a real preset and a real chain.
+        //
+        // Holding still is also what the user sees. Moving a cable is not an
+        // edit, and the sound should not change because the hardware blinked.
+        guard let uid else { return }
         guard uid != outputDeviceUID else { return }
         persistDeviceState()
         outputDeviceUID = uid
