@@ -5,6 +5,10 @@ on:
     branches: ["master"]
   pull_request:
 
+# Nothing here writes to the repository: the job only builds and tests.
+permissions:
+  contents: read
+
 jobs:
   test:
     # Kept in step with the release job: tests have to run against the same
