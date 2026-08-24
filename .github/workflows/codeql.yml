@@ -1,0 +1,62 @@
+name: CodeQL
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+  schedule:
+    # Weekly, so advisories that land after a commit are still caught.
+    - cron: "23 5 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Swift cannot be built by CodeQL's autobuilder here: the project uses
+          # file-system-synchronized groups (objectVersion 70) and an ad-hoc
+          # signed macOS app target, so the build has to be the one the rest of
+          # CI runs. Same runner image as ci.yml and release.yml for the same
+          # reason — the SDK the binary is linked against is a real choice.
+          - language: swift
+            build-mode: manual
+            runner: macos-26
+          # The workflows themselves. Nothing to build.
+          - language: actions
+            build-mode: none
+            runner: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        if: matrix.language == 'swift'
+        run: xcodebuild -version && xcrun --show-sdk-version
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # CodeQL traces this build, so it has to compile every source file from
+      # scratch — a cached or incremental build would extract an empty
+      # database. A fresh runner gives that for free; do not add a build cache
+      # here without also disabling it for this job.
+      - name: Build
+        if: matrix.build-mode == 'manual'
+        run: make build
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
