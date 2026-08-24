@@ -15,7 +15,7 @@ jobs:
     # SDK the shipped binary is linked against.
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Show toolchain
         run: xcodebuild -version && xcrun --show-sdk-version
