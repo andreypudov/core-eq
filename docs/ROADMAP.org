@@ -9,7 +9,7 @@ of what people asked for and reported after the app was posted publicly; the
 shape of the filter chain the later releases build on is in [[file:ARCHITECTURE.org][ARCHITECTURE.org]].
 
 The ordering rule is simple. A defect that makes the app produce no sound
-outranks a feature that four people asked for, and both outrank a feature that
+outranks the most-asked-for feature, and both outrank a feature that
 widens what the app is. So: 1.8 fixes, 1.9 opens the preset format, 1.10 opens
 the scope from one chain per device to one chain per application.
 
@@ -19,17 +19,28 @@ commitment, the schedule is not.
 
 * 1.8 — Make it work everywhere it claims to
 
-The launch thread produced one class of bug that stops the app dead, and it is
-not rare: it hits anyone on a USB audio interface or speakers hanging off a
-display. Nothing else ships until this does.
+Public feedback produced three defects that are not edge cases. One stops audio
+entirely on USB interfaces and display-connected outputs. One doubles the audio
+and breaks every screen capture tool. One keeps the Mac awake indefinitely. All
+three affect people doing nothing unusual, and none of them can be worked
+around from inside the app. Nothing else ships until they are fixed.
 
 ** Multichannel outputs
 
-*Reported by three people:* HDMI to a display, an iConnectivity Audio4C over
-USB, and pre-emptively by a DisplayPort user who had been burned before.
-Symptoms are silence or badly mangled audio, and they persist at Flat, which
-is the tell: the audio still crosses the tap when it is not being filtered, so
-the fault is in the plumbing rather than the DSP.
+*Configurations reported:* HDMI to a display, an iConnectivity Audio4C over USB,
+and a DisplayPort monitor output raised pre-emptively by someone who had been
+burned before. Reports arrived through both Reddit and GitHub issues and may
+overlap, so treat the count of people as unknown; the count of distinct broken
+setups is what matters and it is at least three.
+
+Symptoms are silence or badly mangled audio, and they persist at Flat, which is
+the tell: the audio still crosses the tap when it is not being filtered, so the
+fault is in the plumbing rather than the DSP.
+
+One Audio4C report adds a detail worth having: “I can hear it over my speakers
+for a split second and then it's gone.” Audio starts and then stops, rather
+than never starting, which points at the moment the aggregate device is built
+and the IO proc takes over rather than at the tap's creation.
 
 CoreEQ takes a stereo tap while the device presents more than two channels, so
 the layout does not line up. Forcing the device to 2 channels in Audio MIDI
@@ -84,13 +95,52 @@ still a window filtered with stale coefficients.
 Measure how wide it actually is before deciding whether it needs fixing. It may
 be a handful of buffers and inaudible.
 
-** Coexistence with other system-audio tools
+** Echo and doubled audio
 
-Running CoreEQ alongside SoundSource produces a flangey delay, because the
-signal is being processed twice with a small offset. That is correct behaviour
-for two tools in one path, but no user should have to work it out.
+Four symptoms that sound like one another, and the third is the one that makes
+this a defect rather than an explanation:
 
-Detect a loaded HAL driver or a second tap and say so plainly in the UI.
+- Running alongside SoundSource produces a flangey delay.
+- With CoreEQ active, screen recording fails in *every* capture tool tested, and
+  the captured audio has “a Doppler echo delay”.
+- After waking from sleep, audio sometimes plays with an echo.
+- The Audio4C reports above, where sound starts and then vanishes.
+
+The SoundSource case has an easy story: two processors in one path, so the
+signal arrives twice slightly offset. The wake-from-sleep case does not — no
+second tool is involved, so something on CoreEQ's side is producing two copies
+of the audio by itself. The likely shape is an IO proc or an aggregate device
+that survives a state change it should not have survived, leaving two of them
+running. That would explain the echo after wake, and it is worth testing
+whether it also explains the capture-tool case.
+
+Three things to do:
+
+- Audit the teardown and rebuild path around sleep, wake, and device changes,
+  and confirm exactly one IO proc is ever running.
+- Reproduce against a screen capture tool. Capture tools take their own tap of
+  the system audio, so CoreEQ's global tap and theirs are interacting.
+  “Every capture tool fails” makes this a real conflict, not a quirk of one app.
+- When a second system-audio tool genuinely is present, detect it and say so
+  plainly in the UI rather than leaving the user to work out why their audio
+  sounds doubled.
+
+** Preventing the Mac from sleeping
+
+Activity Monitor shows CoreEQ preventing sleep, and it does so with no audio
+playing at all.
+
+The cause is not an assertion in CoreEQ's own code — there isn't one. It is the
+IO proc: =AudioDeviceStart= runs the aggregate continuously from launch, by
+design, since global bypass “keeps the engine running but passes audio through”
+(=AudioEngine.swift:49=). A continuously running IOProc is active audio IO as
+far as the system is concerned, so the assertion follows automatically.
+
+The fix is to stop running when there is nothing to do: tear the IO proc down
+when the app is bypassed, and when the mix has been silent for long enough that
+restarting on the next sample is cheaper than holding the machine awake. The
+constraint is that starting back up has to be fast and seamless enough that the
+first second of playback is not lost.
 
 ** Documentation that answers the repeated questions
 
@@ -107,9 +157,9 @@ Cheap, and it closes three of the recurring threads:
 
 * 1.9 — Open the preset format
 
-The most requested feature in the launch thread, from four separate people
-approaching it from four directions: AutoEQ, EqualizerAPO, Wavelet, and “EQ txt
-files”. All four describe the same file.
+The most requested feature by a clear margin, asked for from four directions:
+AutoEQ, EqualizerAPO, Wavelet, and “EQ txt files”. All four describe the same
+file.
 
 ** Import
 
@@ -143,8 +193,9 @@ identically.
 
 * 1.10 — Open the scope: per-application EQ and volume
 
-Two direct requests, one of which became a GitHub issue, plus a third person
-asking whether the process-tap API supports per-app taps at all.
+Asked for repeatedly, on Reddit and as GitHub issues, and someone also asked
+whether the process-tap API supports per-app taps at all. One request puts the
+appeal well: per-app volume “would really compliment the eq feature”.
 
 It does. =CATapDescription= takes a process list; CoreEQ only uses the
 global-minus-itself variant because I wanted one curve over everything. So this
@@ -209,13 +260,16 @@ Stated here so the answer is written down once.
 
 * How this was chosen
 
-Two rounds of public feedback, each read through in full:
+Three sources, each read through in full: the r/MacApps launch thread, from
+people actually running the app; GitHub issues; and the earlier Threads post,
+from people reacting to a screenshot, whose top request — parametric bands —
+shipped in 1.6.
 
-- Thirty-six threads on the r/MacApps launch post, from people actually running
-  the app. Source of every defect above.
-- Fourteen threads on the earlier Threads post, from people reacting to a
-  screenshot. Its top request, parametric bands, shipped in 1.6.
+Reddit and GitHub reports are not deduplicated, and probably should not be
+taken as separate voices: someone who hits a bug in the thread is exactly the
+person who then files the issue. Where this document counts anything, it counts
+distinct symptoms or broken configurations rather than people.
 
-The pattern across both is worth keeping in view: the requests cluster around
+The pattern across the feedback is worth keeping in view: the requests cluster around
 the preset *format* and the *scope* of the chain, not around the DSP. The
 filtering is not what people want changed.
