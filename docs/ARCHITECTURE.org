@@ -5,7 +5,7 @@
 
 This began as a proposal and is now what CoreEQ does, as of 1.6. It is kept as
 the record of *why* the equalizer is shaped this way; the file layout and the
-build are in [[file:../DEVELOPMENT.org][DEVELOPMENT.org]].
+build are in [[file:DEVELOPMENT.org][DEVELOPMENT.org]].
 
 * Goal
 
