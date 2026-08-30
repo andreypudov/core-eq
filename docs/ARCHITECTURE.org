@@ -10,8 +10,8 @@ build are in [[file:DEVELOPMENT.org][DEVELOPMENT.org]].
 * Goal
 
 CoreEQ needs parametric editing — arbitrary centre frequency and bandwidth is
-the single most requested change in [[file:COMMENTS_ANALYSIS.org][COMMENTS_ANALYSIS.org]], and headphone
-correction and AutoEQ import are unimplementable without it. It also needs to
+the single most requested change from users, and headphone correction and
+AutoEQ import are unimplementable without it. It also needs to
 stay an application a person opens to make their music sound better, not an
 audio workstation.
 
