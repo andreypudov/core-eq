@@ -21,9 +21,50 @@ commitment, the schedule is not.
 
 Public feedback produced three defects that are not edge cases. One stops audio
 entirely on USB interfaces and display-connected outputs. One doubles the audio
-and breaks every screen capture tool. One keeps the Mac awake indefinitely. All
-three affect people doing nothing unusual, and none of them can be worked
-around from inside the app. Nothing else ships until they are fixed.
+and breaks every screen capture tool. One keeps the Mac awake indefinitely.
+Reproducing the first turned up a fourth that nobody reported: an Aggregate or
+Multi-Output Device as the system output silences the Mac outright while the app
+reports that it is working. All four affect people doing nothing unusual, and
+none of them can be worked around from inside the app. Nothing else ships until
+they are fixed.
+
+** Aggregate and Multi-Output Devices silence the Mac
+
+Found while trying to reproduce the multichannel reports below rather than from
+public feedback — which probably means it has been silencing people who had no
+way to work out what to blame.
+
+Core Audio will not nest one aggregate device inside another, and it does not
+say so. Handed an Aggregate or Multi-Output Device as a sub-device,
+=AudioHardwareCreateAggregateDevice= returns =noErr= and silently drops it,
+leaving an aggregate with no active sub-devices and no output streams at all.
+=AudioDeviceStart= then succeeds on that empty device, the engine reports
+=running=, and the IO proc is handed real tapped audio together with an output
+buffer list of zero buffers. =EQProcessor.render= iterates over nothing. Every
+stage succeeds and no audio is ever written.
+
+The tap, meanwhile, goes on muting every other process at the hardware. So the
+result is a completely silent Mac, an app reporting that it is processing audio,
+and no recovery from inside the app — global bypass skips the DSP without
+releasing the tap, so quitting CoreEQ is the only fix. That is not a
+discoverable one for a menu bar app that can launch at login.
+
+Measured rather than inferred. The same call, wrapping two different devices:
+the built-in speakers give an aggregate with =1 buffer(s) [2ch]= and one active
+sub-device; an Aggregate Device gives =0 buffer(s) []= and zero active
+sub-devices. Both return =noErr=.
+
+This is plausibly a wider fault than the multichannel one it was found under.
+Aggregate and Multi-Output Devices are how people play to two sets of speakers
+at once, and how anyone recording through BlackHole or Loopback is set up, which
+is a larger population than 7.1 HDMI users.
+
+*Fixed.* CoreEQ refuses an aggregate default output before the tap is created,
+so the machine is never muted for a configuration the app cannot serve, and it
+says which device and why. A second check confirms the aggregate it built
+reports output channels before an IO proc is started on it, because a call
+returning =noErr= is evidently not evidence that the device works. Refusing is
+not the same as supporting, which is below under "Later".
 
 ** Multichannel outputs
 
@@ -62,6 +103,22 @@ Two things to do, and they are probably one change:
 *Done when* the three reported configurations produce correct stereo, and a
 device reporting more than two channels either works or is reported in the UI
 rather than failing silently.
+
+*Implemented, not yet confirmed.* Both bullets are done. =EQProcessor= now takes
+an explicit output layout, worked out once on the main thread from the
+aggregate's stream configuration and the tap's format, and places the tap's
+stereo pair at named global output channels instead of pairing buffers by
+position — so a stereo tap against an eight channel device fills the front pair
+and silences the other six, where it used to pack four frames of stereo into one
+frame of eight and zero the remaining three quarters. It also finds the tap in
+the input list by matching its format rather than by index, which is the second
+bullet. Regression tests cover eight channel interleaved, one buffer per
+sub-device, fully non-interleaved, a tap that is not the first input buffer, and
+an output list with no buffers at all.
+
+What is missing is a listening test. No multichannel hardware was available, so
+none of the three reported configurations has been confirmed by ear. That is
+what actually closes this item.
 
 ** Permission text before the system prompt, not after
 
@@ -215,6 +272,34 @@ Per-app *volume* is the easier half and rides along: it is a gain stage on a
 chain that already exists.
 
 * Later — worth doing, not yet scheduled
+
+** Rendering through Aggregate and Multi-Output Devices
+
+Refusing them with a clear message is honest, but it is still a no, and the 1.8
+fix above changes only what the app does about not being able to.
+
+Supporting them, without giving up the driver-free design, means not wrapping
+the user's aggregate at all: read its sub-device list and build an equivalent
+*flat* aggregate out of those leaf devices directly, carrying over the main
+sub-device, the drift compensation, and whether it is stacked. Nesting is the
+only thing Core Audio prohibits; the leaves are ordinary devices. Measured:
+rebuilding the same aggregate from its own leaves gives two active sub-devices
+and a real output layout, where nesting gave zero of both.
+
+The two kinds then split, and unevenly:
+
+- *Multi-Output Devices* need nothing further. Rebuilt as a stacked aggregate,
+  Core Audio does the duplication internally and presents =1 buffer(s) [2ch]= —
+  plain stereo, which the render path already handles. This is both the larger
+  population and the cheaper half.
+- *Aggregate Devices* concatenate their sub-devices' channels, so a flat rebuild
+  of two stereo devices presents four. That needed the multichannel layout work
+  above, which is now done, so this is unblocked as well.
+
+The open risk is whether two aggregates can run against the same leaf devices at
+once. Creation succeeds while the user's own aggregate exists and holds them;
+whether both can be *started* has not been tested, and that is the question that
+decides the design.
 
 ** A/B comparison export
 
