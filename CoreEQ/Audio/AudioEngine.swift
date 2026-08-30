@@ -104,7 +104,8 @@ final class AudioEngine: ObservableObject {
                 (error as? CoreAudioError)?.localizedDescription ?? error.localizedDescription
             logger.error("Engine start failed: \(message, privacy: .public)")
             status = .failed(message)
-            if retryCount < Self.maxRetries {
+            let isPermanent = (error as? UnusableOutputDevice)?.isPermanent ?? false
+            if !isPermanent, retryCount < Self.maxRetries {
                 retryCount += 1
                 scheduleRestart(after: 3.0, reason: "retry \(retryCount) after failure")
             }
@@ -141,6 +142,25 @@ final class AudioEngine: ObservableObject {
         let outputID = try defaultOutputDeviceID()
         let outputUID = try deviceUID(of: outputID)
         let outputName = (try? deviceName(of: outputID)) ?? "Unknown Device"
+
+        // Core Audio will not nest one aggregate device inside another, and it
+        // does not say so. Handed an Aggregate or Multi-Output Device as a
+        // sub-device, `AudioHardwareCreateAggregateDevice` still returns noErr —
+        // it silently drops the sub-device, leaving an aggregate with no active
+        // sub-devices and no output streams at all. `AudioDeviceStart` then
+        // succeeds on that empty device and the IO proc runs normally, handed
+        // real tapped audio and an output buffer list with zero buffers, so
+        // `EQProcessor.render` writes nowhere and every stage no-ops in silence.
+        //
+        // Meanwhile the tap goes on muting every other process at the hardware.
+        // The result is a completely silent Mac while the app reports that it is
+        // working, and bypass does not rescue it because bypass does not release
+        // the tap. Refusing here — before the tap exists — is what keeps a
+        // configuration CoreEQ cannot serve from taking the machine's audio down
+        // with it.
+        guard !AudioDevices.isAggregate(outputID) else {
+            throw UnusableOutputDevice.aggregateDevice(name: outputName)
+        }
 
         // Tap every process except our own output, otherwise the equalized
         // signal we play back would be captured again as a feedback loop.
@@ -183,9 +203,26 @@ final class AudioEngine: ObservableObject {
             "creating the aggregate device")
         aggregateID = newAggregateID
 
+        // The guard above covers the one cause of this we know of. This is the
+        // invariant itself: an aggregate reporting success is not evidence that
+        // it has anywhere to put audio, and running an IO proc against one that
+        // does not is indistinguishable from working, from the inside.
+        guard AudioDevices.hasOutputChannels(aggregateID) else {
+            throw UnusableOutputDevice.noOutputStreams(name: outputName)
+        }
+
         let rate = try nominalSampleRate(of: aggregateID)
         processor.setSampleRate(rate)
         sampleRate = rate
+
+        // Tell the processor what this device actually looks like, so the render
+        // thread never has to guess. The stereo pair goes to the first two output
+        // channels: on a single device those are its front left and right, and on
+        // an aggregate they are the main sub-device's, which is the one the user
+        // nominated. Every other channel the device has stays silent.
+        processor.setOutputLayout(
+            EQProcessor.OutputLayout(
+                tapChannels: tapChannelCount(of: tapID), leftChannel: 0, rightChannel: 1))
 
         let processor = self.processor
         var newProcID: AudioDeviceIOProcID?
@@ -326,6 +363,43 @@ final class AudioEngine: ObservableObject {
 
     // MARK: - Core Audio property helpers
 
+    /// A default output device the engine cannot render through.
+    ///
+    /// Separate from `CoreAudioError` because nothing here is a failed Core
+    /// Audio call. Every call succeeds; these are the cases where what comes
+    /// back reports success and is nonetheless unusable.
+    private enum UnusableOutputDevice: Error, LocalizedError {
+        case aggregateDevice(name: String)
+        case noOutputStreams(name: String)
+
+        /// Whether trying again could produce a different answer. Nesting never
+        /// will, so retrying only republishes the same failure three more times
+        /// and leaves the user watching a status message flap. An empty
+        /// aggregate from some cause we have not identified might be transient,
+        /// so that one keeps the retries.
+        var isPermanent: Bool {
+            switch self {
+            case .aggregateDevice: return true
+            case .noOutputStreams: return false
+            }
+        }
+
+        var errorDescription: String? {
+            switch self {
+            case .aggregateDevice(let name):
+                return """
+                    “\(name)” is an Aggregate or Multi-Output Device, which CoreEQ \
+                    cannot process audio through. Choose a single output device.
+                    """
+            case .noOutputStreams(let name):
+                return """
+                    The audio device CoreEQ built around “\(name)” reported no output \
+                    channels, so there is nowhere to send the equalized audio.
+                    """
+            }
+        }
+    }
+
     private struct CoreAudioError: Error, LocalizedError {
         let status: OSStatus
         let operation: String
@@ -380,6 +454,21 @@ final class AudioEngine: ObservableObject {
             AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &name),
             "reading the device name")
         return name?.takeRetainedValue() as String? ?? ""
+    }
+
+    /// Channels the tap will deliver, read from the tap's own format rather than
+    /// assumed from what we asked for. Falls back to stereo, which is what
+    /// `CATapDescription(stereoGlobalTapButExcludeProcesses:)` builds.
+    private func tapChannelCount(of tap: AudioObjectID) -> Int {
+        var addr = propertyAddress(kAudioTapPropertyFormat)
+        var format = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        guard AudioObjectGetPropertyData(tap, &addr, 0, nil, &size, &format) == noErr,
+            format.mChannelsPerFrame > 0
+        else {
+            return EQProcessor.OutputLayout().tapChannels
+        }
+        return Int(format.mChannelsPerFrame)
     }
 
     private func nominalSampleRate(of deviceID: AudioDeviceID) throws -> Double {

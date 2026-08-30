@@ -39,6 +39,29 @@ final class EQProcessor: @unchecked Sendable {
     /// consumer can snapshot without the producer overtaking the read region.
     let spectrumBuffer = SpectrumAudioBuffer(capacity: 8_192)
 
+    /// Where the tap's channels land in the device's output layout.
+    ///
+    /// `render` used to assume two things that are only true of a plain stereo
+    /// device: that input buffer *i* pairs with output buffer *i*, and that both
+    /// hold the same channels. Neither survives a device presenting more than
+    /// two channels, or an aggregate presenting one buffer per sub-device. This
+    /// is those assumptions made explicit and worked out once, on the main
+    /// thread, where reading device properties is allowed.
+    ///
+    /// Channels are numbered globally: buffers are walked in order and their
+    /// channel counts accumulated, so channel *g* is found by walking until a
+    /// buffer contains it. That one numbering covers interleaved stereo, a wide
+    /// interleaved buffer, one buffer per sub-device, and fully non-interleaved
+    /// layouts without a special case for any of them.
+    struct OutputLayout: Equatable {
+        /// Channels the tap delivers. CoreEQ's global tap is stereo.
+        var tapChannels = 2
+        /// Global output channel carrying the tap's left channel.
+        var leftChannel = 0
+        /// Global output channel carrying the tap's right channel.
+        var rightChannel = 1
+    }
+
     /// What the render thread needs to know about one filter: no identifier, no
     /// colour, no ladder slot. Plain data, so staging a chain is a fixed number
     /// of scalar copies into storage that already exists.
@@ -104,6 +127,7 @@ final class EQProcessor: @unchecked Sendable {
     private var pendingPreamp: Double?
     private var pendingBypass: Bool?
     private var pendingSampleRate: Double?
+    private var pendingLayout: OutputLayout?
 
     // Render-thread-only state.
     private var filters = [FilterState](repeating: FilterState(), count: EQProcessor.maxFilters)
@@ -116,6 +140,9 @@ final class EQProcessor: @unchecked Sendable {
         repeating: FilterParameters(), count: EQProcessor.maxFilters)
     private var sampleRate = 44_100.0
     private var bypassed = false
+    /// Defaults to plain interleaved stereo, which is what every device looked
+    /// like before the engine started describing them.
+    private var layout = OutputLayout()
     // Output trim, smoothed like the band gains so dragging the preamp slider
     // is a fade rather than a step.
     private var targetPreampLinear = 1.0
@@ -148,6 +175,14 @@ final class EQProcessor: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Stages the output layout. Set by `AudioEngine` once per engine start,
+    /// after it knows the aggregate's stream configuration and the tap's format.
+    func setOutputLayout(_ newLayout: OutputLayout) {
+        lock.lock()
+        pendingLayout = newLayout
+        lock.unlock()
+    }
+
     func setSampleRate(_ rate: Double) {
         guard rate > 0 else { return }
         lock.lock()
@@ -157,9 +192,15 @@ final class EQProcessor: @unchecked Sendable {
 
     // MARK: - Render (Core Audio IO thread)
 
-    /// Copies tapped system audio from `input` to `output`, applying the EQ
-    /// in place unless bypassed. Assumes Float32 samples, the native format
-    /// for process taps and aggregate device IO.
+    /// Places tapped system audio into `output` at the positions `layout` names,
+    /// applying the EQ unless bypassed. Assumes Float32 samples, the native
+    /// format for process taps and aggregate device IO.
+    ///
+    /// Nothing here reasons about buffer *positions*. The tap is found in the
+    /// input list by its format, and its channels are written to the global
+    /// output channels the layout names — so a stereo tap feeding an eight
+    /// channel device fills two channels and silences six, rather than smearing
+    /// four frames of stereo across one frame of eight.
     func render(
         input: UnsafePointer<AudioBufferList>, output: UnsafeMutablePointer<AudioBufferList>
     ) {
@@ -168,59 +209,140 @@ final class EQProcessor: @unchecked Sendable {
 
         consumePendingParameters()
 
-        var totalFrames = 0
+        // Silence first, then place. Every output channel the tap does not feed
+        // has to end up silent rather than left as it was found, and so does the
+        // tail of a buffer longer than the tap delivered. Clearing up front makes
+        // both of those one memset instead of a special case each.
         for i in 0..<outABL.count {
-            let outBuffer = outABL[i]
-            guard let outData = outBuffer.mData else { continue }
-            let outBytes = Int(outBuffer.mDataByteSize)
-            if i < inABL.count, let inData = inABL[i].mData {
-                let copied = min(outBytes, Int(inABL[i].mDataByteSize))
-                memcpy(outData, inData, copied)
-                if copied < outBytes {
-                    memset(outData.advanced(by: copied), 0, outBytes - copied)
-                }
-            } else {
-                memset(outData, 0, outBytes)
-            }
-            if totalFrames == 0, outBuffer.mNumberChannels > 0 {
-                totalFrames = outBytes / (MemoryLayout<Float>.size * Int(outBuffer.mNumberChannels))
-            }
+            guard let data = outABL[i].mData else { continue }
+            memset(data, 0, Int(outABL[i].mDataByteSize))
         }
 
-        if !bypassed, totalFrames > 0 {
-            advanceSmoothing(frames: totalFrames)
+        if let tap = tapBuffer(in: inABL),
+            let tapData = tap.mData?.assumingMemoryBound(to: Float.self),
+            tap.mNumberChannels > 0
+        {
+            let channels = Int(tap.mNumberChannels)
+            let frames = Int(tap.mDataByteSize) / (MemoryLayout<Float>.size * channels)
+            let placed = place(tapData, channels: channels, frames: frames, into: outABL)
 
-            var channelBase = 0
-            for i in 0..<outABL.count where channelBase < Self.maxChannels {
-                let buffer = outABL[i]
-                let channels = Int(buffer.mNumberChannels)
-                guard channels > 0, let data = buffer.mData?.assumingMemoryBound(to: Float.self)
-                else { continue }
-                let frames = Int(buffer.mDataByteSize) / (MemoryLayout<Float>.size * channels)
-                for ch in 0..<channels where channelBase + ch < Self.maxChannels {
-                    processChannel(
-                        data + ch, stride: channels, frames: frames, channel: channelBase + ch)
-                }
-                applyPreamp(data, count: frames * channels)
-                channelBase += channels
+            if !bypassed, placed > 0 {
+                advanceSmoothing(frames: placed)
+                equalize(outABL, channels: channels, frames: placed)
             }
         }
 
         feedSpectrum(outABL)
     }
 
+    /// Copies the tap's channels to the output channels the layout names, and
+    /// returns how many frames were actually written.
+    private func place(
+        _ tapData: UnsafePointer<Float>, channels: Int, frames: Int,
+        into outABL: UnsafeMutableAudioBufferListPointer
+    ) -> Int {
+        var written = 0
+        for channel in 0..<min(channels, Self.maxChannels) {
+            guard let target = destination(of: globalChannel(for: channel), in: outABL)
+            else { continue }
+            let count = min(frames, target.frames)
+            var source = tapData + channel
+            var sink = target.pointer
+            for _ in 0..<count {
+                sink.pointee = source.pointee
+                source += channels
+                sink += target.stride
+            }
+            written = max(written, count)
+        }
+        return written
+    }
+
+    /// Runs the chain and the output trim over the channels the tap was placed
+    /// into. The rest of the device's channels are silence and stay that way.
+    private func equalize(
+        _ outABL: UnsafeMutableAudioBufferListPointer, channels: Int, frames: Int
+    ) {
+        for channel in 0..<min(channels, Self.maxChannels) {
+            guard let target = destination(of: globalChannel(for: channel), in: outABL)
+            else { continue }
+            let count = min(frames, target.frames)
+            processChannel(
+                target.pointer, stride: target.stride, frames: count, channel: channel)
+            applyPreamp(target.pointer, stride: target.stride, frames: count)
+        }
+    }
+
+    private func globalChannel(for tapChannel: Int) -> Int {
+        tapChannel == 0 ? layout.leftChannel : layout.rightChannel
+    }
+
+    /// Locates one global output channel: which buffer holds it, where in that
+    /// buffer it starts, and how far apart its samples are.
+    ///
+    /// Returns nil when the layout names a channel the device does not have,
+    /// which is the honest answer — better a silent channel than a write past
+    /// the end of a buffer.
+    private func destination(
+        of globalChannel: Int, in outABL: UnsafeMutableAudioBufferListPointer
+    ) -> (pointer: UnsafeMutablePointer<Float>, stride: Int, frames: Int)? {
+        var base = 0
+        for i in 0..<outABL.count {
+            let buffer = outABL[i]
+            let channels = Int(buffer.mNumberChannels)
+            guard channels > 0 else { continue }
+            if globalChannel < base + channels {
+                guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else {
+                    return nil
+                }
+                let frames = Int(buffer.mDataByteSize) / (MemoryLayout<Float>.size * channels)
+                return (data + (globalChannel - base), channels, frames)
+            }
+            base += channels
+        }
+        return nil
+    }
+
+    /// The input buffer carrying the tap's audio.
+    ///
+    /// Chosen by matching the tap's channel count rather than by position. An
+    /// aggregate device is not obliged to put the tap's buffers first in the
+    /// list, and a developer shipping the same kind of tool reported lists where
+    /// they were not.
+    private func tapBuffer(in inABL: UnsafeMutableAudioBufferListPointer) -> AudioBuffer? {
+        for i in 0..<inABL.count
+        where inABL[i].mNumberChannels == UInt32(layout.tapChannels) && inABL[i].mData != nil {
+            return inABL[i]
+        }
+        // Nothing matched the tap's format. Falling back to the first buffer
+        // holding anything keeps audio flowing on a device we described wrongly,
+        // which beats dropping every block.
+        for i in 0..<inABL.count where inABL[i].mData != nil {
+            return inABL[i]
+        }
+        return nil
+    }
+
     /// Hands a mono copy of the final output — equalized when enabled, the
     /// untouched passthrough when bypassed — to the spectrum buffer, so the
-    /// analyzer always shows what is actually reaching the speakers. Runs off
-    /// the first output buffer, which covers the common interleaved case.
+    /// analyzer always shows what is actually reaching the speakers.
+    ///
+    /// Reads the channels the audio was placed into rather than the head of the
+    /// first buffer, which on a multichannel device is not where the audio is.
     private func feedSpectrum(_ outABL: UnsafeMutableAudioBufferListPointer) {
-        guard let first = outABL.first,
-            let data = first.mData?.assumingMemoryBound(to: Float.self)
+        guard let left = destination(of: layout.leftChannel, in: outABL), left.frames > 0
         else { return }
-        let channels = Int(first.mNumberChannels)
-        guard channels > 0 else { return }
-        let frames = Int(first.mDataByteSize) / (MemoryLayout<Float>.size * channels)
-        spectrumBuffer.write(interleaved: data, frames: frames, channels: channels)
+        // Average the pair when the layout put it side by side in one buffer,
+        // which is every interleaved device. Otherwise the left channel alone is
+        // an honest enough picture for a backdrop.
+        let right = destination(of: layout.rightChannel, in: outABL)
+        let adjacent = right.map { $0.pointer == left.pointer + 1 && $0.stride == left.stride }
+        spectrumBuffer.write(
+            interleaved: left.pointer,
+            frames: left.frames,
+            channels: adjacent == true ? 2 : 1,
+            stride: left.stride
+        )
     }
 
     // MARK: - Render-thread helpers
@@ -238,11 +360,20 @@ final class EQProcessor: @unchecked Sendable {
         let newPreamp = pendingPreamp
         let newBypass = pendingBypass
         let newRate = pendingSampleRate
+        let newLayout = pendingLayout
         pendingFilterCount = nil
         pendingPreamp = nil
         pendingBypass = nil
         pendingSampleRate = nil
+        pendingLayout = nil
         lock.unlock()
+
+        if let newLayout, newLayout != layout {
+            layout = newLayout
+            // A different layout means different channels, so the delay lines
+            // are describing audio that is no longer there.
+            for i in 0..<filterCount { filters[i].resetState() }
+        }
 
         if let newRate, newRate != sampleRate {
             sampleRate = newRate
@@ -282,11 +413,15 @@ final class EQProcessor: @unchecked Sendable {
 
     /// Output trim, applied after every filter — this is the point of the chain
     /// where headroom given away by boosting is taken back.
-    private func applyPreamp(_ samples: UnsafeMutablePointer<Float>, count: Int) {
+    private func applyPreamp(
+        _ samples: UnsafeMutablePointer<Float>, stride: Int, frames: Int
+    ) {
         guard currentPreampLinear != 1.0 else { return }
         let gain = Float(currentPreampLinear)
-        for i in 0..<count {
-            samples[i] *= gain
+        var index = 0
+        for _ in 0..<frames {
+            samples[index] *= gain
+            index += stride
         }
     }
 

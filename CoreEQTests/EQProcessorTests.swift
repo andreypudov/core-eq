@@ -350,6 +350,244 @@ struct EQProcessorTests {
         #expect((20 * log10(rms(at48) / rms(reference))).isClose(to: 6, within: 0.8))
     }
 
+    // MARK: - Device layouts
+
+    /// Drives one render with an input list and an output list that need not
+    /// match, which is the case every layout below is about and the one the
+    /// helpers above cannot express.
+    ///
+    /// `inputChannels` describes a single interleaved tap buffer.
+    /// `outputBuffers` gives the channel count of each output buffer, so
+    /// `[8]` is one interleaved eight channel buffer and `[2, 2]` is one buffer
+    /// per sub-device. Returns the output buffers separately, as the device
+    /// would see them.
+    private func renderAcrossLayout(
+        _ processor: EQProcessor,
+        input: [Float],
+        inputChannels: Int,
+        outputBuffers: [Int],
+        frames: Int
+    ) -> [[Float]] {
+        var inputSamples = input
+
+        // Allocated rather than taken from Swift arrays: several buffers have to
+        // be live at once inside one call, and nesting
+        // `withUnsafeMutableBufferPointer` over an array of arrays is an
+        // exclusivity violation.
+        let storage = outputBuffers.map { channels in
+            UnsafeMutablePointer<Float>.allocate(capacity: frames * channels)
+        }
+        for (index, channels) in outputBuffers.enumerated() {
+            storage[index].initialize(repeating: 99, count: frames * channels)
+        }
+        defer {
+            for (index, channels) in outputBuffers.enumerated() {
+                storage[index].deinitialize(count: frames * channels)
+                storage[index].deallocate()
+            }
+        }
+
+        // An `AudioBufferList` with more than one buffer is a variable-length C
+        // struct, so it has to be built in raw memory rather than declared.
+        let bytes =
+            MemoryLayout<AudioBufferList>.size
+            + max(0, outputBuffers.count - 1) * MemoryLayout<AudioBuffer>.size
+        let raw = UnsafeMutableRawPointer.allocate(
+            byteCount: bytes, alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { raw.deallocate() }
+        let outList = raw.bindMemory(to: AudioBufferList.self, capacity: 1)
+        outList.pointee.mNumberBuffers = UInt32(outputBuffers.count)
+        let outABL = UnsafeMutableAudioBufferListPointer(outList)
+        for (index, channels) in outputBuffers.enumerated() {
+            outABL[index] = AudioBuffer(
+                mNumberChannels: UInt32(channels),
+                mDataByteSize: UInt32(frames * channels * MemoryLayout<Float>.size),
+                mData: UnsafeMutableRawPointer(storage[index])
+            )
+        }
+
+        inputSamples.withUnsafeMutableBufferPointer { inPtr in
+            var inList = AudioBufferList(
+                mNumberBuffers: 1,
+                mBuffers: AudioBuffer(
+                    mNumberChannels: UInt32(inputChannels),
+                    mDataByteSize: UInt32(input.count * MemoryLayout<Float>.size),
+                    mData: inPtr.baseAddress
+                )
+            )
+            processor.render(input: &inList, output: outList)
+        }
+
+        return outputBuffers.enumerated().map { index, channels in
+            Array(UnsafeBufferPointer(start: storage[index], count: frames * channels))
+        }
+    }
+
+    /// A stereo ramp whose two channels are distinguishable: left counts up,
+    /// right counts down, so a channel landing in the wrong place is visible
+    /// rather than merely wrong in level.
+    private func stereoRamp(frames: Int) -> [Float] {
+        (0..<frames).flatMap { [Float($0 + 1), -Float($0 + 1)] }
+    }
+
+    /// The multichannel bug. A stereo tap against a device presenting eight
+    /// channels must fill the front pair and silence the rest — not pack four
+    /// frames of stereo into one frame of eight and zero the remaining 75%,
+    /// which is what pairing buffers by position did.
+    @Test func aStereoTapFillsOnlyTheFrontPairOfAWideDevice() {
+        let processor = makeProcessor()
+        let frames = 8
+        let output = renderAcrossLayout(
+            processor, input: stereoRamp(frames: frames), inputChannels: 2,
+            outputBuffers: [8], frames: frames
+        )[0]
+
+        for frame in 0..<frames {
+            let base = frame * 8
+            #expect(output[base] == Float(frame + 1), "left channel misplaced at frame \(frame)")
+            #expect(
+                output[base + 1] == -Float(frame + 1), "right channel misplaced at frame \(frame)")
+            #expect(
+                output[(base + 2)..<(base + 8)].allSatisfy { $0 == 0 },
+                "frame \(frame) put audio in channels the tap does not feed")
+        }
+    }
+
+    /// The aggregate case: one buffer per sub-device. The stereo pair belongs to
+    /// the main sub-device, and the second device gets silence rather than
+    /// whatever its buffer happened to hold.
+    @Test func aStereoTapFeedsTheMainSubDeviceOfAnAggregate() {
+        let processor = makeProcessor()
+        let frames = 8
+        let output = renderAcrossLayout(
+            processor, input: stereoRamp(frames: frames), inputChannels: 2,
+            outputBuffers: [2, 2], frames: frames
+        )
+
+        #expect(output[0] == stereoRamp(frames: frames), "the main sub-device lost the audio")
+        #expect(output[1].allSatisfy { $0 == 0 }, "the second sub-device was left uninitialised")
+    }
+
+    /// A fully non-interleaved device: one channel per buffer. Left and right
+    /// land in different buffers, which no amount of buffer pairing gets right.
+    @Test func aStereoTapSplitsAcrossNonInterleavedBuffers() {
+        let processor = makeProcessor()
+        let frames = 8
+        let output = renderAcrossLayout(
+            processor, input: stereoRamp(frames: frames), inputChannels: 2,
+            outputBuffers: [1, 1], frames: frames
+        )
+
+        #expect(output[0] == (0..<frames).map { Float($0 + 1) }, "left channel misplaced")
+        #expect(output[1] == (0..<frames).map { -Float($0 + 1) }, "right channel misplaced")
+    }
+
+    /// An output list wider than the tap must not leave the extra channels
+    /// carrying stale audio, which on a real device is the previous block.
+    @Test func channelsTheTapDoesNotFeedAreSilenced() {
+        let processor = makeProcessor()
+        let frames = 4
+        let output = renderAcrossLayout(
+            processor, input: stereoRamp(frames: frames), inputChannels: 2,
+            outputBuffers: [2, 6], frames: frames
+        )
+
+        #expect(output[1].allSatisfy { $0 == 0 }, "a channel the tap never wrote kept its contents")
+    }
+
+    /// The tap is found by its format, not by being first. An aggregate is free
+    /// to order the input list however it likes.
+    @Test func theTapIsFoundEvenWhenItIsNotTheFirstInputBuffer() {
+        let processor = makeProcessor()
+        let frames = 4
+        var unrelated = [Float](repeating: 0.25, count: frames * 4)
+        var tap = stereoRamp(frames: frames)
+        var output = [Float](repeating: 99, count: frames * 2)
+
+        unrelated.withUnsafeMutableBufferPointer { firstPtr in
+            tap.withUnsafeMutableBufferPointer { tapPtr in
+                output.withUnsafeMutableBufferPointer { outPtr in
+                    let bytes = MemoryLayout<AudioBufferList>.size + MemoryLayout<AudioBuffer>.size
+                    let raw = UnsafeMutableRawPointer.allocate(
+                        byteCount: bytes, alignment: MemoryLayout<AudioBufferList>.alignment)
+                    defer { raw.deallocate() }
+                    let inList = raw.bindMemory(to: AudioBufferList.self, capacity: 1)
+                    inList.pointee.mNumberBuffers = 2
+                    let inABL = UnsafeMutableAudioBufferListPointer(inList)
+                    // A four channel buffer first, the stereo tap second.
+                    inABL[0] = AudioBuffer(
+                        mNumberChannels: 4,
+                        mDataByteSize: UInt32(frames * 4 * MemoryLayout<Float>.size),
+                        mData: firstPtr.baseAddress)
+                    inABL[1] = AudioBuffer(
+                        mNumberChannels: 2,
+                        mDataByteSize: UInt32(frames * 2 * MemoryLayout<Float>.size),
+                        mData: tapPtr.baseAddress)
+
+                    var outList = AudioBufferList(
+                        mNumberBuffers: 1,
+                        mBuffers: AudioBuffer(
+                            mNumberChannels: 2,
+                            mDataByteSize: UInt32(frames * 2 * MemoryLayout<Float>.size),
+                            mData: outPtr.baseAddress
+                        )
+                    )
+                    processor.render(input: inList, output: &outList)
+                }
+            }
+        }
+
+        #expect(
+            output == stereoRamp(frames: frames), "the wrong input buffer was taken for the tap")
+    }
+
+    /// An output list with no buffers at all — what an aggregate built around an
+    /// unusable device hands over. The engine refuses to start one of those, so
+    /// this only asserts the render path does not fault on it.
+    @Test func anOutputListWithNoBuffersIsHarmless() {
+        let processor = makeProcessor()
+        let frames = 4
+        var input = stereoRamp(frames: frames)
+
+        input.withUnsafeMutableBufferPointer { inPtr in
+            var inList = AudioBufferList(
+                mNumberBuffers: 1,
+                mBuffers: AudioBuffer(
+                    mNumberChannels: 2,
+                    mDataByteSize: UInt32(frames * 2 * MemoryLayout<Float>.size),
+                    mData: inPtr.baseAddress
+                )
+            )
+            var outList = AudioBufferList(
+                mNumberBuffers: 0,
+                mBuffers: AudioBuffer(mNumberChannels: 0, mDataByteSize: 0, mData: nil)
+            )
+            processor.render(input: &inList, output: &outList)
+        }
+    }
+
+    /// The EQ has to follow the audio to wherever the layout put it, not run
+    /// over the head of the first buffer.
+    @Test func theChainRunsOnTheChannelsTheAudioWasPlacedIn() {
+        let boost = EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)
+        let processor = makeProcessor(filters: [boost])
+        let frames = 256
+        let tone = sine(1_000, frames: frames)
+        let stereo = tone.flatMap { [$0, $0] }
+
+        var last: [[Float]] = []
+        for _ in 0..<12 {
+            last = renderAcrossLayout(
+                processor, input: stereo, inputChannels: 2, outputBuffers: [8], frames: frames)
+        }
+
+        let left = stride(from: 0, to: frames * 8, by: 8).map { last[0][$0] }
+        #expect(rms(left) > rms(tone) * 1.5, "the boost never reached the placed channel")
+        let unfed = stride(from: 4, to: frames * 8, by: 8).map { last[0][$0] }
+        #expect(
+            unfed.allSatisfy { $0 == 0 }, "the chain wrote into a channel the tap does not feed")
+    }
+
     // MARK: - The spectrum tap
 
     /// The analyzer draws what reaches the speakers, so the tap has to carry

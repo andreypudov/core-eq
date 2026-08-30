@@ -61,6 +61,42 @@ enum AudioDevices {
         }
     }
 
+    /// Whether the device is an Aggregate or Multi-Output Device — one built
+    /// out of other devices rather than backed by hardware of its own.
+    ///
+    /// Both kinds report the aggregate transport type, so this single question
+    /// covers both. `AudioEngine` needs it because Core Audio will not nest an
+    /// aggregate inside another one.
+    static func isAggregate(_ deviceID: AudioDeviceID) -> Bool {
+        transportType(of: deviceID) == kAudioDeviceTransportTypeAggregate
+    }
+
+    /// Whether the device presents anywhere to write audio. False for a device
+    /// whose output stream configuration is empty, which is not the same thing
+    /// as a device that failed to be created.
+    static func hasOutputChannels(_ deviceID: AudioDeviceID) -> Bool {
+        var address = address(
+            kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeOutput)
+        var dataSize: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &dataSize) == noErr,
+            dataSize > 0
+        else {
+            return false
+        }
+
+        let bufferList = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(dataSize), alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { bufferList.deallocate() }
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &dataSize, bufferList) == noErr
+        else {
+            return false
+        }
+
+        let buffers = UnsafeMutableAudioBufferListPointer(
+            bufferList.assumingMemoryBound(to: AudioBufferList.self))
+        return buffers.contains { $0.mNumberChannels > 0 }
+    }
+
     static func name(of deviceID: AudioDeviceID) -> String? {
         var address = address(kAudioObjectPropertyName)
         var name: Unmanaged<CFString>?
@@ -169,29 +205,6 @@ enum AudioDevices {
     private static func isCoreEQAggregate(_ deviceID: AudioDeviceID) -> Bool {
         guard let uid = persistentID(of: deviceID) else { return false }
         return uid.hasPrefix(coreEQAggregateUIDPrefix)
-    }
-
-    private static func hasOutputChannels(_ deviceID: AudioDeviceID) -> Bool {
-        var address = address(
-            kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeOutput)
-        var dataSize: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &dataSize) == noErr,
-            dataSize > 0
-        else {
-            return false
-        }
-
-        let bufferList = UnsafeMutableRawPointer.allocate(
-            byteCount: Int(dataSize), alignment: MemoryLayout<AudioBufferList>.alignment)
-        defer { bufferList.deallocate() }
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &dataSize, bufferList) == noErr
-        else {
-            return false
-        }
-
-        let buffers = UnsafeMutableAudioBufferListPointer(
-            bufferList.assumingMemoryBound(to: AudioBufferList.self))
-        return buffers.contains { $0.mNumberChannels > 0 }
     }
 
     private static func address(
