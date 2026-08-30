@@ -1,0 +1,275 @@
+#+TITLE: CoreEQ Roadmap
+#+SUBTITLE: Fix what is broken, then open the format, then open the scope
+#+AUTHOR: Andrey Pudov
+#+DATE: <2026-08-30 Sun>
+#+OPTIONS: toc:2 num:nil
+
+Where CoreEQ goes after 1.7, and why in this order. Everything here comes out
+of what people asked for and reported after the app was posted publicly; the
+shape of the filter chain the later releases build on is in [[file:ARCHITECTURE.org][ARCHITECTURE.org]].
+
+The ordering rule is simple. A defect that makes the app produce no sound
+outranks the most-asked-for feature, and both outrank a feature that
+widens what the app is. So: 1.8 fixes, 1.9 opens the preset format, 1.10 opens
+the scope from one chain per device to one chain per application.
+
+Dates are deliberately absent. This is a project I wrote for myself and put on
+GitHub because it turned out to be useful to other people; the order is a
+commitment, the schedule is not.
+
+* 1.8 — Make it work everywhere it claims to
+
+Public feedback produced three defects that are not edge cases. One stops audio
+entirely on USB interfaces and display-connected outputs. One doubles the audio
+and breaks every screen capture tool. One keeps the Mac awake indefinitely. All
+three affect people doing nothing unusual, and none of them can be worked
+around from inside the app. Nothing else ships until they are fixed.
+
+** Multichannel outputs
+
+*Configurations reported:* HDMI to a display, an iConnectivity Audio4C over USB,
+and a DisplayPort monitor output raised pre-emptively by someone who had been
+burned before. Reports arrived through both Reddit and GitHub issues and may
+overlap, so treat the count of people as unknown; the count of distinct broken
+setups is what matters and it is at least three.
+
+Symptoms are silence or badly mangled audio, and they persist at Flat, which is
+the tell: the audio still crosses the tap when it is not being filtered, so the
+fault is in the plumbing rather than the DSP.
+
+One Audio4C report adds a detail worth having: “I can hear it over my speakers
+for a split second and then it's gone.” Audio starts and then stops, rather
+than never starting, which points at the moment the aggregate device is built
+and the IO proc takes over rather than at the tap's creation.
+
+CoreEQ takes a stereo tap while the device presents more than two channels, so
+the layout does not line up. Forcing the device to 2 channels in Audio MIDI
+Setup restores sound, which confirms the diagnosis.
+
+Two things to do, and they are probably one change:
+
+- Handle devices with more than two channels honestly. Either match the tap to
+  the device's channel count, or place the stereo pair correctly in a wider
+  layout and pass the rest through untouched. The second is the smaller change
+  and is what the app already claims to do.
+- Stop assuming buffer position. =EQProcessor.render= pairs input buffer /i/
+  with output buffer /i/ across the =AudioBufferList=. That is better than
+  hardcoding buffer 0, but it is still positional, and a developer who shipped
+  the same kind of tool reported the aggregate handing them lists where the
+  tap's buffers were not the first entries. Select by matching channel count
+  and format instead.
+
+*Done when* the three reported configurations produce correct stereo, and a
+device reporting more than two channels either works or is reported in the UI
+rather than failing silently.
+
+** Permission text before the system prompt, not after
+
+“System Audio Recording” sounds broader than what an equalizer does, and the
+one moment where that matters is the moment macOS asks. Today the explanation
+lives in Settings under the permission status, so it is only reachable after
+the dialog has already been answered.
+
+Move it in front: what is captured, that nothing is stored or sent, and that
+quitting drops the tap immediately. It fits on one screen.
+
+** Bluetooth noise at higher volume
+
+One report, unresolved: a Soundcore Q20i picking up noise around 40% volume.
+
+Clipping is the first hypothesis and the cheapest to rule out, since =AutoGain=
+corrects the *average* of the chain response and never boosts — by design, and
+documented as such — so it removes the systematic part of the headroom problem
+without guaranteeing clipping away. The mix level arriving at a tap is
+unknowable from inside it. If the noise is also present at Flat, it is not
+clipping and needs a real investigation.
+
+** The route-change window
+
+Coefficients come from =kAudioDevicePropertyNominalSampleRate=, not from
+=kAudioTapPropertyFormat=, which is what saves CoreEQ from the bug a commenter
+described where a Bluetooth headset flipping to HFP shifts every band down by
+2 to 3x. But the property listener fires *after* the route change, so there is
+still a window filtered with stale coefficients.
+
+Measure how wide it actually is before deciding whether it needs fixing. It may
+be a handful of buffers and inaudible.
+
+** Echo and doubled audio
+
+Four symptoms that sound like one another, and the third is the one that makes
+this a defect rather than an explanation:
+
+- Running alongside SoundSource produces a flangey delay.
+- With CoreEQ active, screen recording fails in *every* capture tool tested, and
+  the captured audio has “a Doppler echo delay”.
+- After waking from sleep, audio sometimes plays with an echo.
+- The Audio4C reports above, where sound starts and then vanishes.
+
+The SoundSource case has an easy story: two processors in one path, so the
+signal arrives twice slightly offset. The wake-from-sleep case does not — no
+second tool is involved, so something on CoreEQ's side is producing two copies
+of the audio by itself. The likely shape is an IO proc or an aggregate device
+that survives a state change it should not have survived, leaving two of them
+running. That would explain the echo after wake, and it is worth testing
+whether it also explains the capture-tool case.
+
+Three things to do:
+
+- Audit the teardown and rebuild path around sleep, wake, and device changes,
+  and confirm exactly one IO proc is ever running.
+- Reproduce against a screen capture tool. Capture tools take their own tap of
+  the system audio, so CoreEQ's global tap and theirs are interacting.
+  “Every capture tool fails” makes this a real conflict, not a quirk of one app.
+- When a second system-audio tool genuinely is present, detect it and say so
+  plainly in the UI rather than leaving the user to work out why their audio
+  sounds doubled.
+
+** Preventing the Mac from sleeping
+
+Activity Monitor shows CoreEQ preventing sleep, and it does so with no audio
+playing at all.
+
+The cause is not an assertion in CoreEQ's own code — there isn't one. It is the
+IO proc: =AudioDeviceStart= runs the aggregate continuously from launch, by
+design, since global bypass “keeps the engine running but passes audio through”
+(=AudioEngine.swift:49=). A continuously running IOProc is active audio IO as
+far as the system is concerned, so the assertion follows automatically.
+
+The fix is to stop running when there is nothing to do: tear the IO proc down
+when the app is bypassed, and when the mix has been silent for long enough that
+restarting on the next sample is cheaper than holding the machine awake. The
+constraint is that starting back up has to be fast and seamless enough that the
+first second of playback is not lost.
+
+** Documentation that answers the repeated questions
+
+Cheap, and it closes three of the recurring threads:
+
+- A one-line description per preset, so the list does not assume the reader
+  already knows what Acoustic or Spoken Word is for.
+- A =/Library/Audio/Plug-Ins/HAL= listing as the way to verify the no-driver
+  claim independently. A commenter proposed this unprompted, and it is better
+  proof than any wording I could write.
+- A stated-limits section in the README covering global volume, multichannel,
+  and bit-perfect playback, so the deliberate non-goals stop being answered one
+  comment at a time.
+
+* 1.9 — Open the preset format
+
+The most requested feature by a clear margin, asked for from four directions:
+AutoEQ, EqualizerAPO, Wavelet, and “EQ txt files”. All four describe the same
+file.
+
+** Import
+
+AutoEQ's parametric export gives a preamp value and a frequency/gain/Q triple
+per band. EqualizerAPO consumes that format and Wavelet ships the same
+database, so one parser covers every request in the thread.
+
+The chain already expresses what the format says: free filters take any centre
+in =filterFrequencyRange= (20 Hz – 20 kHz) with Q from 0.1 to 10, and the
+profile's preamp maps onto the existing output trim. So the work is a parser, a
+file picker, and three decisions the format forces:
+
+- A profile with more than =maxFreeFilters= (16) bands. Truncating by
+  significance beats refusing the file.
+- A band past the ±12 dB =gainRange=. Clamp and say so, rather than silently.
+- Whether an imported profile replaces the ladder or sits on top of it. Replace
+  is almost certainly right: a correction curve is a complete statement about
+  the headphone, not an adjustment to an existing one.
+
+** Export
+
+Asked for once, alongside import, and nearly free once the parser exists.
+Writing the same format back makes a CoreEQ profile something you can hand to
+someone on another platform.
+
+** Done when
+
+An AutoEQ profile downloaded for a real pair of headphones loads and measures
+correct against its published response, and what CoreEQ writes out reloads
+identically.
+
+* 1.10 — Open the scope: per-application EQ and volume
+
+Asked for repeatedly, on Reddit and as GitHub issues, and someone also asked
+whether the process-tap API supports per-app taps at all. One request puts the
+appeal well: per-app volume “would really compliment the eq feature”.
+
+It does. =CATapDescription= takes a process list; CoreEQ only uses the
+global-minus-itself variant because I wanted one curve over everything. So this
+is not an audio-path question. It is a state-model question — one chain per
+process rather than one chain per device — and a UI question, which is the
+larger half.
+
+What has to be decided:
+
+- How a per-app chain relates to the global one. Replace, or stack on top.
+- What happens to a chain when its application quits and comes back with a new
+  pid, and how profiles bind to an application rather than a process.
+- Whether per-app implies a mixer view, and how that stays an app someone opens
+  to make their music sound better rather than becoming an audio workstation.
+
+Per-app *volume* is the easier half and rides along: it is a gain stage on a
+chain that already exists.
+
+* Later — worth doing, not yet scheduled
+
+** A/B comparison export
+
+Both slots already hold complete states, so writing out both curves and their
+settings is mostly plumbing. Suggested by someone who has built the feature
+elsewhere and offered to help.
+
+** Live waveform view
+
+There is already an FFT feeding the spectrum analyser; a time-domain view is a
+second read of the same buffer, tied to the A/B toggle.
+
+** Browsing the AutoEQ database in-app
+
+The step past file import: search the community database by headphone model and
+apply, the way Poweramp does. Open data, so it is a network fetch plus the 1.9
+parser. Note that this would be CoreEQ's first outbound network connection,
+which is currently a privacy claim worth keeping. If it happens, it happens on
+explicit user action and is stated as such.
+
+** Preset recommendation
+
+“Please recommend a configuration or built-in option” read two ways: tell me
+which to pick, or pick for me. The 1.8 preset descriptions answer the first
+cheaply. The second needs the app to know the device and the material, which is
+worth thinking about rather than guessing at.
+
+* Not planned
+
+Stated here so the answer is written down once.
+
+- *Bit-perfect passthrough.* A process tap sits after the system mixer by
+  definition, so the honest maximum CoreEQ can offer is getting out of the path
+  entirely, which bypass already does. Real bit-perfect means hog mode and
+  exclusive device access, which is a different application. Better to not
+  claim it than to half-claim it.
+- *Global volume control.* macOS already has one. CoreEQ adjusts tone.
+- *HRTF.* Raised once with no detail. Large, and a different product from an
+  equalizer.
+- *A standalone audio-tap-to-file tool.* Suggested as an unmet need, and the tap
+  plumbing here is most of the work, but it is not this app.
+- *iOS.* The process-tap API is macOS-only, so this is not a port.
+
+* How this was chosen
+
+Three sources, each read through in full: the r/MacApps launch thread, from
+people actually running the app; GitHub issues; and the earlier Threads post,
+from people reacting to a screenshot, whose top request — parametric bands —
+shipped in 1.6.
+
+Reddit and GitHub reports are not deduplicated, and probably should not be
+taken as separate voices: someone who hits a bug in the thread is exactly the
+person who then files the issue. Where this document counts anything, it counts
+distinct symptoms or broken configurations rather than people.
+
+The pattern across the feedback is worth keeping in view: the requests cluster around
+the preset *format* and the *scope* of the chain, not around the DSP. The
+filtering is not what people want changed.

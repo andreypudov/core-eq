@@ -8,7 +8,7 @@ import SwiftUI
 /// both show up as pale fringes along the edges. Drawing the shapes directly is
 /// crisp at any size and in either appearance.
 ///
-/// Geometry mirrors `Design/logo.svg` — the same five bars on a 1024 pt canvas,
+/// Geometry mirrors `design/logo.svg` — the same five bars on a 1024 pt canvas,
 /// expressed as fractions so it scales to whatever frame it's given.
 struct AppMark: View {
     /// Brand green, matching `logo.svg` `.bg` and `AppIcon.icon`'s solid fill.
