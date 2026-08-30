@@ -2,7 +2,7 @@
 
 Everything needed to build, run, test, and package CoreEQ, plus a tour of the
 project structure and architecture. End-user documentation is in
-[[file:README.org][README.org]].
+[[file:../README.org][README.org]].
 
 * Toolchain
 
@@ -156,7 +156,7 @@ Notes on unsigned distribution:
   via System Settings → Privacy & Security → *Open Anyway* or by clearing
   the quarantine attribute. Building from source avoids this entirely —
   local builds are never quarantined. Both paths are documented for users
-  in [[file:README.org][README.org]].
+  in [[file:../README.org][README.org]].
 - The System Audio Recording (TCC) permission is keyed to the code
   signature; ad-hoc signatures have no stable identity, so each shipped
   update re-prompts users for the permission.
@@ -267,7 +267,7 @@ project in VS Code or Vim, and not before.
 #+begin_example
 CoreEQ.xcodeproj          Xcode project (folder-synchronized sources)
 Config/Info.plist         LSUIElement, NSAudioCaptureUsageDescription, versions
-Design/
+design/
   logo.svg                Colored app icon source (not shipped)
   menubar.svg             Monochrome menu bar template source (not shipped)
 CoreEQ/
@@ -377,11 +377,11 @@ left behind fails the build with “Multiple commands produce …”.
 
 ** Icons
 
-The shipped icon files are generated from the SVG sources in =Design/= by
+The shipped icon files are generated from the SVG sources in =design/= by
 =make icons= (requires ImageMagick: =brew install imagemagick=). After
 editing an SVG, rerun the target and rebuild:
 
-- =Design/logo.svg= → =CoreEQ/Resources/AppIcon.icns= — rasterized at the ten
+- =design/logo.svg= → =CoreEQ/Resources/AppIcon.icns= — rasterized at the ten
   standard sizes (16–1024 px) and packed with =iconutil=; referenced from
   =Config/Info.plist= via =CFBundleIconFile=. This is the *fallback* icon
   for macOS 14/15.
@@ -391,11 +391,11 @@ editing an SVG, rerun the target and rebuild:
   This is the *primary* icon on macOS 26+: without it the system shows the
   =.icns= scaled down on a dark backing plate (the legacy-icon treatment),
   and with it the system also derives the dark/tinted icon-style variants
-  automatically. The bar geometry is duplicated from =Design/logo.svg=;
+  automatically. The bar geometry is duplicated from =design/logo.svg=;
   keep them in sync when the design changes. Icon caches are aggressive —
   after replacing the app, =lsregister -f /Applications/CoreEQ.app= plus
   =killall iconservicesagent Dock Finder= forces a refresh.
-- =Design/menubar.svg= → =CoreEQ/Resources/MenuBarIconTemplate.png= (18 pt) and
+- =design/menubar.svg= → =CoreEQ/Resources/MenuBarIconTemplate.png= (18 pt) and
   =@2x= (36 pt) — a black-on-transparent copy of the logo's EQ bars.
   macOS renders it as a /template image/: only the alpha channel is used,
   recolored automatically for Light/Dark mode. Keep this SVG a solid
@@ -406,7 +406,7 @@ editing an SVG, rerun the target and rebuild:
 
 This section is how CoreEQ is put together. *Why* it is put together this way —
 one chain behind two editors, what a band is, what the graph is allowed to do —
-is [[file:docs/ARCHITECTURE.org][docs/ARCHITECTURE.org]]. Read that before changing anything about the
+is [[file:ARCHITECTURE.org][ARCHITECTURE.org]]. Read that before changing anything about the
 relationship between the graphic and parametric editors.
 
 ** Audio path: how CoreEQ attaches to system audio

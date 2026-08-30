@@ -6,7 +6,7 @@ application is playing, with no virtual audio driver and no kernel extension.
 It runs on Apple's native Core Audio process-tap API, so there is nothing
 installed into the system and nothing left behind when CoreEQ is not running.
 
-[[./Design/screenshots/core-eq-1.7.png]]
+[[./design/screenshots/core-eq-1.7.png]]
 
 * Features
 
@@ -197,7 +197,7 @@ preset, and the on/off state are restored on every launch, per output device.
 * Development
 
 Architecture notes, build and test instructions are in
-[[file:DEVELOPMENT.org][DEVELOPMENT.org]].
+[[file:docs/DEVELOPMENT.org][docs/DEVELOPMENT.org]].
 
 #+begin_src sh
 make build   # build the Release configuration
