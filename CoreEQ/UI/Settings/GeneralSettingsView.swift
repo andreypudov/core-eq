@@ -14,9 +14,33 @@ struct GeneralSettingsView: View {
     @State private var loginItemFailed = false
 
     @ObservedObject private var engine = EngineStatusBridge.shared
+    @ObservedObject private var route = SettingsRoute.shared
+
+    /// What is stopping the equalizer, if anything.
+    ///
+    /// Waiting for permission is deliberately not a problem: the section below
+    /// is already about exactly that, and saying it twice on one pane would read
+    /// as two faults rather than one.
+    private var engineProblem: String? {
+        guard case .failed(_, let message) = engine.status else { return nil }
+        return message
+    }
 
     var body: some View {
         Form {
+            // First, when there is one: someone who arrives here from a warning
+            // came to find out what is wrong, and should not have to look.
+            if let problem = engineProblem {
+                Section {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .font(Theme.Font.label)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button("Show Diagnostics") { route.tab = .diagnostics }
+                }
+            }
+
             Section {
                 Toggle("Open CoreEQ at login", isOn: loginItemBinding)
                     .help("Start CoreEQ automatically, in the menu bar, when you log in")
@@ -61,9 +85,11 @@ struct GeneralSettingsView: View {
                     // Prominent because arriving here from the menu bar means
                     // having been sent to do something, and the something has to
                     // be obvious at a glance.
-                    if let action = permission.action {
-                        Button(action.title) { perform(action) }
-                            .buttonStyle(.borderedProminent)
+                    if permission.needsAction {
+                        Button("Open System Settings…") {
+                            SystemSettingsLink.openAudioCapturePrivacy()
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
                 }
             } footer: {
@@ -95,42 +121,16 @@ struct GeneralSettingsView: View {
     /// output device is one — and reading those as a refusal tells the user
     /// their permission is missing when it is granted, sending them to System
     /// Settings to fix something that is not broken.
-    /// The one thing to do about the permission, when there is one.
-    private enum PermissionAction {
-        /// Let macOS raise its prompt, now that CoreEQ has explained itself.
-        case request
-        /// It was refused, and only System Settings can change that.
-        case openSystemSettings
-
-        var title: String {
-            switch self {
-            case .request: return "Allow Audio Access…"
-            case .openSystemSettings: return "Open System Settings…"
-            }
-        }
-    }
-
-    private func perform(_ action: PermissionAction) {
-        switch action {
-        case .request: EngineActions.shared.requestPermission()
-        case .openSystemSettings: openPrivacySettings()
-        }
-    }
-
     private enum Permission {
         case granted
         case refused
         case notRunning
-        /// Never asked for. The one state where CoreEQ can still explain itself
-        /// before macOS does the asking.
-        case unasked
 
         var title: String {
             switch self {
             case .granted: return "Granted"
             case .refused: return "Not granted"
             case .notRunning: return "Not running"
-            case .unasked: return "Not requested"
             }
         }
 
@@ -139,17 +139,21 @@ struct GeneralSettingsView: View {
             case .granted: return "checkmark.circle"
             case .refused: return "exclamationmark.triangle"
             case .notRunning: return "pause.circle"
-            case .unasked: return "exclamationmark.circle"
             }
         }
 
         var isGranted: Bool { self == .granted }
 
-        var action: PermissionAction? {
+        /// Whether there is anything for the user to do here.
+        ///
+        /// Both "never asked" and "refused" get the same button. macOS cannot
+        /// distinguish them for us, and an app that guesses shows the wrong one
+        /// sometimes; the fallback named in the footer covers the case where the
+        /// button cannot help.
+        var needsAction: Bool {
             switch self {
-            case .unasked: return .request
-            case .refused: return .openSystemSettings
-            case .granted, .notRunning: return nil
+            case .refused: return true
+            case .granted, .notRunning: return false
             }
         }
 
@@ -160,43 +164,21 @@ struct GeneralSettingsView: View {
                     "CoreEQ processes the sound you hear. Nothing is recorded, stored, or transmitted."
             case .refused:
                 return
-                    "Without it CoreEQ cannot process system audio. Grant it under Privacy & Security → "
-                    + "Screen & System Audio Recording, then quit and reopen CoreEQ."
+                    "Without it CoreEQ cannot process system audio.\n\n"
+                    + Theme.audioPermissionInstruction
             case .notRunning:
                 return
                     "CoreEQ has not needed the permission yet, so there is nothing to report."
-            case .unasked:
-                return
-                    "An equalizer has to reach the sound to change it. CoreEQ reads audio on "
-                    + "its way to your speakers, adjusts it, and plays it straight back — that "
-                    + "is the whole of what the permission is for. Nothing is recorded, stored, "
-                    + "or sent anywhere, and quitting CoreEQ hands the audio back immediately.\n\n"
-                    + "Allow access, and macOS will ask you to confirm."
             }
         }
     }
 
     private var permission: Permission {
-        if case .awaitingPermission(let offer) = engine.status {
-            // Asked once already: macOS will not offer again, so the only thing
-            // that helps is System Settings.
-            return offer == .askTheSystem ? .unasked : .refused
-        }
         switch engine.tapAccess {
         case .granted: return .granted
         case .denied: return .refused
         case .unknown: return .notRunning
         }
-    }
-
-    private func openPrivacySettings() {
-        guard
-            let url = URL(
-                string:
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-            )
-        else { return }
-        NSWorkspace.shared.open(url)
     }
 
     // MARK: - Login item

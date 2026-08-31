@@ -20,7 +20,6 @@ final class SettingsStore {
         static let userProfiles = "userProfiles"
         static let deviceStates = "deviceStates"
         static let lastOutputDeviceUID = "lastOutputDeviceUID"
-        static let wasAudioAccessRefused = "wasAudioAccessRefused"
     }
 
     private let defaults: UserDefaults
@@ -38,17 +37,6 @@ final class SettingsStore {
     var lastOutputDeviceUID: String? {
         get { defaults.string(forKey: Key.lastOutputDeviceUID) }
         set { defaults.set(newValue, forKey: Key.lastOutputDeviceUID) }
-    }
-
-    /// Whether the last attempt to capture system audio was refused.
-    ///
-    /// Not "have we asked". Asking once does not mean macOS will not ask again:
-    /// it forgets whenever the app's identity changes, and then prompts as if
-    /// for the first time. Only a refusal that actually happened is a reason to
-    /// stop offering to ask and send someone to System Settings instead.
-    var wasAudioAccessRefused: Bool {
-        get { defaults.bool(forKey: Key.wasAudioAccessRefused) }
-        set { defaults.set(newValue, forKey: Key.wasAudioAccessRefused) }
     }
 
     var activeProfileName: String? {

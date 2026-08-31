@@ -47,6 +47,17 @@ enum Theme {
     /// at the left of the band slider row for its own scale.
     static let axisGutter: CGFloat = 52
 
+    /// What to do when macOS will not ask again.
+    ///
+    /// The permission dialog carries its own explanation — that is what
+    /// `NSAudioCaptureUsageDescription` is for, and the system shows it at
+    /// exactly the moment it matters. What the system cannot say is what to do
+    /// once it has an answer recorded and has stopped offering to ask, which is
+    /// the only part left for the app.
+    static let audioPermissionInstruction =
+        "Allow CoreEQ under Screen & System Audio Recording. It starts equalizing as "
+        + "soon as you come back."
+
     /// Every size and weight the app is allowed to use.
     ///
     /// Before this there were eight hardcoded point sizes plus three of the

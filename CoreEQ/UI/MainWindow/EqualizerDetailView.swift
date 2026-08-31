@@ -55,8 +55,13 @@ struct EqualizerDetailView: View {
                 // not being shaped — so it also carries the explanation.
                 .opacity(audioEngine.isProcessing ? 1.0 : 0.5)
                 .overlay {
-                    if case .awaitingPermission(let offer) = audioEngine.status {
-                        permissionOverlay(offer)
+                    // A refused capture is a permission problem, not a
+                    // generic engine error, and wants the explanation and the
+                    // way to System Settings rather than a bare message. The
+                    // waiting state is gone by then — the explanation has been
+                    // given — so the refusal has to bring it back.
+                    if audioEngine.needsAudioPermission {
+                        permissionOverlay
                     } else if let failure = engineFailure {
                         engineOverlay(failure)
                     }
@@ -616,9 +621,9 @@ struct EqualizerDetailView: View {
     /// and the one moment that matters is the moment the system asks. Creating
     /// the tap is what raises that prompt, so the engine waits here until the
     /// button below is pressed.
-    private func permissionOverlay(_ offer: AudioPermissionGate.Offer) -> some View {
+    private var permissionOverlay: some View {
         VStack(spacing: 10) {
-            Label("CoreEQ needs permission to process audio", systemImage: "waveform")
+            Label("CoreEQ is not allowed to process audio", systemImage: "waveform")
                 .font(Theme.Font.heading)
                 .foregroundStyle(.primary)
 
@@ -633,28 +638,20 @@ struct EqualizerDetailView: View {
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
 
-            switch offer {
-            case .askTheSystem:
-                Button("Allow Audio Access…") { audioEngine.requestPermission() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .keyboardShortcut(.defaultAction)
+            Button("Open System Settings…") { SystemSettingsLink.openAudioCapturePrivacy() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
 
-                Text("macOS will ask you to confirm.")
-                    .font(Theme.Font.label)
-                    .foregroundStyle(.tertiary)
-            case .openSystemSettings:
-                // macOS raises its prompt once. After that only System Settings
-                // can change the answer, so offering to ask again would be an
-                // offer the app cannot keep.
-                Button("Open System Settings…") { SettingsOpener.shared.open(tab: .general) }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-
-                Text("Allow CoreEQ under Screen & System Audio Recording.")
-                    .font(Theme.Font.label)
-                    .foregroundStyle(.tertiary)
-            }
+            // Always shown, rather than swapped in once the app believes it has
+            // been refused. macOS cannot tell "denied" from "not asked" apart,
+            // so any app that tries ends up showing the wrong one sometimes;
+            // naming the fallback costs a line and is never wrong.
+            Text(Theme.audioPermissionInstruction)
+                .font(Theme.Font.secondary)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 18)
@@ -719,7 +716,6 @@ struct EqualizerDetailView: View {
         case .running: return nil
         case .stopped: return "Audio engine stopped"
         case .failed: return "Audio engine error"
-        case .awaitingPermission: return "Waiting for permission"
         }
     }
 

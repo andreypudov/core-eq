@@ -133,12 +133,52 @@ by unit tests against a fake tap factory rather than by a real interface.
 ** Permission text before the system prompt, not after
 
 “System Audio Recording” sounds broader than what an equalizer does, and the
-one moment where that matters is the moment macOS asks. Today the explanation
-lives in Settings under the permission status, so it is only reachable after
-the dialog has already been answered.
+one moment where that matters is the moment macOS asks. The explanation lived in
+Settings under the permission status, so it was only reachable after the dialog
+had already been answered.
 
-Move it in front: what is captured, that nothing is stored or sent, and that
-quitting drops the tap immediately. It fits on one screen.
+*Done*, and not the way this item imagined. The explanation belongs in
+=NSAudioCaptureUsageDescription=: macOS shows that string inside the permission
+dialog, which is precisely the moment in question. An in-app screen shown before
+the prompt was built first and then removed — it duplicated what the system
+already does, and required the app to predict whether a prompt was coming, which
+macOS gives no way to know.
+
+Two things were learned on the way, both worth keeping written down.
+
+The permission a process tap needs is *audio capture*, declared with
+=NSAudioCaptureUsageDescription= — Apple's own tap sample declares that key and
+nothing else. It is not screen recording, and
+=CGPreflightScreenCaptureAccess= reports a different permission entirely, even
+though the two appear under one heading in System Settings.
+
+And there is no API to ask whether audio capture is allowed. Microphone and
+camera have =AVCaptureDevice.authorizationStatus=; screen recording has a
+preflight; taps have neither, and creating one is what raises the prompt. So an
+app cannot check first — it can only try, and watch what happens.
+
+That last point turned out to matter more than the text did. See the item below.
+
+** Refusing permission silenced the Mac
+
+=AudioHardwareCreateProcessTap= returns *success* when the user has refused
+permission. The tap reports a plausible format, the aggregate runs, the IO proc
+fires — and every sample is zero, while =muteBehavior = .mutedWhenTapped=
+silences every other process at the hardware.
+
+Measured rather than inferred: with a refusal recorded and music playing, the
+engine reported =status: running=, a two channel device-bound tap, and
+=capturing: no audio seen since the engine started=. Apple's tap sample ignores
+the =OSStatus= from that call entirely, so it would behave the same way.
+
+The result was the worst state this engine has: a completely silent Mac, with
+every layer of the app reporting that it works, and nothing on screen.
+
+*Fixed.* Muting is now earned. A tap starts unmuted and the render path writes
+nothing until the engine has seen a non-zero sample; only then does it rebuild
+muted and begin processing. A refusal now costs only that the audio is not
+equalized, which is how an equalizer should fail, and the app says so and offers
+the System Settings pane rather than a retry that cannot help.
 
 ** Bluetooth noise at higher volume
 

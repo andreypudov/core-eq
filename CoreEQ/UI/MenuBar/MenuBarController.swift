@@ -276,35 +276,31 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func engineFailureItem() -> NSMenuItem? {
         guard let summary = audioEngine.status.summary else { return nil }
-        let awaiting: Bool
-        if case .awaitingPermission = audioEngine.status {
-            awaiting = true
-        } else {
-            awaiting = false
-        }
+        let isPermission = audioEngine.needsAudioPermission
 
+        // Always General, whichever kind of warning this is. Someone clicking a
+        // warning wants to know what is wrong and what to do; Diagnostics is a
+        // report to paste into an issue, which is a different errand and reads
+        // as a wall of text when it is not the one you are on. General states
+        // the problem and offers Diagnostics as the next step.
         let item = NSMenuItem(
-            title: summary,
-            action: awaiting ? #selector(openPermission) : #selector(openDiagnostics),
-            keyEquivalent: "")
+            title: isPermission ? "Audio permission needed" : summary,
+            action: #selector(openPermission), keyEquivalent: "")
         item.target = self
         item.image = NSImage(
             systemSymbolName:
-                awaiting ? "exclamationmark.circle.fill" : "exclamationmark.triangle.fill",
+                isPermission
+                ? "exclamationmark.circle.fill" : "exclamationmark.triangle.fill",
             accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
         item.toolTip = audioEngine.status.description
         return item
     }
 
-    /// Permission is explained in Settings, not here: this row can hold about
-    /// four words before the whole menu grows to its width.
+    /// Whatever the warning was about is explained in Settings, not here: this
+    /// row can hold about four words before the whole menu grows to its width.
     @objc private func openPermission() {
         SettingsOpener.shared.open(tab: .general)
-    }
-
-    @objc private func openDiagnostics() {
-        SettingsOpener.shared.open(tab: .diagnostics)
     }
 
     private func headerItem() -> NSMenuItem {

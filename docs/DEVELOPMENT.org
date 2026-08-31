@@ -46,10 +46,14 @@ open build/Debug/CoreEQ.app
 
 - CoreEQ is a menu bar app (=LSUIElement=): no Dock icon, look for the sliders
   icon in the menu bar.
-- First launch triggers the macOS *System Audio Recording* permission dialog
-  (the usage string comes from =NSAudioCaptureUsageDescription= in
-  =Config/Info.plist=). Without the permission the tap cannot be created and
-  the engine reports a failure in the UI, retrying up to three times.
+- First launch triggers the macOS *System Audio Recording* permission dialog.
+  The explanation shown in it is the usage string in =Config/Info.plist=
+  (=NSAudioCaptureUsageDescription=), which is macOS's own mechanism for saying
+  what a permission is for at the moment it is asked for.
+- Refusing does *not* fail loudly. =AudioHardwareCreateProcessTap= returns
+  success even when the permission was refused: the tap reports a plausible
+  format, the aggregate runs, the IO proc fires, and every sample is zero. See
+  *Proving the tap* below for what the engine does about it.
 - Note that TCC ties the permission to the code signature; rebuilding with a
   different signature may re-prompt.
 
@@ -462,18 +466,47 @@ relationship between the graphic and parametric editors.
 
 Implemented in =AudioEngine.swift=:
 
-1. *Process tap.* The engine creates a global Core Audio process tap
+1. *Process tap.* The engine creates Core Audio process taps
    (=AudioHardwareCreateProcessTap=, macOS 14.2+) covering every process
-   except CoreEQ itself — excluding itself prevents a feedback loop. The tap
-   uses =muteBehavior = .mutedWhenTapped=, so the tapped processes' original
-   audio is silenced at the hardware; the only signal reaching the speakers is
-   what CoreEQ writes back.
+   except CoreEQ itself — excluding itself prevents a feedback loop. One tap
+   per output stream, because a tap binds to a single stream and takes its
+   format. Once capture is proven the taps use
+   =muteBehavior = .mutedWhenTapped=, so the tapped processes' original audio is
+   silenced at the hardware and the only signal reaching the speakers is what
+   CoreEQ writes back. Until then they are unmuted — see *Proving the tap*.
 2. *Private aggregate device.* The tap and the current default output device
    are combined into a private (invisible) aggregate device with drift
    compensation, so tap input and device output share one IO cycle.
 3. *IO proc.* An IO proc on the aggregate receives the tapped system mix each
    cycle, runs it through =EQProcessor=, and writes it to the real device's
    output buffers.
+
+*** Proving the tap
+
+A tap is created *unmuted*, and the render path writes nothing, until the engine
+has seen it deliver a non-zero sample. Only then does it rebuild with
+=.mutedWhenTapped= and start processing.
+
+This is not caution for its own sake. =AudioHardwareCreateProcessTap= returns
+success when the user has refused permission — measured, not assumed: with a
+refusal recorded, the engine reported =status: running=, a two channel
+device-bound tap, and not one sample. Muting on the strength of that gives a
+completely silent Mac with every layer of the app reporting that it works, which
+is the worst state this engine has.
+
+Unmuted, the same refusal costs only that the audio is not equalized. That is
+how an equalizer should fail, and it is why the order matters: prove, then mute.
+
+The proof is polled every 250 ms and gives up after ten seconds, at which point
+the engine says it is not capturing and *leaves the audio alone*. Returning to
+the app after a refusal starts a fresh attempt, which is how allowing the
+permission in System Settings takes effect — audio capture has no permission API
+to consult, so coming back is the only signal available.
+
+=EQProcessor.hasReceivedAudio= is the observation, and it is reported in
+Settings ▸ Diagnostics alongside whether the tap is muting yet. The two have to
+be read together: not capturing *while muting* is a silent Mac; not capturing
+*while unmuted* is CoreEQ standing aside.
 
 Because the tap dies with the process, a crash or quit always returns the
 system to normal, unprocessed audio — there is no persistent driver state to

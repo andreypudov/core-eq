@@ -95,6 +95,41 @@ struct DiagnosticsReportTests {
         #expect(report.contains("macOS Version 15.0"))
     }
 
+    /// The two facts have to be read together. "Not capturing" while muting is
+    /// a silent Mac; "not capturing" while unmuted is CoreEQ standing aside,
+    /// which is the state it is designed to fail into.
+    @Test func aTapThatIsNotYetMutingSaysSo() {
+        var engine = self.engine()
+        engine.isMuting = false
+
+        #expect(text(engine: engine).contains("muting others:   no"))
+        #expect(text(engine: engine).contains("audio is left alone"))
+    }
+
+    @Test func aProvenTapReportsThatItIsMuting() {
+        var engine = self.engine()
+        engine.isMuting = true
+
+        #expect(text(engine: engine).contains("muting others:   yes"))
+    }
+
+    /// Whether the tap is delivering anything is the fact that separates
+    /// "nothing is playing" from "nothing is reaching us". A report read by
+    /// someone chasing a silent Mac has to state it either way.
+    @Test func aCapturingTapIsReported() {
+        var engine = self.engine()
+        engine.hasReceivedAudio = true
+
+        #expect(text(engine: engine).contains("capturing:       yes"))
+    }
+
+    @Test func aTapThatHasDeliveredNothingIsReported() {
+        var engine = self.engine()
+        engine.hasReceivedAudio = false
+
+        #expect(text(engine: engine).contains("no audio seen since the engine started"))
+    }
+
     /// A stopped engine has to say so. A report that simply omits the section
     /// reads as though the engine were fine.
     // MARK: - The permission

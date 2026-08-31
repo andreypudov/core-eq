@@ -22,11 +22,22 @@ final class EngineStatusBridge: ObservableObject {
     @Published private(set) var tapAccess: TapAccess = .unknown
 
     private var cancellables: Set<AnyCancellable> = []
+    private weak var engine: AudioEngine?
 
     private init() {}
 
     /// Called once, by whoever owns the engine.
+    /// Whether the tap is delivering anything.
+    ///
+    /// Asked when a report is drawn, rather than published: it changes once, on
+    /// the render thread, and waking the UI for a fact nobody is looking at
+    /// would be work for nothing. It is also the one thing here that cannot come
+    /// from a snapshot — the engine's is taken at start, when the answer is
+    /// always no.
+    var hasReceivedAudio: Bool { engine?.hasReceivedAudio ?? false }
+
     func follow(_ engine: AudioEngine) {
+        self.engine = engine
         engine.$status
             .sink { [weak self] status in self?.status = status }
             .store(in: &cancellables)
