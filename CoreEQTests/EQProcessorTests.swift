@@ -837,4 +837,257 @@ struct EQProcessorTests {
         #expect(output == stereoRamp(frames: frames))
     }
 
+    // MARK: - Wide devices
+
+    /// Renders into an output list whose buffers may differ in *both* channel
+    /// count and length, as `(channels, frames)` pairs. `renderAcrossLayout`
+    /// gives every buffer the same length, which cannot express a device whose
+    /// buffers disagree, or one presenting an empty buffer among real ones.
+    private func renderAcrossUnevenLayout(
+        _ processor: EQProcessor,
+        input: [Float],
+        inputChannels: Int,
+        outputBuffers: [(channels: Int, frames: Int)]
+    ) -> [[Float]] {
+        var inputSamples = input
+
+        let counts = outputBuffers.map { $0.channels * $0.frames }
+        let storage = counts.map { count -> UnsafeMutablePointer<Float> in
+            let p = UnsafeMutablePointer<Float>.allocate(capacity: max(1, count))
+            p.initialize(repeating: 99, count: max(1, count))
+            return p
+        }
+        defer {
+            for (index, count) in counts.enumerated() {
+                storage[index].deinitialize(count: max(1, count))
+                storage[index].deallocate()
+            }
+        }
+
+        let bytes =
+            MemoryLayout<AudioBufferList>.size
+            + max(0, outputBuffers.count - 1) * MemoryLayout<AudioBuffer>.size
+        let raw = UnsafeMutableRawPointer.allocate(
+            byteCount: bytes, alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { raw.deallocate() }
+        let outList = raw.bindMemory(to: AudioBufferList.self, capacity: 1)
+        outList.pointee.mNumberBuffers = UInt32(outputBuffers.count)
+        let outABL = UnsafeMutableAudioBufferListPointer(outList)
+        for (index, buffer) in outputBuffers.enumerated() {
+            outABL[index] = AudioBuffer(
+                mNumberChannels: UInt32(buffer.channels),
+                mDataByteSize: UInt32(counts[index] * MemoryLayout<Float>.size),
+                mData: UnsafeMutableRawPointer(storage[index])
+            )
+        }
+
+        inputSamples.withUnsafeMutableBufferPointer { inPtr in
+            var inList = AudioBufferList(
+                mNumberBuffers: 1,
+                mBuffers: AudioBuffer(
+                    mNumberChannels: UInt32(inputChannels),
+                    mDataByteSize: UInt32(input.count * MemoryLayout<Float>.size),
+                    mData: inPtr.baseAddress
+                )
+            )
+            processor.render(input: &inList, output: outList)
+        }
+
+        return counts.enumerated().map { index, count in
+            Array(UnsafeBufferPointer(start: storage[index], count: count))
+        }
+    }
+
+    /// The full width the processor supports, which is also exactly what
+    /// BlackHole 16ch and a 7.1.4 layout present. Everything else multichannel
+    /// here runs six channels, so the ceiling itself was never rendered through.
+    @Test func aSixteenChannelTapCarriesEveryChannel() {
+        let channels = EQProcessor.maxChannels
+        let processor = makeProcessor()
+        processor.setOutputLayout(
+            .init(tapChannels: channels, destinations: Array(0..<channels)))
+        let frames = 8
+        let input = identifiableChannels(channels: channels, frames: frames)
+
+        let output = renderAcrossLayout(
+            processor, input: input, inputChannels: channels,
+            outputBuffers: [channels], frames: frames)[0]
+
+        #expect(output == input, "a channel was dropped, reordered, or altered at full width")
+    }
+
+    /// Delay lines are indexed `(filter * maxChannels + channel) * 2`, so the
+    /// last channel sits at the end of the allocation. An off-by-one there would
+    /// have channel 15 read another filter's state — or run off the end — and
+    /// six-channel tests can never reach it.
+    @Test func theTopChannelKeepsItsOwnFilterState() {
+        let channels = EQProcessor.maxChannels
+        // Two filters, not one: the index is `filter * maxChannels + channel`,
+        // so a stride that is too short makes filter 1's channel 0 collide with
+        // filter 0's channel 8 — invisible while there is only one filter.
+        let processor = makeProcessor(filters: [
+            EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1),
+            EQFilter(kind: .bell, frequency: 4_000, gain: -9, q: 1),
+        ])
+        processor.setOutputLayout(
+            .init(tapChannels: channels, destinations: Array(0..<channels)))
+        let frames = 512
+        let tone = sine(1_000, frames: frames)
+        let input = tone.flatMap { sample in [Float](repeating: sample, count: channels) }
+
+        var last: [Float] = []
+        for _ in 0..<12 {
+            last =
+                renderAcrossLayout(
+                    processor, input: input, inputChannels: channels,
+                    outputBuffers: [channels], frames: frames)[0]
+        }
+
+        let first = stride(from: 0, to: frames * channels, by: channels).map { last[$0] }
+        for channel in 1..<channels {
+            let samples = stride(from: channel, to: frames * channels, by: channels).map {
+                last[$0]
+            }
+            #expect(samples == first, "channel \(channel) diverged from channel 0")
+        }
+        #expect(rms(first) > rms(tone) * 1.5, "the boost never reached the channels")
+    }
+
+    /// A wide tap crossing a buffer boundary. Only a *stereo* tap has ever been
+    /// split across buffers here, and stereo never exercises the seam: channel 8
+    /// is the first channel of the second buffer, and the global-channel walk in
+    /// `destination` has to find it there rather than at offset 8 of the first.
+    @Test func aWideTapSpansSeveralOutputBuffers() {
+        let channels = EQProcessor.maxChannels
+        let processor = makeProcessor()
+        processor.setOutputLayout(
+            .init(tapChannels: channels, destinations: Array(0..<channels)))
+        let frames = 8
+        let input = identifiableChannels(channels: channels, frames: frames)
+
+        let output = renderAcrossLayout(
+            processor, input: input, inputChannels: channels,
+            outputBuffers: [8, 8], frames: frames)
+
+        for frame in 0..<frames {
+            for channel in 0..<8 {
+                #expect(
+                    output[0][frame * 8 + channel] == Float((channel + 1) * 100 + frame),
+                    "channel \(channel) misplaced in the first buffer")
+                #expect(
+                    output[1][frame * 8 + channel] == Float((channel + 9) * 100 + frame),
+                    "channel \(channel + 8) misplaced in the second buffer")
+            }
+        }
+    }
+
+    /// The aggregate shape at width: one stereo buffer per sub-device, eight of
+    /// them. Every buffer boundary is a seam, so a global walk that drifts by a
+    /// buffer shows up immediately.
+    @Test func aWideTapSpansOneBufferPerStereoPair() {
+        let channels = EQProcessor.maxChannels
+        let processor = makeProcessor()
+        processor.setOutputLayout(
+            .init(tapChannels: channels, destinations: Array(0..<channels)))
+        let frames = 4
+        let input = identifiableChannels(channels: channels, frames: frames)
+
+        let output = renderAcrossLayout(
+            processor, input: input, inputChannels: channels,
+            outputBuffers: [Int](repeating: 2, count: 8), frames: frames)
+
+        for pair in 0..<8 {
+            for frame in 0..<frames {
+                #expect(
+                    output[pair][frame * 2] == Float((pair * 2 + 1) * 100 + frame),
+                    "left of pair \(pair) misplaced")
+                #expect(
+                    output[pair][frame * 2 + 1] == Float((pair * 2 + 2) * 100 + frame),
+                    "right of pair \(pair) misplaced")
+            }
+        }
+    }
+
+    /// A tap wider than the processor carries. `maxChannels` is a real budget —
+    /// the delay lines are allocated against it — so a 64 channel BlackHole, or
+    /// any device beyond 7.1.4, is clamped rather than overrunning. The channels
+    /// that fit must still be correct, and the rest must be silent rather than
+    /// stale.
+    ///
+    /// This pins current behaviour, and current behaviour is a limitation: the
+    /// audio past channel 15 is dropped.
+    @Test func aTapWiderThanTheProcessorRoutesWhatItCan() {
+        let channels = EQProcessor.maxChannels + 4
+        let processor = makeProcessor()
+        processor.setOutputLayout(
+            .init(tapChannels: channels, destinations: Array(0..<channels)))
+        let frames = 4
+        let input = identifiableChannels(channels: channels, frames: frames)
+
+        let output = renderAcrossLayout(
+            processor, input: input, inputChannels: channels,
+            outputBuffers: [channels], frames: frames)[0]
+
+        for frame in 0..<frames {
+            for channel in 0..<EQProcessor.maxChannels {
+                #expect(
+                    output[frame * channels + channel] == Float((channel + 1) * 100 + frame),
+                    "channel \(channel) was lost inside the budget")
+            }
+            for channel in EQProcessor.maxChannels..<channels {
+                #expect(
+                    output[frame * channels + channel] == 0,
+                    "channel \(channel) is past the budget and should be silent")
+            }
+        }
+    }
+
+    /// Buffers in one list need not be the same length. `place` reports the
+    /// longest run it wrote, so the chain must re-clamp per channel or it would
+    /// process past the end of the shorter buffer.
+    @Test func aShorterOutputBufferIsNotOverrun() {
+        let boost = EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)
+        let processor = makeProcessor(filters: [boost])
+        processor.setOutputLayout(.init(tapChannels: 4, destinations: Array(0..<4)))
+        let frames = 8
+        let input = identifiableChannels(channels: 4, frames: frames)
+
+        let output = renderAcrossUnevenLayout(
+            processor, input: input, inputChannels: 4,
+            outputBuffers: [(channels: 2, frames: frames), (channels: 2, frames: frames / 2)])
+
+        #expect(output[0].count == frames * 2)
+        #expect(output[1].count == (frames / 2) * 2, "the short buffer changed length")
+        #expect(output[1].allSatisfy { $0.isFinite }, "the short buffer was written past its end")
+    }
+
+    /// A device may present a buffer with no channels at all. Global channel
+    /// numbering has to step over it, so channel 4 is the head of the *third*
+    /// buffer, not of the empty one.
+    @Test func anEmptyBufferInTheOutputListIsSkipped() {
+        let processor = makeProcessor()
+        processor.setOutputLayout(.init(tapChannels: 8, destinations: Array(0..<8)))
+        let frames = 4
+        let input = identifiableChannels(channels: 8, frames: frames)
+
+        let output = renderAcrossUnevenLayout(
+            processor, input: input, inputChannels: 8,
+            outputBuffers: [
+                (channels: 4, frames: frames),
+                (channels: 0, frames: frames),
+                (channels: 4, frames: frames),
+            ])
+
+        for frame in 0..<frames {
+            for channel in 0..<4 {
+                #expect(
+                    output[0][frame * 4 + channel] == Float((channel + 1) * 100 + frame),
+                    "channel \(channel) misplaced before the empty buffer")
+                #expect(
+                    output[2][frame * 4 + channel] == Float((channel + 5) * 100 + frame),
+                    "channel \(channel + 4) did not step over the empty buffer")
+            }
+        }
+    }
+
 }

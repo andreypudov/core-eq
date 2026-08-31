@@ -157,4 +157,21 @@ struct OutputPlanTests {
         #expect(layout.tapBufferIndex == 3)
     }
 
+    /// `OutputPlan` maps every channel the tap delivers, however many that is.
+    /// The 16 channel ceiling belongs to `EQProcessor`, which allocates delay
+    /// lines against it — so a 64 channel BlackHole is mapped in full here and
+    /// clamped there.
+    ///
+    /// The two disagreeing is deliberate but worth knowing: the diagnostics
+    /// report prints *this* map, so on such a device it names destinations the
+    /// render path will not use.
+    @Test func aTapWiderThanTheProcessorIsStillMappedInFull() {
+        let layout = OutputPlan.layout(
+            for: DeviceDescription(tapChannels: 64, isDeviceBound: true, deviceChannels: 64))
+
+        #expect(layout.tapChannels == 64)
+        #expect(layout.destinations.count == 64)
+        #expect(layout.destinations.last == 63)
+    }
+
 }

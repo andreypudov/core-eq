@@ -338,12 +338,6 @@ final class EQProcessor: @unchecked Sendable {
         return nil
     }
 
-    /// The input buffer carrying the tap's audio.
-    ///
-    /// Chosen by matching the tap's channel count rather than by position. An
-    /// aggregate device is not obliged to put the tap's buffers first in the
-    /// list, and a developer shipping the same kind of tool reported lists where
-    /// they were not.
     /// The buffer the tap arrives in.
     ///
     /// Taken from the layout rather than searched for. The aggregate lists its
