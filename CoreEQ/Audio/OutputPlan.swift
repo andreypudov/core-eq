@@ -90,6 +90,63 @@ enum OutputPlan {
         return pair
     }
 
+    /// One tap, and where on the device its channels belong.
+    struct TapPlan: Equatable {
+        /// Channels this tap delivers — the width of the stream it is bound to.
+        var channels: Int
+        /// Global output channel that this tap's channel 0 feeds.
+        var firstOutputChannel: Int
+
+        init(channels: Int, firstOutputChannel: Int) {
+            self.channels = channels
+            self.firstOutputChannel = firstOutputChannel
+        }
+    }
+
+    /// A tap for every output stream, in the device's own stream order.
+    ///
+    /// A tap binds to exactly one stream and takes that stream's format —
+    /// `CATapDescription` offers no way to bind one to a whole device. A device
+    /// presenting its sixteen channels as eight stereo streams, which is how
+    /// most interfaces present them, therefore needs eight taps; binding to the
+    /// widest single stream captures two channels and abandons fourteen.
+    static func tapPlans(forStreams channelCounts: [Int]) -> [TapPlan] {
+        var plans: [TapPlan] = []
+        var offset = 0
+        for channels in channelCounts where channels > 0 {
+            plans.append(TapPlan(channels: channels, firstOutputChannel: offset))
+            offset += channels
+        }
+        return plans
+    }
+
+    /// The layout for a set of taps, laid out in the aggregate's input list
+    /// after `inputBuffers` buffers belonging to the device itself.
+    ///
+    /// Channels are routed in tap order, each tap's own order preserved, so
+    /// routed channel *i* is not generally tap channel *i* — which is exactly
+    /// why the render path is told both ends.
+    static func layout(forTaps taps: [TapPlan], inputBuffers: Int) -> EQProcessor.OutputLayout {
+        let firstBuffer = max(0, inputBuffers)
+        var destinations: [Int] = []
+        var sourceBuffers: [Int] = []
+        var sourceChannels: [Int] = []
+        for (index, tap) in taps.enumerated() {
+            for channel in 0..<max(0, tap.channels) {
+                destinations.append(tap.firstOutputChannel + channel)
+                sourceBuffers.append(firstBuffer + index)
+                sourceChannels.append(channel)
+            }
+        }
+        return EQProcessor.OutputLayout(
+            tapChannels: destinations.count,
+            destinations: destinations,
+            tapBufferIndex: firstBuffer,
+            sourceBuffers: sourceBuffers,
+            sourceChannels: sourceChannels,
+            primaryTapChannels: taps.first?.channels ?? 0)
+    }
+
     /// Which output stream to bind a device-bound tap to.
     ///
     /// A device can present several output streams, and the tap binds to exactly
@@ -106,5 +163,38 @@ enum OutputPlan {
             bestChannels = channels
         }
         return best
+    }
+}
+
+/// Channel roles, as far as a device is willing to describe them.
+///
+/// Separated from `AudioDevices` for the reason everything else here is: reading
+/// a device needs real hardware, but *ordering* the roles a device names is a
+/// decision, and decisions are where the defects have been.
+enum ChannelRoles {
+    /// A bitmap names which roles are present but not their order; Core Audio
+    /// lays them out in bit order, which is what this reproduces.
+    static func labels(fromBitmap bitmap: AudioChannelBitmap) -> [AudioChannelLabel] {
+        let ordered: [(AudioChannelBitmap, AudioChannelLabel)] = [
+            (.bit_Left, kAudioChannelLabel_Left),
+            (.bit_Right, kAudioChannelLabel_Right),
+            (.bit_Center, kAudioChannelLabel_Center),
+            (.bit_LFEScreen, kAudioChannelLabel_LFEScreen),
+            (.bit_LeftSurround, kAudioChannelLabel_LeftSurround),
+            (.bit_RightSurround, kAudioChannelLabel_RightSurround),
+            (.bit_LeftCenter, kAudioChannelLabel_LeftCenter),
+            (.bit_RightCenter, kAudioChannelLabel_RightCenter),
+            (.bit_CenterSurround, kAudioChannelLabel_CenterSurround),
+            (.bit_LeftSurroundDirect, kAudioChannelLabel_LeftSurroundDirect),
+            (.bit_RightSurroundDirect, kAudioChannelLabel_RightSurroundDirect),
+            (.bit_TopCenterSurround, kAudioChannelLabel_TopCenterSurround),
+            (.bit_VerticalHeightLeft, kAudioChannelLabel_VerticalHeightLeft),
+            (.bit_VerticalHeightCenter, kAudioChannelLabel_VerticalHeightCenter),
+            (.bit_VerticalHeightRight, kAudioChannelLabel_VerticalHeightRight),
+            (.bit_TopBackLeft, kAudioChannelLabel_TopBackLeft),
+            (.bit_TopBackCenter, kAudioChannelLabel_TopBackCenter),
+            (.bit_TopBackRight, kAudioChannelLabel_TopBackRight),
+        ]
+        return ordered.filter { bitmap.contains($0.0) }.map(\.1)
     }
 }

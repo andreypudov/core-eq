@@ -24,6 +24,9 @@ enum DiagnosticsReport {
         /// Channels per output stream.
         var streamChannels: [Int]
         var preferredStereo: StereoPair?
+        /// Zero-based channels the device calls LFE. Empty means it reports no
+        /// layout — not that it has no LFE.
+        var lfeChannels: [Int] = []
     }
 
     /// What the running engine actually settled on, as opposed to what a device
@@ -42,6 +45,14 @@ enum DiagnosticsReport {
         /// Input buffer the tap was read from. Nonzero means the output device
         /// is duplex and contributes input buffers ahead of the tap's.
         var tapBufferIndex: Int = 0
+        /// Tap channels the render path will actually carry, when that is fewer
+        /// than the map names. The map is built from the device; the processor
+        /// has a fixed ceiling. Reporting the map alone would name destinations
+        /// no audio ever reaches — nil when nothing is known to be dropped.
+        var routedChannels: Int?
+        /// Taps the engine created. More than one means the device presents its
+        /// channels as several streams and each needed its own tap.
+        var tapCount: Int = 1
     }
 
     /// How the saved EQ is keyed, which is the fact that settles "my preset did
@@ -97,7 +108,9 @@ enum DiagnosticsReport {
             lines.append(
                 "  tap:             \(engine.tapChannels) channel(s), "
                     + (engine.isDeviceBound
-                        ? "device-bound on stream \(engine.boundStream)"
+                        ? (engine.tapCount > 1
+                            ? "device-bound, one tap on each of \(engine.tapCount) streams"
+                            : "device-bound on stream \(engine.boundStream)")
                         : "stereo mixdown (fallback)"))
             if !engine.isDeviceBound {
                 lines.append(
@@ -105,7 +118,14 @@ enum DiagnosticsReport {
             }
             lines.append("  aggregate:       \(engine.aggregateChannels) output channel(s)")
             lines.append("  tap buffer:      input buffer \(engine.tapBufferIndex)")
-            lines.append("  channel map:     \(describeMap(engine.destinations))")
+            lines.append(
+                "  channel map:     "
+                    + describeMap(engine.destinations, routed: engine.routedChannels))
+            if let routed = engine.routedChannels, engine.destinations.count > routed {
+                lines.append(
+                    "                   NOTE: this device presents more channels than CoreEQ "
+                        + "renders; the rest are silent.")
+            }
         } else {
             lines.append("  not running")
         }
@@ -163,6 +183,12 @@ enum DiagnosticsReport {
             } else {
                 lines.append("    stereo pair:   not reported")
             }
+            lines.append(
+                "    LFE:           "
+                    + (device.lfeChannels.isEmpty
+                        ? "no layout reported"
+                        : "channel(s) \(device.lfeChannels.map(String.init).joined(separator: ", "))")
+            )
             if device.isAggregate {
                 lines.append(
                     "    NOTE: Aggregate or Multi-Output Device. CoreEQ cannot render "
@@ -177,11 +203,17 @@ enum DiagnosticsReport {
     }
 
     /// "tap 0 → 0, tap 1 → 1", or a note when a channel goes nowhere.
-    private static func describeMap(_ destinations: [Int]) -> String {
+    ///
+    /// `routed` is how many of them the render path actually carries. Channels
+    /// past it are named as dropped rather than as destinations, because that is
+    /// what happens to them.
+    private static func describeMap(_ destinations: [Int], routed: Int? = nil) -> String {
         guard !destinations.isEmpty else { return "empty" }
+        let limit = routed ?? destinations.count
         return destinations.enumerated()
             .map { index, destination in
-                destination < 0 ? "tap \(index) → dropped" : "tap \(index) → \(destination)"
+                if index >= limit { return "tap \(index) → dropped (channel limit)" }
+                return destination < 0 ? "tap \(index) → dropped" : "tap \(index) → \(destination)"
             }
             .joined(separator: ", ")
     }

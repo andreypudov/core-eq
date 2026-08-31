@@ -31,10 +31,17 @@ final class EQProcessor: @unchecked Sendable {
     /// pass over the buffer in `processChannel`, so this is a real budget.
     static let maxFilters = 32
     /// Channels the render path can carry. Two was not a budget but an
-    /// assumption — the delay lines were named `z1L`/`z1R`. Sixteen covers
-    /// every layout a Mac presents, including 7.1.4, and costs
-    /// `maxFilters × maxChannels × 2` doubles of delay line, allocated once.
-    static let maxChannels = 16
+    /// assumption — the delay lines were named `z1L`/`z1R`.
+    ///
+    /// Sixteen covered 7.1.4 and every layout a Mac *presents by itself*, but
+    /// not the devices people attach to one: BlackHole ships a 64 channel
+    /// build, and Dante and MADI interfaces are routinely wider than sixteen.
+    /// The cost is `maxFilters × maxChannels × 2` doubles of delay line,
+    /// allocated once — 8 KB at sixteen, 32 KB at sixty-four — and the
+    /// per-sample work is set by the channels actually routed, not by this
+    /// ceiling. Twenty-four kilobytes is not worth losing three quarters of a
+    /// device over.
+    static let maxChannels = 64
 
     private static let smoothingSeconds = 0.05
 
@@ -71,14 +78,46 @@ final class EQProcessor: @unchecked Sendable {
         /// Which buffer of the input list carries the tap. The aggregate lists
         /// its sub-device's input buffers first, so this is nonzero whenever the
         /// output device is duplex.
+        ///
+        /// With several taps this is the *first* of them, and the one the
+        /// fallback search stands in for; `sourceBuffers` is what the render
+        /// path actually reads.
         var tapBufferIndex: Int
+        /// Input buffer each routed channel is read from, in routed order.
+        var sourceBuffers: [Int]
+        /// Channel within that buffer, in routed order.
+        var sourceChannels: [Int]
+        /// Channels the buffer at `tapBufferIndex` should hold. With one tap
+        /// that is the tap's whole width; with several it is the first tap's.
+        /// Used only to recognise the buffer, never to route.
+        var primaryTapChannels: Int
 
-        /// Plain interleaved stereo — what every device was assumed to be
-        /// before the engine started describing them.
+        /// One tap, whose channels are read in order — every device CoreEQ has
+        /// ever seen presents its output as a single stream, and this is that
+        /// case written down.
         init(tapChannels: Int = 2, destinations: [Int] = [0, 1], tapBufferIndex: Int = 0) {
             self.tapChannels = tapChannels
             self.destinations = destinations
             self.tapBufferIndex = tapBufferIndex
+            self.sourceBuffers = [Int](repeating: tapBufferIndex, count: max(0, tapChannels))
+            self.sourceChannels = Array(0..<max(0, tapChannels))
+            self.primaryTapChannels = tapChannels
+        }
+
+        /// Several taps, one per output stream. A tap binds to exactly one
+        /// stream — `CATapDescription` offers no way to bind to a whole device —
+        /// so a device presenting its channels as several streams needs one tap
+        /// each, and each tap's channels have to be told where they belong.
+        init(
+            tapChannels: Int, destinations: [Int], tapBufferIndex: Int,
+            sourceBuffers: [Int], sourceChannels: [Int], primaryTapChannels: Int
+        ) {
+            self.tapChannels = tapChannels
+            self.destinations = destinations
+            self.tapBufferIndex = tapBufferIndex
+            self.sourceBuffers = sourceBuffers
+            self.sourceChannels = sourceChannels
+            self.primaryTapChannels = primaryTapChannels
         }
     }
 
@@ -145,6 +184,8 @@ final class EQProcessor: @unchecked Sendable {
     private var pendingRoutedChannels: Int?
     private var pendingTapBufferIndex: Int?
     private var pendingTapChannelCount: Int?
+    private var pendingSourceBuffers = [Int](repeating: 0, count: EQProcessor.maxChannels)
+    private var pendingSourceChannels = Array(0..<EQProcessor.maxChannels)
 
     // Render-thread-only state.
     private var filters = [FilterState](repeating: FilterState(), count: EQProcessor.maxFilters)
@@ -156,6 +197,8 @@ final class EQProcessor: @unchecked Sendable {
     private var stagedFilters = [FilterParameters](
         repeating: FilterParameters(), count: EQProcessor.maxFilters)
     private var stagedDestinations = [Int](repeating: -1, count: EQProcessor.maxChannels)
+    private var stagedSourceBuffers = [Int](repeating: 0, count: EQProcessor.maxChannels)
+    private var stagedSourceChannels = Array(0..<EQProcessor.maxChannels)
     private var sampleRate = 44_100.0
     private var bypassed = false
     /// Delay lines for every filter and channel, flat and allocated once:
@@ -175,6 +218,10 @@ final class EQProcessor: @unchecked Sendable {
     /// Channels the tap delivers, *unclamped* — `routedChannels` is capped at
     /// `maxChannels`, and recognising the tap needs its real width.
     private var tapChannelCount = 2
+    /// Input buffer each routed channel is read from, render-thread owned.
+    private var sourceBuffers = [Int](repeating: 0, count: EQProcessor.maxChannels)
+    /// Channel within that buffer, render-thread owned.
+    private var sourceChannels = Array(0..<EQProcessor.maxChannels)
     // Output trim, smoothed like the band gains so dragging the preamp slider
     // is a fade rather than a step.
     private var targetPreampLinear = 1.0
@@ -214,10 +261,13 @@ final class EQProcessor: @unchecked Sendable {
         lock.lock()
         for channel in 0..<count {
             pendingDestinations[channel] = newLayout.destinations[safe: channel] ?? -1
+            pendingSourceBuffers[channel] =
+                newLayout.sourceBuffers[safe: channel] ?? newLayout.tapBufferIndex
+            pendingSourceChannels[channel] = newLayout.sourceChannels[safe: channel] ?? channel
         }
         pendingRoutedChannels = count
         pendingTapBufferIndex = max(0, newLayout.tapBufferIndex)
-        pendingTapChannelCount = max(0, newLayout.tapChannels)
+        pendingTapChannelCount = max(0, newLayout.primaryTapChannels)
         lock.unlock()
     }
 
@@ -256,39 +306,42 @@ final class EQProcessor: @unchecked Sendable {
             memset(data, 0, Int(outABL[i].mDataByteSize))
         }
 
-        if let tap = tapBuffer(in: inABL),
-            let tapData = tap.mData?.assumingMemoryBound(to: Float.self),
-            tap.mNumberChannels > 0
-        {
-            let channels = Int(tap.mNumberChannels)
-            let frames = Int(tap.mDataByteSize) / (MemoryLayout<Float>.size * channels)
-            let placed = place(tapData, channels: channels, frames: frames, into: outABL)
+        // Where the primary tap actually turned up, which may not be where it
+        // was described. Resolved once per block rather than per channel.
+        let substitute = substituteTapBuffer(in: inABL)
+        let placed = place(inABL, into: outABL, substitute: substitute)
 
-            if !bypassed, placed > 0 {
-                advanceSmoothing(frames: placed)
-                equalize(outABL, channels: channels, frames: placed)
-            }
+        if !bypassed, placed > 0 {
+            advanceSmoothing(frames: placed)
+            equalize(outABL, frames: placed)
         }
 
         feedSpectrum(outABL)
     }
 
-    /// Copies the tap's channels to the output channels the layout names, and
-    /// returns how many frames were actually written.
+    /// Copies each routed channel from the input channel the layout names to the
+    /// output channel it names, and returns how many frames were written.
+    ///
+    /// Source and destination are both explicit. With one tap every source is
+    /// the same buffer and the channels are read in order; with one tap per
+    /// output stream they are not, and nothing here needs to know which case it
+    /// is in.
     private func place(
-        _ tapData: UnsafePointer<Float>, channels: Int, frames: Int,
-        into outABL: UnsafeMutableAudioBufferListPointer
+        _ inABL: UnsafeMutableAudioBufferListPointer,
+        into outABL: UnsafeMutableAudioBufferListPointer,
+        substitute: Int?
     ) -> Int {
         var written = 0
-        for channel in 0..<min(channels, routedChannels) {
-            guard let target = destination(of: destinations[channel], in: outABL)
+        for channel in 0..<routedChannels {
+            guard let source = origin(of: channel, in: inABL, substitute: substitute),
+                let target = destination(of: destinations[channel], in: outABL)
             else { continue }
-            let count = min(frames, target.frames)
-            var source = tapData + channel
+            let count = min(source.frames, target.frames)
+            var read = source.pointer
             var sink = target.pointer
             for _ in 0..<count {
-                sink.pointee = source.pointee
-                source += channels
+                sink.pointee = read.pointee
+                read += source.stride
                 sink += target.stride
             }
             written = max(written, count)
@@ -296,12 +349,33 @@ final class EQProcessor: @unchecked Sendable {
         return written
     }
 
+    /// Locates one routed channel in the input list: which buffer it is in,
+    /// where it starts, and how far apart its samples are. The mirror of
+    /// `destination`, and nil on the same terms — a channel the input does not
+    /// have is left silent rather than read from nowhere.
+    private func origin(
+        of channel: Int, in inABL: UnsafeMutableAudioBufferListPointer, substitute: Int?
+    ) -> (pointer: UnsafePointer<Float>, stride: Int, frames: Int)? {
+        var buffer = sourceBuffers[channel]
+        // The described buffer was not the tap, so the one the search found
+        // stands in for it — the old behaviour, kept for the taps it applies to.
+        if let substitute, buffer == tapBufferIndex { buffer = substitute }
+        guard buffer >= 0, buffer < inABL.count,
+            let data = inABL[buffer].mData?.assumingMemoryBound(to: Float.self)
+        else { return nil }
+        let channels = Int(inABL[buffer].mNumberChannels)
+        let source = sourceChannels[channel]
+        guard channels > 0, source >= 0, source < channels else { return nil }
+        let frames = Int(inABL[buffer].mDataByteSize) / (MemoryLayout<Float>.size * channels)
+        return (UnsafePointer(data + source), channels, frames)
+    }
+
     /// Runs the chain and the output trim over the channels the tap was placed
     /// into. The rest of the device's channels are silence and stay that way.
     private func equalize(
-        _ outABL: UnsafeMutableAudioBufferListPointer, channels: Int, frames: Int
+        _ outABL: UnsafeMutableAudioBufferListPointer, frames: Int
     ) {
-        for channel in 0..<min(channels, routedChannels) {
+        for channel in 0..<routedChannels {
             guard let target = destination(of: destinations[channel], in: outABL)
             else { continue }
             let count = min(frames, target.frames)
@@ -338,10 +412,11 @@ final class EQProcessor: @unchecked Sendable {
         return nil
     }
 
-    /// The buffer the tap arrives in.
+    /// The buffer to read instead of the one the layout named, or nil when the
+    /// named one is right.
     ///
-    /// Taken from the layout rather than searched for. The aggregate lists its
-    /// sub-device's input buffers before the tap's, so the position is known on
+    /// Position is taken from the layout rather than searched for: the aggregate
+    /// lists its sub-device's input buffers before the taps', so it is known on
     /// the main thread, where device properties may be read — see
     /// `OutputPlan.tapBufferIndex`.
     ///
@@ -351,23 +426,26 @@ final class EQProcessor: @unchecked Sendable {
     /// sixteen in, sixteen out — CoreEQ equalized the device's own silent input
     /// and wrote silence to the speakers, while the tap went on muting every
     /// other process. The engine reported `running` throughout.
-    private func tapBuffer(in inABL: UnsafeMutableAudioBufferListPointer) -> AudioBuffer? {
-        if tapBufferIndex < inABL.count, inABL[tapBufferIndex].mData != nil,
+    ///
+    /// The search survives as the fallback. A description that does not fit the
+    /// device is a reason to look, not a reason to drop every block.
+    private func substituteTapBuffer(in inABL: UnsafeMutableAudioBufferListPointer) -> Int? {
+        if tapBufferIndex >= 0, tapBufferIndex < inABL.count,
+            inABL[tapBufferIndex].mData != nil,
             inABL[tapBufferIndex].mNumberChannels == UInt32(tapChannelCount)
         {
-            return inABL[tapBufferIndex]
+            return nil
         }
-        // Either the named buffer is not there or it is not the width the tap
-        // was described as, so the description no longer fits the device.
-        // Prefer a buffer matching the tap's width, then anything at all:
-        // keeping audio flowing on a device we described wrongly beats dropping
-        // every block.
+        for i in 0..<inABL.count
+        where inABL[i].mNumberChannels == UInt32(tapChannelCount) && inABL[i].mData != nil {
+            return i
+        }
         for i in 0..<inABL.count
         where inABL[i].mNumberChannels == UInt32(routedChannels) && inABL[i].mData != nil {
-            return inABL[i]
+            return i
         }
         for i in 0..<inABL.count where inABL[i].mData != nil {
-            return inABL[i]
+            return i
         }
         return nil
     }
@@ -434,6 +512,8 @@ final class EQProcessor: @unchecked Sendable {
         if let newRouted {
             for channel in 0..<newRouted {
                 stagedDestinations[channel] = pendingDestinations[channel]
+                stagedSourceBuffers[channel] = pendingSourceBuffers[channel]
+                stagedSourceChannels[channel] = pendingSourceChannels[channel]
             }
         }
         pendingFilterCount = nil
@@ -456,7 +536,10 @@ final class EQProcessor: @unchecked Sendable {
 
         if let newRouted {
             var changed = newRouted != routedChannels
-            for channel in 0..<newRouted where stagedDestinations[channel] != destinations[channel]
+            for channel in 0..<newRouted
+            where stagedDestinations[channel] != destinations[channel]
+                || stagedSourceBuffers[channel] != sourceBuffers[channel]
+                || stagedSourceChannels[channel] != sourceChannels[channel]
             {
                 changed = true
             }
@@ -464,6 +547,8 @@ final class EQProcessor: @unchecked Sendable {
                 routedChannels = newRouted
                 for channel in 0..<newRouted {
                     destinations[channel] = stagedDestinations[channel]
+                    sourceBuffers[channel] = stagedSourceBuffers[channel]
+                    sourceChannels[channel] = stagedSourceChannels[channel]
                 }
                 // Different channels means the delay lines are describing audio
                 // that is no longer there.

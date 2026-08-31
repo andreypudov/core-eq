@@ -703,6 +703,99 @@ struct EQProcessorTests {
         }
     }
 
+    // MARK: - Every channel, on and off
+
+    /// Bypass on a wide device.
+    ///
+    /// `bypassIsBitExactPassthrough` covers one channel, which is the case that
+    /// was never in doubt. Switching the equalizer off while playing to a
+    /// sixteen channel device has to hand every one of those channels back
+    /// untouched — the copy runs before the bypass check, so a mistake here is
+    /// silence or scrambling rather than a wrong gain.
+    @Test func bypassIsBitExactOnEveryChannel() {
+        let processor = makeProcessor(
+            filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)],
+            preamp: -6
+        )
+        processor.setOutputLayout(.init(tapChannels: 16, destinations: Array(0..<16)))
+        processor.setBypassed(true)
+
+        let frames = 64
+        let input = identifiableChannels(channels: 16, frames: frames)
+
+        var output: [Float] = []
+        for _ in 0..<4 {
+            output =
+                renderAcrossLayout(
+                    processor, input: input, inputChannels: 16, outputBuffers: [16], frames: frames)[
+                    0]
+        }
+
+        #expect(output == input, "bypass altered a wide device's samples")
+    }
+
+    /// The output trim is the last stage of the chain, so it has to reach every
+    /// channel the audio was placed in — not just the pair the spectrum reads.
+    @Test func thePreampScalesEveryChannel() {
+        let processor = makeProcessor(preamp: -6)
+        processor.setOutputLayout(.init(tapChannels: 8, destinations: Array(0..<8)))
+
+        let frames = 512
+        let tone = sine(1_000, frames: frames)
+        let input = tone.flatMap { sample in [Float](repeating: sample, count: 8) }
+
+        var output: [Float] = []
+        for _ in 0..<24 {
+            output =
+                renderAcrossLayout(
+                    processor, input: input, inputChannels: 8, outputBuffers: [8], frames: frames)[
+                    0]
+        }
+
+        for channel in 0..<8 {
+            let samples = stride(from: channel, to: frames * 8, by: 8).map { output[$0] }
+            let gain = 20 * log10(rms(samples) / rms(tone))
+            #expect(
+                abs(gain + 6) < 0.3,
+                "channel \(channel) was trimmed by \(gain) dB rather than -6")
+        }
+    }
+
+    /// Taps are separate buffers and Core Audio does not promise they carry the
+    /// same number of frames. A short one must not shorten or scramble the
+    /// others, and must not be read past its end.
+    @Test func aShortTapDoesNotDisturbTheOthers() {
+        let processor = makeProcessor()
+        processor.setOutputLayout(
+            .init(
+                tapChannels: 4, destinations: [0, 1, 2, 3], tapBufferIndex: 0,
+                sourceBuffers: [0, 0, 1, 1], sourceChannels: [0, 1, 0, 1],
+                primaryTapChannels: 2))
+
+        let frames = 8
+        let full = stereoRamp(frames: frames)
+        let short = stereoRamp(frames: frames / 2)
+
+        let output = renderAcrossInputBuffers(
+            processor, inputBuffers: [full, short], inputChannels: 2,
+            outputChannels: 4, frames: frames)
+
+        // The full tap is intact across every frame.
+        for frame in 0..<frames {
+            #expect(output[frame * 4] == Float(frame + 1), "the full tap was disturbed")
+            #expect(output[frame * 4 + 1] == -Float(frame + 1), "the full tap was disturbed")
+        }
+        // The short tap contributed what it had, and silence after it.
+        for frame in 0..<(frames / 2) {
+            #expect(output[frame * 4 + 2] == Float(frame + 1), "the short tap was not placed")
+        }
+        for frame in (frames / 2)..<frames {
+            #expect(
+                output[frame * 4 + 2] == 0 && output[frame * 4 + 3] == 0,
+                "the short tap was read past its end")
+        }
+    }
+
     // MARK: - The spectrum tap
 
     /// The analyzer draws what reaches the speakers, so the tap has to carry
@@ -1087,6 +1180,88 @@ struct EQProcessorTests {
                     output[2][frame * 4 + channel] == Float((channel + 5) * 100 + frame),
                     "channel \(channel + 4) did not step over the empty buffer")
             }
+        }
+    }
+
+    // MARK: - Several taps, one per output stream
+
+    /// The multi-stream device, end to end at the sample level. Two taps of two
+    /// channels each arrive in two separate input buffers, and their four
+    /// channels have to reassemble into the device's channels 0–3 in the right
+    /// order. Reading either tap alone — which is what binding to the widest
+    /// stream did — loses half the audio.
+    @Test func severalTapsReassembleIntoOneDevice() {
+        let processor = makeProcessor()
+        let frames = 8
+        processor.setOutputLayout(
+            OutputPlan.layout(
+                forTaps: OutputPlan.tapPlans(forStreams: [2, 2]), inputBuffers: 0))
+
+        // Tap 0 carries device channels 0 and 1, tap 1 carries 2 and 3.
+        let first = (0..<frames).flatMap { [Float(100 + $0), Float(200 + $0)] }
+        let second = (0..<frames).flatMap { [Float(300 + $0), Float(400 + $0)] }
+
+        let output = renderAcrossInputBuffers(
+            processor, inputBuffers: [first, second],
+            inputChannels: 2, outputChannels: 4, frames: frames)
+
+        for frame in 0..<frames {
+            #expect(output[frame * 4] == Float(100 + frame), "tap 0 channel 0 misplaced")
+            #expect(output[frame * 4 + 1] == Float(200 + frame), "tap 0 channel 1 misplaced")
+            #expect(output[frame * 4 + 2] == Float(300 + frame), "tap 1 channel 0 misplaced")
+            #expect(output[frame * 4 + 3] == Float(400 + frame), "tap 1 channel 1 misplaced")
+        }
+    }
+
+    /// The taps sit after the device's own input buffers, so a duplex
+    /// multi-stream device offsets all of them — the two failure modes this file
+    /// has found, together.
+    @Test func severalTapsAreFoundPastTheDevicesOwnInput() {
+        let processor = makeProcessor()
+        let frames = 4
+        processor.setOutputLayout(
+            OutputPlan.layout(
+                forTaps: OutputPlan.tapPlans(forStreams: [2, 2]), inputBuffers: 1))
+
+        let deviceInput = [Float](repeating: 0, count: frames * 2)
+        let first = (0..<frames).flatMap { [Float(100 + $0), Float(200 + $0)] }
+        let second = (0..<frames).flatMap { [Float(300 + $0), Float(400 + $0)] }
+
+        let output = renderAcrossInputBuffers(
+            processor, inputBuffers: [deviceInput, first, second],
+            inputChannels: 2, outputChannels: 4, frames: frames)
+
+        for frame in 0..<frames {
+            #expect(output[frame * 4] == Float(100 + frame), "tap 0 was read from the wrong buffer")
+            #expect(
+                output[frame * 4 + 2] == Float(300 + frame), "tap 1 was read from the wrong buffer")
+        }
+    }
+
+    /// Every tap's channels get the chain, not just the first tap's. A device
+    /// whose rear pair came through a second tap unequalized would be worse than
+    /// one that dropped it, because it would sound almost right.
+    @Test func theChainReachesEveryTap() {
+        let boost = EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)
+        let processor = makeProcessor(filters: [boost])
+        let frames = 512
+        processor.setOutputLayout(
+            OutputPlan.layout(
+                forTaps: OutputPlan.tapPlans(forStreams: [2, 2]), inputBuffers: 0))
+
+        let tone = sine(1_000, frames: frames)
+        let pair = tone.flatMap { [$0, $0] }
+
+        var output: [Float] = []
+        for _ in 0..<12 {
+            output = renderAcrossInputBuffers(
+                processor, inputBuffers: [pair, pair],
+                inputChannels: 2, outputChannels: 4, frames: frames)
+        }
+
+        for channel in 0..<4 {
+            let samples = stride(from: channel, to: frames * 4, by: 4).map { output[$0] }
+            #expect(rms(samples) > rms(tone) * 1.5, "channel \(channel) was left unequalized")
         }
     }
 

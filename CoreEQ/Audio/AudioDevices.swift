@@ -1,3 +1,4 @@
+import AudioToolbox
 import CoreAudio
 import Foundation
 import os
@@ -53,7 +54,8 @@ enum AudioDevices {
                     isDefaultOutput: id == defaultID,
                     bufferChannels: outputBufferChannels(of: id),
                     streamChannels: outputStreamChannelCounts(of: id),
-                    preferredStereo: preferredStereoPair(of: id)
+                    preferredStereo: preferredStereoPair(of: id),
+                    lfeChannels: lfeChannels(of: id)
                 )
             }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -223,6 +225,92 @@ enum AudioDevices {
     }
 
     /// Total output channels the device presents across all its buffers.
+    /// Zero-based channels the device says carry LFE, or an empty array when it
+    /// does not describe its layout.
+    ///
+    /// Read from `kAudioDevicePropertyPreferredChannelLayout`, which a device is
+    /// free not to answer — an HDMI display tested here does not. Absence is
+    /// reported as "no roles known", never guessed at from the channel count: a
+    /// 5.1 layout's LFE is channel 3, a 7.1.4 layout's is also 3, and a device
+    /// with six channels and no layout might be neither.
+    static func lfeChannels(of deviceID: AudioDeviceID) -> [Int] {
+        labels(of: deviceID).enumerated()
+            .filter {
+                $0.element == kAudioChannelLabel_LFEScreen
+                    || $0.element == kAudioChannelLabel_LFE2
+            }
+            .map(\.offset)
+    }
+
+    /// The device's channel labels, in channel order. Empty when it reports no
+    /// layout, or reports one in a form that carries no per-channel roles.
+    static func labels(of deviceID: AudioDeviceID) -> [AudioChannelLabel] {
+        var layoutAddress = address(
+            kAudioDevicePropertyPreferredChannelLayout, scope: kAudioObjectPropertyScopeOutput)
+        var dataSize: UInt32 = 0
+        guard
+            AudioObjectGetPropertyDataSize(deviceID, &layoutAddress, 0, nil, &dataSize) == noErr,
+            dataSize >= UInt32(MemoryLayout<AudioChannelLayout>.size)
+        else { return [] }
+
+        let raw = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(dataSize), alignment: MemoryLayout<AudioChannelLayout>.alignment)
+        defer { raw.deallocate() }
+        guard
+            AudioObjectGetPropertyData(deviceID, &layoutAddress, 0, nil, &dataSize, raw) == noErr
+        else { return [] }
+
+        let layout = raw.assumingMemoryBound(to: AudioChannelLayout.self)
+        let tag = layout.pointee.mChannelLayoutTag
+        if tag == kAudioChannelLayoutTag_UseChannelDescriptions {
+            let count = Int(layout.pointee.mNumberChannelDescriptions)
+            guard count > 0 else { return [] }
+            let descriptions = withUnsafeMutablePointer(
+                to: &layout.pointee.mChannelDescriptions
+            ) {
+                UnsafeBufferPointer(
+                    start: UnsafeMutableRawPointer($0).assumingMemoryBound(
+                        to: AudioChannelDescription.self), count: count)
+            }
+            return descriptions.map(\.mChannelLabel)
+        }
+        if tag == kAudioChannelLayoutTag_UseChannelBitmap {
+            return ChannelRoles.labels(fromBitmap: layout.pointee.mChannelBitmap)
+        }
+        return labels(forTag: tag)
+    }
+
+    /// Expands a layout tag — "5.1", "7.1.4" — into per-channel labels, which is
+    /// the only way to learn which channel a tag calls LFE.
+    private static func labels(forTag tag: AudioChannelLayoutTag) -> [AudioChannelLabel] {
+        var tag = tag
+        var size: UInt32 = 0
+        guard
+            AudioFormatGetPropertyInfo(
+                kAudioFormatProperty_ChannelLayoutForTag,
+                UInt32(MemoryLayout<AudioChannelLayoutTag>.size), &tag, &size) == noErr,
+            size >= UInt32(MemoryLayout<AudioChannelLayout>.size)
+        else { return [] }
+
+        let raw = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(size), alignment: MemoryLayout<AudioChannelLayout>.alignment)
+        defer { raw.deallocate() }
+        guard
+            AudioFormatGetProperty(
+                kAudioFormatProperty_ChannelLayoutForTag,
+                UInt32(MemoryLayout<AudioChannelLayoutTag>.size), &tag, &size, raw) == noErr
+        else { return [] }
+
+        let layout = raw.assumingMemoryBound(to: AudioChannelLayout.self)
+        let count = Int(layout.pointee.mNumberChannelDescriptions)
+        guard count > 0 else { return [] }
+        return withUnsafeMutablePointer(to: &layout.pointee.mChannelDescriptions) {
+            UnsafeBufferPointer(
+                start: UnsafeMutableRawPointer($0).assumingMemoryBound(
+                    to: AudioChannelDescription.self), count: count)
+        }.map(\.mChannelLabel)
+    }
+
     static func outputChannelCount(of deviceID: AudioDeviceID) -> Int {
         outputBufferChannels(of: deviceID).reduce(0, +)
     }

@@ -103,7 +103,7 @@ final class AudioEngine: ObservableObject {
     private let settings: SettingsStore
     private let logger = Logger(subsystem: "com.andreypudov.coreeq", category: "AudioEngine")
 
-    private var tapID = AudioObjectID(kAudioObjectUnknown)
+    private var tapIDs: [AudioObjectID] = []
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var ioProcID: AudioDeviceIOProcID?
 
@@ -221,8 +221,9 @@ final class AudioEngine: ObservableObject {
         if let selfObject = try? processObjectID(for: getpid()) {
             excluded.append(selfObject)
         }
-        let tap = try makeTap(excluding: excluded, outputUID: outputUID, outputID: outputID)
-        tapID = tap.id
+        let taps = try makeTaps(excluding: excluded, outputUID: outputUID, outputID: outputID)
+        tapIDs = taps.map(\.id)
+        let tap = taps[0]
 
         let description: [String: Any] = [
             kAudioAggregateDeviceNameKey: "CoreEQ Aggregate",
@@ -235,12 +236,14 @@ final class AudioEngine: ObservableObject {
             kAudioAggregateDeviceSubDeviceListKey: [
                 [kAudioSubDeviceUIDKey: outputUID]
             ],
-            kAudioAggregateDeviceTapListKey: [
+            // One entry per tap. A device presenting several output streams
+            // needs one tap each, and the aggregate carries them all.
+            kAudioAggregateDeviceTapListKey: taps.map { tap in
                 [
                     kAudioSubTapUIDKey: tap.uuid.uuidString,
                     kAudioSubTapDriftCompensationKey: true,
                 ]
-            ],
+            },
         ]
         var newAggregateID = AudioObjectID(kAudioObjectUnknown)
         try check(
@@ -262,13 +265,23 @@ final class AudioEngine: ObservableObject {
 
         // Tell the processor what this device actually looks like, so the render
         // thread never has to guess.
-        let layout = OutputPlan.layout(
-            for: DeviceDescription(
-                tapChannels: tap.channels,
-                isDeviceBound: tap.isDeviceBound,
-                deviceChannels: AudioDevices.outputChannelCount(of: outputID),
-                preferredStereo: AudioDevices.preferredStereoPair(of: outputID),
-                inputBuffers: AudioDevices.inputBufferChannels(of: outputID).count))
+        let inputBuffers = AudioDevices.inputBufferChannels(of: outputID).count
+        let layout: EQProcessor.OutputLayout
+        if taps.count > 1 {
+            layout = OutputPlan.layout(
+                forTaps: taps.map {
+                    OutputPlan.TapPlan(channels: $0.channels, firstOutputChannel: $0.firstChannel)
+                },
+                inputBuffers: inputBuffers)
+        } else {
+            layout = OutputPlan.layout(
+                for: DeviceDescription(
+                    tapChannels: tap.channels,
+                    isDeviceBound: tap.isDeviceBound,
+                    deviceChannels: AudioDevices.outputChannelCount(of: outputID),
+                    preferredStereo: AudioDevices.preferredStereoPair(of: outputID),
+                    inputBuffers: inputBuffers))
+        }
         processor.setOutputLayout(layout)
 
         let processor = self.processor
@@ -290,12 +303,14 @@ final class AudioEngine: ObservableObject {
             status: "running",
             deviceName: outputName,
             sampleRate: rate,
-            tapChannels: tap.channels,
+            tapChannels: layout.tapChannels,
             isDeviceBound: tap.isDeviceBound,
             boundStream: tap.stream,
             destinations: layout.destinations,
             aggregateChannels: AudioDevices.outputChannelCount(of: aggregateID),
-            tapBufferIndex: layout.tapBufferIndex
+            tapBufferIndex: layout.tapBufferIndex,
+            routedChannels: min(layout.tapChannels, EQProcessor.maxChannels),
+            tapCount: taps.count
         )
 
         status = .running(deviceName: outputName)
@@ -347,10 +362,10 @@ final class AudioEngine: ObservableObject {
             aggregateID = AudioObjectID(kAudioObjectUnknown)
         }
 
-        if tapID != kAudioObjectUnknown {
-            AudioHardwareDestroyProcessTap(tapID)
-            tapID = AudioObjectID(kAudioObjectUnknown)
+        for tap in tapIDs where tap != kAudioObjectUnknown {
+            AudioHardwareDestroyProcessTap(tap)
         }
+        tapIDs = []
     }
 
     // MARK: - Change handling
@@ -513,6 +528,18 @@ final class AudioEngine: ObservableObject {
         }
     }
 
+    /// A tap whose samples are not the Float32 the render path assumes.
+    ///
+    /// Its own type so the device-bound attempt can fall back to the stereo
+    /// global tap on it, the same way it falls back on a tap that could not be
+    /// created at all.
+    private struct UnrenderableTapFormat: Error, LocalizedError {
+        var errorDescription: String? {
+            "The audio tap did not deliver 32-bit float samples, which is the "
+                + "only format CoreEQ renders."
+        }
+    }
+
     private struct CoreAudioError: Error, LocalizedError {
         let status: OSStatus
         let operation: String
@@ -588,6 +615,9 @@ final class AudioEngine: ObservableObject {
         /// Whether this is the device- and stream-bound tap, whose format
         /// matches the device's, rather than the stereo mixdown.
         let isDeviceBound: Bool
+        /// Global output channel this tap's channel 0 feeds. Zero for a single
+        /// tap; the running total of earlier streams when there are several.
+        var firstChannel: Int = 0
     }
 
     /// Creates the tap, preferring the one that does not mix the audio down.
@@ -603,27 +633,64 @@ final class AudioEngine: ObservableObject {
     /// newer ground and a per-device failure mode CoreEQ has never had. So it is
     /// attempted and not required: a device it cannot serve degrades to the
     /// stereo behaviour that already worked rather than to no audio at all.
-    private func makeTap(
+    private func makeTaps(
         excluding excluded: [AudioObjectID], outputUID: String, outputID: AudioDeviceID
-    ) throws -> Tap {
+    ) throws -> [Tap] {
         let numbers = excluded.map(NSNumber.init(value:))
-        // A device can present several output streams and the tap binds to one,
-        // so bind it to the widest rather than to whichever happens to be first.
-        let stream = OutputPlan.widestStream(
-            of: AudioDevices.outputStreamChannelCounts(of: outputID))
+        let streams = AudioDevices.outputStreamChannelCounts(of: outputID)
+
+        // A tap binds to one stream and takes that stream's format, so a device
+        // presenting its channels as several streams needs one tap each. Binding
+        // to the widest alone captured that stream and abandoned the rest, which
+        // on an interface presenting eight stereo streams is fourteen of sixteen
+        // channels.
+        if streams.count > 1, streams.allSatisfy({ $0 > 0 }) {
+            var taps: [Tap] = []
+            var offset = 0
+            for (index, channels) in streams.enumerated() {
+                guard
+                    let tap = try? makeTap(
+                        CATapDescription(
+                            __excludingProcesses: numbers, andDeviceUID: outputUID,
+                            withStream: index),
+                        isDeviceBound: true, stream: index)
+                else { break }
+                taps.append(
+                    Tap(
+                        id: tap.id, uuid: tap.uuid, channels: tap.channels, stream: tap.stream,
+                        isDeviceBound: true, firstChannel: offset))
+                offset += channels
+            }
+            if taps.count == streams.count {
+                logger.info(
+                    """
+                    Device-bound taps: \(taps.count, privacy: .public) streams, \
+                    \(offset, privacy: .public) channels
+                    """)
+                return taps
+            }
+            // Partial success is not a usable device: the streams that did tap
+            // would be muted and replaced while the rest played on untouched.
+            for tap in taps { AudioHardwareDestroyProcessTap(tap.id) }
+            logger.info("Per-stream taps incomplete; falling back")
+        }
+
+        let stream = OutputPlan.widestStream(of: streams)
         if let tap = try? makeTap(
             CATapDescription(
                 __excludingProcesses: numbers, andDeviceUID: outputUID, withStream: stream),
             isDeviceBound: true, stream: stream)
         {
             logger.info("Device-bound tap: \(tap.channels, privacy: .public) channels")
-            return tap
+            return [tap]
         }
 
         logger.info("Device-bound tap unavailable; using the stereo global tap")
-        return try makeTap(
-            CATapDescription(stereoGlobalTapButExcludeProcesses: excluded),
-            isDeviceBound: false, stream: -1)
+        return [
+            try makeTap(
+                CATapDescription(stereoGlobalTapButExcludeProcesses: excluded),
+                isDeviceBound: false, stream: -1)
+        ]
     }
 
     private func makeTap(
@@ -637,23 +704,39 @@ final class AudioEngine: ObservableObject {
         let status = AudioHardwareCreateProcessTap(description, &id)
         guard status == noErr else { throw TapUnavailable(status: status) }
         tapAccess = .granted
+        let format = tapFormat(of: id)
+        // A tap the render path cannot read is worse than no tap: it would mute
+        // every other process and play the reinterpreted bytes. Destroy it and
+        // let the caller fall back.
+        guard format.isRenderable else {
+            AudioHardwareDestroyProcessTap(id)
+            throw UnrenderableTapFormat()
+        }
         return Tap(
-            id: id, uuid: description.uuid, channels: tapChannelCount(of: id),
+            id: id, uuid: description.uuid, channels: format.channels,
             stream: stream, isDeviceBound: isDeviceBound)
     }
 
-    /// Channels the tap will deliver, read from the tap's own format rather than
+    /// What the tap will deliver, read from the tap's own format rather than
     /// assumed from what we asked for.
-    private func tapChannelCount(of tap: AudioObjectID) -> Int {
+    ///
+    /// The format matters as much as the channel count. `EQProcessor.render`
+    /// binds the tap's bytes to `Float` and does arithmetic on them, so a tap
+    /// carrying anything else would not fail — it would reinterpret the
+    /// samples and render noise. A device-bound tap takes *the stream's*
+    /// format, which is the device's to choose, so this is checked rather than
+    /// trusted.
+    private func tapFormat(of tap: AudioObjectID) -> (channels: Int, isRenderable: Bool) {
         var addr = propertyAddress(kAudioTapPropertyFormat)
         var format = AudioStreamBasicDescription()
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         guard AudioObjectGetPropertyData(tap, &addr, 0, nil, &size, &format) == noErr,
             format.mChannelsPerFrame > 0
         else {
-            return EQProcessor.OutputLayout().tapChannels
+            return (EQProcessor.OutputLayout().tapChannels, false)
         }
-        return Int(format.mChannelsPerFrame)
+        let isFloat = format.mFormatFlags & kAudioFormatFlagIsFloat != 0
+        return (Int(format.mChannelsPerFrame), isFloat && format.mBitsPerChannel == 32)
     }
 
     private func nominalSampleRate(of deviceID: AudioDeviceID) throws -> Double {

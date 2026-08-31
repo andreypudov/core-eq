@@ -1,3 +1,4 @@
+import CoreAudio
 import Testing
 
 /// Where each tap channel goes.
@@ -172,6 +173,104 @@ struct OutputPlanTests {
         #expect(layout.tapChannels == 64)
         #expect(layout.destinations.count == 64)
         #expect(layout.destinations.last == 63)
+    }
+
+    // MARK: - Devices that present several output streams
+
+    /// A tap binds to one stream, so a device presenting eight stereo streams
+    /// needs eight taps. Each one's channel 0 belongs at its own offset.
+    @Test func everyStreamGetsATapAtItsOwnOffset() {
+        let plans = OutputPlan.tapPlans(forStreams: [2, 2, 2, 2])
+
+        #expect(plans.count == 4)
+        #expect(plans.map(\.firstOutputChannel) == [0, 2, 4, 6])
+        #expect(plans.map(\.channels) == [2, 2, 2, 2])
+    }
+
+    /// Streams need not be the same width.
+    @Test func unevenStreamsAccumulateCorrectly() {
+        let plans = OutputPlan.tapPlans(forStreams: [8, 2, 4])
+
+        #expect(plans.map(\.firstOutputChannel) == [0, 8, 10])
+    }
+
+    /// A stream with no channels contributes no tap and no offset.
+    @Test func anEmptyStreamIsSkipped() {
+        let plans = OutputPlan.tapPlans(forStreams: [2, 0, 2])
+
+        #expect(plans.count == 2)
+        #expect(plans.map(\.firstOutputChannel) == [0, 2])
+    }
+
+    /// The routed order runs tap by tap, each tap's own channels in order, so
+    /// routed channel 3 is the second channel of the second tap — not the
+    /// fourth channel of anything.
+    @Test func severalTapsAreRoutedTapByTap() {
+        let layout = OutputPlan.layout(
+            forTaps: OutputPlan.tapPlans(forStreams: [2, 2, 2]), inputBuffers: 0)
+
+        #expect(layout.tapChannels == 6)
+        #expect(layout.destinations == [0, 1, 2, 3, 4, 5])
+        #expect(layout.sourceBuffers == [0, 0, 1, 1, 2, 2])
+        #expect(layout.sourceChannels == [0, 1, 0, 1, 0, 1])
+        #expect(layout.primaryTapChannels == 2)
+    }
+
+    /// The taps sit after whatever input buffers the device contributes, so a
+    /// duplex multi-stream device offsets every one of them.
+    @Test func severalTapsSitAfterTheDevicesOwnInputBuffers() {
+        let layout = OutputPlan.layout(
+            forTaps: OutputPlan.tapPlans(forStreams: [4, 4]), inputBuffers: 2)
+
+        #expect(layout.tapBufferIndex == 2)
+        #expect(layout.sourceBuffers == [2, 2, 2, 2, 3, 3, 3, 3])
+        #expect(layout.destinations == [0, 1, 2, 3, 4, 5, 6, 7])
+    }
+
+    /// A single stream through the multi-tap path must come out identical to the
+    /// single-tap path, because that is the case every tested device is in.
+    @Test func oneStreamThroughTheTapPathIsTheOrdinaryLayout() {
+        let many = OutputPlan.layout(
+            forTaps: OutputPlan.tapPlans(forStreams: [16]), inputBuffers: 1)
+        let one = OutputPlan.layout(
+            for: DeviceDescription(
+                tapChannels: 16, isDeviceBound: true, deviceChannels: 16, inputBuffers: 1))
+
+        #expect(many.destinations == one.destinations)
+        #expect(many.sourceBuffers == one.sourceBuffers)
+        #expect(many.sourceChannels == one.sourceChannels)
+        #expect(many.tapBufferIndex == one.tapBufferIndex)
+        #expect(many.primaryTapChannels == one.primaryTapChannels)
+    }
+
+    // MARK: - Channel roles
+
+    /// A bitmap says which roles are present but not their order; Core Audio
+    /// lays them out in bit order. 5.1 as a bitmap therefore puts LFE third.
+    @Test func aSurroundBitmapPutsLFEWhereTheOrderSaysItIs() {
+        let labels = ChannelRoles.labels(
+            fromBitmap: [
+                .bit_Left, .bit_Right, .bit_Center, .bit_LFEScreen,
+                .bit_LeftSurround, .bit_RightSurround,
+            ])
+
+        #expect(labels.count == 6)
+        #expect(labels[3] == kAudioChannelLabel_LFEScreen)
+    }
+
+    /// A layout with no LFE bit names no LFE channel — rather than defaulting to
+    /// the third, which is where most layouts happen to keep one.
+    @Test func aBitmapWithoutLFENamesNone() {
+        let labels = ChannelRoles.labels(fromBitmap: [.bit_Left, .bit_Right])
+
+        #expect(labels == [kAudioChannelLabel_Left, kAudioChannelLabel_Right])
+        #expect(!labels.contains(kAudioChannelLabel_LFEScreen))
+    }
+
+    /// An empty bitmap is a device saying nothing, which must not become a
+    /// confident claim about channel zero.
+    @Test func anEmptyBitmapNamesNothing() {
+        #expect(ChannelRoles.labels(fromBitmap: []).isEmpty)
     }
 
 }
