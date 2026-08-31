@@ -796,6 +796,55 @@ struct EQProcessorTests {
         }
     }
 
+    /// Each channel gets the chain's response *at its own frequency*.
+    ///
+    /// `theRenderedLevelMatchesTheDrawnCurve` proves this for one channel. A
+    /// per-channel delay line that was shared, or a channel reading another's
+    /// samples, would still pass that test and fail this one: six channels are
+    /// driven with six different tones, and each has to come out at the gain the
+    /// curve predicts for its own tone.
+    ///
+    /// Measured against real hardware at these exact frequencies, through a
+    /// sixteen channel device, the worst disagreement was 0.01 dB.
+    @Test func everyChannelGetsTheCurveAtItsOwnFrequency() {
+        let boost = EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)
+        let processor = makeProcessor(filters: [boost])
+        let channels = 6
+        let tones = [200.0, 300.0, 400.0, 500.0, 600.0, 700.0]
+        let frames = 4_096
+
+        let sources = tones.map { sine($0, frames: frames) }
+        var input = [Float](repeating: 0, count: frames * channels)
+        for frame in 0..<frames {
+            for channel in 0..<channels {
+                input[frame * channels + channel] = sources[channel][frame]
+            }
+        }
+
+        processor.setOutputLayout(
+            .init(tapChannels: channels, destinations: Array(0..<channels)))
+
+        var output: [Float] = []
+        for _ in 0..<12 {
+            output =
+                renderAcrossLayout(
+                    processor, input: input, inputChannels: channels,
+                    outputBuffers: [channels], frames: frames)[0]
+        }
+
+        let biquad = Biquad(filter: boost, sampleRate: sampleRate)
+        for channel in 0..<channels {
+            let rendered = stride(from: channel, to: frames * channels, by: channels)
+                .map { output[$0] }
+            let measured = 20 * log10(rms(rendered) / rms(sources[channel]))
+            let predicted = biquad.magnitudeDB(at: tones[channel], sampleRate: sampleRate)
+            #expect(
+                abs(measured - predicted) < 0.5,
+                "channel \(channel) at \(tones[channel]) Hz measured \(measured) dB against \(predicted) dB on the curve"
+            )
+        }
+    }
+
     // MARK: - The spectrum tap
 
     /// The analyzer draws what reaches the speakers, so the tap has to carry

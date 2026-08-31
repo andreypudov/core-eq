@@ -221,7 +221,24 @@ final class AudioEngine: ObservableObject {
         if let selfObject = try? processObjectID(for: getpid()) {
             excluded.append(selfObject)
         }
-        let taps = try makeTaps(excluding: excluded, outputUID: outputUID, outputID: outputID)
+        let factory = LiveTapFactory(outputUID: outputUID, excluded: excluded)
+        let taps: [AssembledTap]
+        do {
+            taps = try TapAssembly.taps(
+                forStreams: AudioDevices.outputStreamChannelCounts(of: outputID),
+                using: factory)
+        } catch {
+            // A tap was made and then rejected, or none could be made at all.
+            // The permission question is answered by whether one was ever
+            // created, not by whether the engine went on to start.
+            if factory.didCreateATap { tapAccess = .granted }
+            throw error
+        }
+        tapAccess = .granted
+        let tappedChannels = taps.reduce(0) { $0 + $1.channels }
+        logger.info(
+            "Taps: \(taps.count, privacy: .public), \(tappedChannels, privacy: .public) channels"
+        )
         tapIDs = taps.map(\.id)
         let tap = taps[0]
 
@@ -478,19 +495,6 @@ final class AudioEngine: ObservableObject {
 
     // MARK: - Core Audio property helpers
 
-    /// The tap could not be created.
-    ///
-    /// Its own type because it is the one failure that means the permission was
-    /// refused, and the only one the Settings pane may describe that way.
-    private struct TapUnavailable: Error, LocalizedError {
-        let status: OSStatus
-
-        var errorDescription: String? {
-            "CoreEQ could not capture system audio (OSStatus \(status)). Check that "
-                + "System Audio Recording is allowed in Privacy & Security."
-        }
-    }
-
     /// A default output device the engine cannot render through.
     ///
     /// Separate from `CoreAudioError` because nothing here is a failed Core
@@ -525,18 +529,6 @@ final class AudioEngine: ObservableObject {
                     channels, so there is nowhere to send the equalized audio.
                     """
             }
-        }
-    }
-
-    /// A tap whose samples are not the Float32 the render path assumes.
-    ///
-    /// Its own type so the device-bound attempt can fall back to the stereo
-    /// global tap on it, the same way it falls back on a tap that could not be
-    /// created at all.
-    private struct UnrenderableTapFormat: Error, LocalizedError {
-        var errorDescription: String? {
-            "The audio tap did not deliver 32-bit float samples, which is the "
-                + "only format CoreEQ renders."
         }
     }
 
@@ -605,138 +597,80 @@ final class AudioEngine: ObservableObject {
         return name?.takeRetainedValue() as String? ?? ""
     }
 
-    /// The system audio tap, and what it will deliver.
-    private struct Tap {
-        let id: AudioObjectID
-        let uuid: UUID
-        let channels: Int
-        /// Output stream it was bound to, or -1 for the stereo global tap.
-        let stream: Int
-        /// Whether this is the device- and stream-bound tap, whose format
-        /// matches the device's, rather than the stereo mixdown.
-        let isDeviceBound: Bool
-        /// Global output channel this tap's channel 0 feeds. Zero for a single
-        /// tap; the running total of earlier streams when there are several.
-        var firstChannel: Int = 0
-    }
-
-    /// Creates the tap, preferring the one that does not mix the audio down.
+    /// The live tap factory: the Core Audio calls, and nothing else.
     ///
-    /// A tap bound to the output device's stream takes the format of that
-    /// stream, so a device presenting eight channels is captured as eight. The
-    /// stereo global tap — what CoreEQ has always used — instead delivers a two
-    /// channel mixdown, which on a surround device means the surround content is
-    /// gone and, because the tap mutes the original at the hardware, gone
-    /// irrecoverably while CoreEQ runs.
-    ///
-    /// The device-bound form binds the tap to one device and stream, which is
-    /// newer ground and a per-device failure mode CoreEQ has never had. So it is
-    /// attempted and not required: a device it cannot serve degrades to the
-    /// stereo behaviour that already worked rather than to no audio at all.
-    private func makeTaps(
-        excluding excluded: [AudioObjectID], outputUID: String, outputID: AudioDeviceID
-    ) throws -> [Tap] {
-        let numbers = excluded.map(NSNumber.init(value:))
-        let streams = AudioDevices.outputStreamChannelCounts(of: outputID)
+    /// Everything deciding *which* taps a device needs, and what to do when only
+    /// some of them can be made, lives in `TapAssembly` where a test can reach
+    /// it. Those decisions are the part that has been wrong. This is the part
+    /// that cannot be tested without the hardware.
+    private final class LiveTapFactory: TapFactory {
+        let outputUID: String
+        let excluded: [AudioObjectID]
+        /// Set the moment any tap is created, which is the only ground truth
+        /// about the permission there is.
+        private(set) var didCreateATap = false
 
-        // A tap binds to one stream and takes that stream's format, so a device
-        // presenting its channels as several streams needs one tap each. Binding
-        // to the widest alone captured that stream and abandoned the rest, which
-        // on an interface presenting eight stereo streams is fourteen of sixteen
-        // channels.
-        if streams.count > 1, streams.allSatisfy({ $0 > 0 }) {
-            var taps: [Tap] = []
-            var offset = 0
-            for (index, channels) in streams.enumerated() {
-                guard
-                    let tap = try? makeTap(
-                        CATapDescription(
-                            __excludingProcesses: numbers, andDeviceUID: outputUID,
-                            withStream: index),
-                        isDeviceBound: true, stream: index)
-                else { break }
-                taps.append(
-                    Tap(
-                        id: tap.id, uuid: tap.uuid, channels: tap.channels, stream: tap.stream,
-                        isDeviceBound: true, firstChannel: offset))
-                offset += channels
-            }
-            if taps.count == streams.count {
-                logger.info(
-                    """
-                    Device-bound taps: \(taps.count, privacy: .public) streams, \
-                    \(offset, privacy: .public) channels
-                    """)
-                return taps
-            }
-            // Partial success is not a usable device: the streams that did tap
-            // would be muted and replaced while the rest played on untouched.
-            for tap in taps { AudioHardwareDestroyProcessTap(tap.id) }
-            logger.info("Per-stream taps incomplete; falling back")
+        init(outputUID: String, excluded: [AudioObjectID]) {
+            self.outputUID = outputUID
+            self.excluded = excluded
         }
 
-        let stream = OutputPlan.widestStream(of: streams)
-        if let tap = try? makeTap(
-            CATapDescription(
-                __excludingProcesses: numbers, andDeviceUID: outputUID, withStream: stream),
-            isDeviceBound: true, stream: stream)
-        {
-            logger.info("Device-bound tap: \(tap.channels, privacy: .public) channels")
-            return [tap]
+        func makeDeviceBoundTap(stream: Int) throws -> AssembledTap {
+            try make(
+                CATapDescription(
+                    __excludingProcesses: excluded.map(NSNumber.init(value:)),
+                    andDeviceUID: outputUID, withStream: stream),
+                isDeviceBound: true, stream: stream)
         }
 
-        logger.info("Device-bound tap unavailable; using the stereo global tap")
-        return [
-            try makeTap(
+        func makeGlobalTap() throws -> AssembledTap {
+            try make(
                 CATapDescription(stereoGlobalTapButExcludeProcesses: excluded),
                 isDeviceBound: false, stream: -1)
-        ]
-    }
-
-    private func makeTap(
-        _ description: CATapDescription, isDeviceBound: Bool, stream: Int
-    ) throws -> Tap {
-        description.name = "CoreEQ System Tap"
-        description.muteBehavior = .mutedWhenTapped
-        description.isPrivate = true
-
-        var id = AudioObjectID(kAudioObjectUnknown)
-        let status = AudioHardwareCreateProcessTap(description, &id)
-        guard status == noErr else { throw TapUnavailable(status: status) }
-        tapAccess = .granted
-        let format = tapFormat(of: id)
-        // A tap the render path cannot read is worse than no tap: it would mute
-        // every other process and play the reinterpreted bytes. Destroy it and
-        // let the caller fall back.
-        guard format.isRenderable else {
-            AudioHardwareDestroyProcessTap(id)
-            throw UnrenderableTapFormat()
         }
-        return Tap(
-            id: id, uuid: description.uuid, channels: format.channels,
-            stream: stream, isDeviceBound: isDeviceBound)
-    }
 
-    /// What the tap will deliver, read from the tap's own format rather than
-    /// assumed from what we asked for.
-    ///
-    /// The format matters as much as the channel count. `EQProcessor.render`
-    /// binds the tap's bytes to `Float` and does arithmetic on them, so a tap
-    /// carrying anything else would not fail — it would reinterpret the
-    /// samples and render noise. A device-bound tap takes *the stream's*
-    /// format, which is the device's to choose, so this is checked rather than
-    /// trusted.
-    private func tapFormat(of tap: AudioObjectID) -> (channels: Int, isRenderable: Bool) {
-        var addr = propertyAddress(kAudioTapPropertyFormat)
-        var format = AudioStreamBasicDescription()
-        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-        guard AudioObjectGetPropertyData(tap, &addr, 0, nil, &size, &format) == noErr,
-            format.mChannelsPerFrame > 0
-        else {
-            return (EQProcessor.OutputLayout().tapChannels, false)
+        func destroy(_ tap: AssembledTap) {
+            AudioHardwareDestroyProcessTap(tap.id)
         }
-        let isFloat = format.mFormatFlags & kAudioFormatFlagIsFloat != 0
-        return (Int(format.mChannelsPerFrame), isFloat && format.mBitsPerChannel == 32)
+
+        private func make(
+            _ description: CATapDescription, isDeviceBound: Bool, stream: Int
+        ) throws -> AssembledTap {
+            description.name = "CoreEQ System Tap"
+            description.muteBehavior = .mutedWhenTapped
+            description.isPrivate = true
+
+            var id = AudioObjectID(kAudioObjectUnknown)
+            let status = AudioHardwareCreateProcessTap(description, &id)
+            guard status == noErr else { throw TapUnavailable(status: status) }
+            didCreateATap = true
+
+            let format = Self.format(of: id)
+            // A tap the render path cannot read is worse than no tap: it would
+            // mute every other process and play back reinterpreted bytes.
+            guard format.isRenderable else {
+                AudioHardwareDestroyProcessTap(id)
+                throw UnrenderableTapFormat()
+            }
+            return AssembledTap(
+                id: id, uuid: description.uuid, channels: format.channels,
+                stream: stream, isDeviceBound: isDeviceBound)
+        }
+
+        private static func format(of tap: AudioObjectID) -> (channels: Int, isRenderable: Bool) {
+            var addr = AudioObjectPropertyAddress(
+                mSelector: kAudioTapPropertyFormat, mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            var format = AudioStreamBasicDescription()
+            var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+            guard AudioObjectGetPropertyData(tap, &addr, 0, nil, &size, &format) == noErr,
+                format.mChannelsPerFrame > 0
+            else {
+                return (EQProcessor.OutputLayout().tapChannels, false)
+            }
+            let isFloat = format.mFormatFlags & kAudioFormatFlagIsFloat != 0
+            return (Int(format.mChannelsPerFrame), isFloat && format.mBitsPerChannel == 32)
+        }
     }
 
     private func nominalSampleRate(of deviceID: AudioDeviceID) throws -> Double {
