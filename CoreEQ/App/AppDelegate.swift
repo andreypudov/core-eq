@@ -45,16 +45,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // device's sound.
         let profileManager = self.profileManager
         let outputs = self.outputs
-        outputs.$defaultDeviceID
+        // The emitted value, never a re-read of `outputs`. `@Published` emits in
+        // `willSet`, so reading the object back here returns the device being
+        // replaced: the EQ was told about the device the user had just left, and
+        // filed their edits under it.
+        outputs.$defaultDeviceUID
             .removeDuplicates()
-            .sink { _ in
-                profileManager.setOutputDevice(uid: outputs.defaultDevicePersistentID)
+            .sink { uid in
+                ProfileStatusBridge.shared.noteDeviceList(uid: uid)
+                profileManager.setOutputDevice(uid: uid)
             }
             .store(in: &cancellables)
 
         // The Settings window is a separate scene and cannot be handed the
         // engine, so the one fact it needs crosses on its own.
         EngineStatusBridge.shared.follow(audioEngine)
+        ProfileStatusBridge.shared.follow(profileManager)
 
         audioEngine.start()
     }

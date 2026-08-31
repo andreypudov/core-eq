@@ -32,6 +32,199 @@ import Testing
         settings.deviceStates[device ?? ""] = state
     }
 
+    // MARK: - Surviving a relaunch
+
+    private static let speakers = "BuiltInSpeakerDevice"
+    private static let aggregate = "~:AMS2_Aggregate:0"
+
+    /// Edit on one device, switch away, then relaunch with that device already
+    /// default. The edit has to be there.
+    @Test func anEditSurvivesASwitchAndARelaunch() {
+        let first = makeManager(device: Self.speakers)
+        first.setGain(9, forBandAt: 0)
+        first.setOutputDevice(uid: Self.aggregate)
+
+        let second = makeManager(device: Self.speakers)
+        #expect(second.bandFilters[0].gain == 9, "the edit did not survive the relaunch")
+    }
+
+    /// The same edit, reached by relaunching on the other device and switching
+    /// back — the sequence that was reported as the one that does work.
+    @Test func anEditComesBackWhenSwitchingToItsDevice() {
+        let first = makeManager(device: Self.speakers)
+        first.setGain(9, forBandAt: 0)
+        first.setOutputDevice(uid: Self.aggregate)
+
+        let second = makeManager(device: Self.aggregate)
+        second.setOutputDevice(uid: Self.speakers)
+        #expect(second.bandFilters[0].gain == 9, "the edit did not come back on switching")
+    }
+
+    /// Quitting is not a device change, so an edit has to be filed when it is
+    /// made rather than when the device next changes.
+    @Test func anEditIsFiledWithoutADeviceSwitch() {
+        let first = makeManager(device: Self.speakers)
+        first.setGain(7, forBandAt: 0)
+
+        let second = makeManager(device: Self.speakers)
+        #expect(second.bandFilters[0].gain == 7, "the edit was never filed")
+    }
+
+    // MARK: - A/B belongs to its device
+
+    /// The reported fault: A and B set up on one device appeared on the next.
+    ///
+    /// Both slots are per device — "a comparison set up on headphones should
+    /// still be there when headphones come back" — so arriving at a device must
+    /// bring that device's pair, never the previous one's.
+    @Test func bothSlotsBelongToTheirOwnDevice() {
+        let manager = makeManager(device: Self.speakers)
+
+        // A distinctive A, then a distinctive B, on the speakers.
+        manager.setGain(9, forBandAt: 0)
+        manager.setSlot(.b)
+        manager.setGain(-9, forBandAt: 0)
+
+        manager.setOutputDevice(uid: Self.aggregate)
+
+        #expect(manager.abSlot == .a, "the previous device's live slot came along")
+        #expect(
+            manager.bandFilters[0].gain == 0,
+            "the previous device's live slot content came along")
+
+        manager.setSlot(.b)
+        #expect(
+            manager.bandFilters[0].gain == 0,
+            "the previous device's alternate slot came along")
+    }
+
+    /// And the pair the first device had is still its own on return.
+    @Test func aDevicesPairSurvivesAVisitToAnother() {
+        let manager = makeManager(device: Self.speakers)
+        manager.setGain(9, forBandAt: 0)
+        manager.setSlot(.b)
+        manager.setGain(-9, forBandAt: 0)
+
+        manager.setOutputDevice(uid: Self.aggregate)
+        manager.setGain(3, forBandAt: 0)
+        manager.setOutputDevice(uid: Self.speakers)
+
+        #expect(manager.abSlot == .b, "the live slot was not restored")
+        #expect(manager.bandFilters[0].gain == -9, "slot B was not restored")
+
+        manager.setSlot(.a)
+        #expect(manager.bandFilters[0].gain == 9, "slot A was not restored")
+    }
+
+    /// A device never seen before starts at the default, not at whatever the
+    /// last device happened to be playing.
+    @Test func anUnknownDeviceStartsFresh() {
+        let manager = makeManager(device: Self.speakers)
+        manager.setGain(9, forBandAt: 0)
+        manager.setSlot(.b)
+        manager.setGain(-9, forBandAt: 0)
+
+        manager.setOutputDevice(uid: "SomeDeviceNeverSeenBefore")
+
+        #expect(manager.activeProfileName == BuiltInProfiles.defaultProfileName)
+        #expect(manager.abSlot == .a)
+        #expect(manager.bandFilters[0].gain == 0)
+    }
+
+    // MARK: - Surviving a relaunch
+
+    /// The live slot is half the state: the same preset in the other slot is a
+    /// different sound, so a relaunch that forgets which was live is wrong even
+    /// when both slots survive.
+    @Test func theLiveSlotSurvivesARelaunch() {
+        let first = makeManager(device: Self.speakers)
+        first.setGain(9, forBandAt: 0)
+        first.setSlot(.b)
+        first.setGain(-9, forBandAt: 0)
+
+        let second = makeManager(device: Self.speakers)
+        #expect(second.abSlot == .b, "the live slot was not restored")
+        #expect(second.bandFilters[0].gain == -9, "the live slot's content was not restored")
+    }
+
+    /// The slot that is not being heard has to survive too, or A/B comes back
+    /// as a comparison against nothing.
+    @Test func theAlternateSlotSurvivesARelaunch() {
+        let first = makeManager(device: Self.speakers)
+        first.setGain(9, forBandAt: 0)
+        first.setSlot(.b)
+        first.setGain(-9, forBandAt: 0)
+
+        let second = makeManager(device: Self.speakers)
+        second.setSlot(.a)
+        #expect(second.bandFilters[0].gain == 9, "the alternate slot was not restored")
+    }
+
+    /// Relaunching on a different device must not hand it the last session's
+    /// pair — the same leak as switching, but across a launch.
+    @Test func aRelaunchOnAnotherDeviceDoesNotInheritThePair() {
+        let first = makeManager(device: Self.speakers)
+        first.setGain(9, forBandAt: 0)
+        first.setSlot(.b)
+        first.setGain(-9, forBandAt: 0)
+
+        let second = makeManager(device: Self.aggregate)
+        #expect(second.abSlot == .a)
+        #expect(second.bandFilters[0].gain == 0)
+    }
+
+    // MARK: - Remembering the device across launches
+
+    /// Core Audio can have no answer at launch. Without a remembered device the
+    /// session files everything into the no-device slot, where no real device
+    /// ever reads it again.
+    @Test func aLaunchWithNoDeviceFallsBackToTheLastOne() {
+        let first = makeManager(device: Self.speakers)
+        first.setGain(9, forBandAt: 0)
+        first.setSlot(.b)
+        first.setGain(-9, forBandAt: 0)
+
+        // The system has not named a device yet.
+        let second = makeManager(device: nil)
+
+        #expect(second.outputDeviceUID == Self.speakers, "the last device was not remembered")
+        #expect(second.abSlot == .b, "the live slot was lost with the device")
+        #expect(second.bandFilters[0].gain == -9, "the state was lost with the device")
+    }
+
+    /// The remembered device follows the switches, so it is the one the user was
+    /// actually last on rather than the one they started on.
+    @Test func theRememberedDeviceFollowsSwitches() {
+        let first = makeManager(device: Self.speakers)
+        first.setOutputDevice(uid: Self.aggregate)
+        first.setGain(4, forBandAt: 0)
+
+        let second = makeManager(device: nil)
+
+        #expect(second.outputDeviceUID == Self.aggregate)
+        #expect(second.bandFilters[0].gain == 4)
+    }
+
+    /// A first ever launch has nothing to remember, and must not invent one.
+    @Test func aFirstLaunchWithNoDeviceIsStillTheNoDeviceSlot() {
+        let manager = makeManager(device: nil)
+
+        #expect(manager.outputDeviceUID == nil)
+        #expect(manager.activeProfileName == BuiltInProfiles.defaultProfileName)
+    }
+
+    /// A real device still wins over the remembered one: the point is a
+    /// fallback, not a preference.
+    @Test func aNamedDeviceWinsOverTheRememberedOne() {
+        let first = makeManager(device: Self.speakers)
+        first.setGain(9, forBandAt: 0)
+
+        let second = makeManager(device: Self.aggregate)
+
+        #expect(second.outputDeviceUID == Self.aggregate)
+        #expect(second.bandFilters[0].gain == 0, "the remembered device's state was loaded")
+    }
+
     /// Total response of a chain at `frequency`, the way the graph computes the
     /// curve it draws.
     private func total(

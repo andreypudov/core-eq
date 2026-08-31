@@ -30,7 +30,11 @@ final class EQProcessor: @unchecked Sendable {
     /// for automatically generated processing later. Each filter is one more
     /// pass over the buffer in `processChannel`, so this is a real budget.
     static let maxFilters = 32
-    static let maxChannels = 2
+    /// Channels the render path can carry. Two was not a budget but an
+    /// assumption — the delay lines were named `z1L`/`z1R`. Sixteen covers
+    /// every layout a Mac presents, including 7.1.4, and costs
+    /// `maxFilters × maxChannels × 2` doubles of delay line, allocated once.
+    static let maxChannels = 16
 
     private static let smoothingSeconds = 0.05
 
@@ -54,12 +58,23 @@ final class EQProcessor: @unchecked Sendable {
     /// interleaved buffer, one buffer per sub-device, and fully non-interleaved
     /// layouts without a special case for any of them.
     struct OutputLayout: Equatable {
-        /// Channels the tap delivers. CoreEQ's global tap is stereo.
-        var tapChannels = 2
-        /// Global output channel carrying the tap's left channel.
-        var leftChannel = 0
-        /// Global output channel carrying the tap's right channel.
-        var rightChannel = 1
+        /// Channels the tap delivers.
+        var tapChannels: Int
+        /// Global output channel for each tap channel, in tap channel order. An
+        /// entry of -1 drops that channel, and the array may be shorter than
+        /// `tapChannels`, which drops the rest.
+        ///
+        /// Held as an array because only the main thread ever touches this type;
+        /// `setOutputLayout` copies it into storage the render thread already
+        /// owns, the same way a filter chain is staged.
+        var destinations: [Int]
+
+        /// Plain interleaved stereo — what every device was assumed to be
+        /// before the engine started describing them.
+        init(tapChannels: Int = 2, destinations: [Int] = [0, 1]) {
+            self.tapChannels = tapChannels
+            self.destinations = destinations
+        }
     }
 
     /// What the render thread needs to know about one filter: no identifier, no
@@ -99,14 +114,6 @@ final class EQProcessor: @unchecked Sendable {
         var currentGain = 0.0
         var needsCoefficientUpdate = true
         var filter = Biquad.identity
-        var z1L = 0.0, z2L = 0.0, z1R = 0.0, z2R = 0.0
-
-        mutating func resetState() {
-            z1L = 0
-            z2L = 0
-            z1R = 0
-            z2R = 0
-        }
     }
 
     // Staged parameters, written by the main thread under `lock` and consumed
@@ -127,7 +134,10 @@ final class EQProcessor: @unchecked Sendable {
     private var pendingPreamp: Double?
     private var pendingBypass: Bool?
     private var pendingSampleRate: Double?
-    private var pendingLayout: OutputLayout?
+    /// Staged destination map and its length, written under the lock into
+    /// storage that already exists so no array is handed to the render thread.
+    private var pendingDestinations = [Int](repeating: -1, count: EQProcessor.maxChannels)
+    private var pendingRoutedChannels: Int?
 
     // Render-thread-only state.
     private var filters = [FilterState](repeating: FilterState(), count: EQProcessor.maxFilters)
@@ -138,11 +148,20 @@ final class EQProcessor: @unchecked Sendable {
     /// on the audio thread, which is the inversion the staging exists to avoid.
     private var stagedFilters = [FilterParameters](
         repeating: FilterParameters(), count: EQProcessor.maxFilters)
+    private var stagedDestinations = [Int](repeating: -1, count: EQProcessor.maxChannels)
     private var sampleRate = 44_100.0
     private var bypassed = false
-    /// Defaults to plain interleaved stereo, which is what every device looked
-    /// like before the engine started describing them.
-    private var layout = OutputLayout()
+    /// Delay lines for every filter and channel, flat and allocated once:
+    /// filter-major, then channel, then the two states. Two per filter per
+    /// channel is what transposed direct form II needs.
+    private var delays = [Double](
+        repeating: 0, count: EQProcessor.maxFilters * EQProcessor.maxChannels * 2)
+    /// Where each tap channel is written, render-thread owned. -1 is "nowhere".
+    /// Defaults to the identity map, so a processor the engine has not described
+    /// yet behaves as plain interleaved audio rather than as silence.
+    private var destinations = Array(0..<EQProcessor.maxChannels)
+    /// Tap channels currently routed, never more than `destinations` holds.
+    private var routedChannels = 2
     // Output trim, smoothed like the band gains so dragging the preamp slider
     // is a fade rather than a step.
     private var targetPreampLinear = 1.0
@@ -178,8 +197,12 @@ final class EQProcessor: @unchecked Sendable {
     /// Stages the output layout. Set by `AudioEngine` once per engine start,
     /// after it knows the aggregate's stream configuration and the tap's format.
     func setOutputLayout(_ newLayout: OutputLayout) {
+        let count = min(newLayout.tapChannels, Self.maxChannels)
         lock.lock()
-        pendingLayout = newLayout
+        for channel in 0..<count {
+            pendingDestinations[channel] = newLayout.destinations[safe: channel] ?? -1
+        }
+        pendingRoutedChannels = count
         lock.unlock()
     }
 
@@ -242,8 +265,8 @@ final class EQProcessor: @unchecked Sendable {
         into outABL: UnsafeMutableAudioBufferListPointer
     ) -> Int {
         var written = 0
-        for channel in 0..<min(channels, Self.maxChannels) {
-            guard let target = destination(of: globalChannel(for: channel), in: outABL)
+        for channel in 0..<min(channels, routedChannels) {
+            guard let target = destination(of: destinations[channel], in: outABL)
             else { continue }
             let count = min(frames, target.frames)
             var source = tapData + channel
@@ -263,18 +286,14 @@ final class EQProcessor: @unchecked Sendable {
     private func equalize(
         _ outABL: UnsafeMutableAudioBufferListPointer, channels: Int, frames: Int
     ) {
-        for channel in 0..<min(channels, Self.maxChannels) {
-            guard let target = destination(of: globalChannel(for: channel), in: outABL)
+        for channel in 0..<min(channels, routedChannels) {
+            guard let target = destination(of: destinations[channel], in: outABL)
             else { continue }
             let count = min(frames, target.frames)
             processChannel(
                 target.pointer, stride: target.stride, frames: count, channel: channel)
             applyPreamp(target.pointer, stride: target.stride, frames: count)
         }
-    }
-
-    private func globalChannel(for tapChannel: Int) -> Int {
-        tapChannel == 0 ? layout.leftChannel : layout.rightChannel
     }
 
     /// Locates one global output channel: which buffer holds it, where in that
@@ -286,6 +305,7 @@ final class EQProcessor: @unchecked Sendable {
     private func destination(
         of globalChannel: Int, in outABL: UnsafeMutableAudioBufferListPointer
     ) -> (pointer: UnsafeMutablePointer<Float>, stride: Int, frames: Int)? {
+        guard globalChannel >= 0 else { return nil }
         var base = 0
         for i in 0..<outABL.count {
             let buffer = outABL[i]
@@ -311,7 +331,7 @@ final class EQProcessor: @unchecked Sendable {
     /// they were not.
     private func tapBuffer(in inABL: UnsafeMutableAudioBufferListPointer) -> AudioBuffer? {
         for i in 0..<inABL.count
-        where inABL[i].mNumberChannels == UInt32(layout.tapChannels) && inABL[i].mData != nil {
+        where inABL[i].mNumberChannels == UInt32(routedChannels) && inABL[i].mData != nil {
             return inABL[i]
         }
         // Nothing matched the tap's format. Falling back to the first buffer
@@ -330,12 +350,13 @@ final class EQProcessor: @unchecked Sendable {
     /// Reads the channels the audio was placed into rather than the head of the
     /// first buffer, which on a multichannel device is not where the audio is.
     private func feedSpectrum(_ outABL: UnsafeMutableAudioBufferListPointer) {
-        guard let left = destination(of: layout.leftChannel, in: outABL), left.frames > 0
+        guard routedChannels > 0,
+            let left = destination(of: destinations[0], in: outABL), left.frames > 0
         else { return }
-        // Average the pair when the layout put it side by side in one buffer,
-        // which is every interleaved device. Otherwise the left channel alone is
-        // an honest enough picture for a backdrop.
-        let right = destination(of: layout.rightChannel, in: outABL)
+        // Average the pair when the map put it side by side in one buffer, which
+        // is every interleaved device. Otherwise the first channel alone is an
+        // honest enough picture for a backdrop.
+        let right = routedChannels > 1 ? destination(of: destinations[1], in: outABL) : nil
         let adjacent = right.map { $0.pointer == left.pointer + 1 && $0.stride == left.stride }
         spectrumBuffer.write(
             interleaved: left.pointer,
@@ -346,6 +367,24 @@ final class EQProcessor: @unchecked Sendable {
     }
 
     // MARK: - Render-thread helpers
+
+    /// First of the two delay-line slots for one filter on one channel.
+    private func delayIndex(filter: Int, channel: Int) -> Int {
+        (filter * Self.maxChannels + channel) * 2
+    }
+
+    /// Clears one filter's delay lines across every channel. Called when a
+    /// filter's shape changes, because the state describes the old response.
+    private func resetDelays(filter: Int) {
+        let base = filter * Self.maxChannels * 2
+        for offset in 0..<(Self.maxChannels * 2) {
+            delays[base + offset] = 0
+        }
+    }
+
+    private func resetAllDelays() {
+        for i in 0..<delays.count { delays[i] = 0 }
+    }
 
     private func consumePendingParameters() {
         guard lock.lockIfAvailable() else { return }
@@ -360,26 +399,41 @@ final class EQProcessor: @unchecked Sendable {
         let newPreamp = pendingPreamp
         let newBypass = pendingBypass
         let newRate = pendingSampleRate
-        let newLayout = pendingLayout
+        let newRouted = pendingRoutedChannels
+        if let newRouted {
+            for channel in 0..<newRouted {
+                stagedDestinations[channel] = pendingDestinations[channel]
+            }
+        }
         pendingFilterCount = nil
         pendingPreamp = nil
         pendingBypass = nil
         pendingSampleRate = nil
-        pendingLayout = nil
+        pendingRoutedChannels = nil
         lock.unlock()
 
-        if let newLayout, newLayout != layout {
-            layout = newLayout
-            // A different layout means different channels, so the delay lines
-            // are describing audio that is no longer there.
-            for i in 0..<filterCount { filters[i].resetState() }
+        if let newRouted {
+            var changed = newRouted != routedChannels
+            for channel in 0..<newRouted where stagedDestinations[channel] != destinations[channel]
+            {
+                changed = true
+            }
+            if changed {
+                routedChannels = newRouted
+                for channel in 0..<newRouted {
+                    destinations[channel] = stagedDestinations[channel]
+                }
+                // Different channels means the delay lines are describing audio
+                // that is no longer there.
+                resetAllDelays()
+            }
         }
 
         if let newRate, newRate != sampleRate {
             sampleRate = newRate
             for i in 0..<filterCount {
                 filters[i].needsCoefficientUpdate = true
-                filters[i].resetState()
+                resetDelays(filter: i)
             }
         }
 
@@ -389,7 +443,7 @@ final class EQProcessor: @unchecked Sendable {
                 let staged = stagedFilters[i]
                 if staged.changesShape(from: filters[i].parameters) {
                     filters[i].needsCoefficientUpdate = true
-                    filters[i].resetState()
+                    resetDelays(filter: i)
                 }
                 filters[i].parameters = staged
                 // Switching a gain-bearing filter off ramps it to zero, which is
@@ -406,7 +460,7 @@ final class EQProcessor: @unchecked Sendable {
         if let newBypass, newBypass != bypassed {
             bypassed = newBypass
             if !bypassed {
-                for i in 0..<filterCount { filters[i].resetState() }
+                for i in 0..<filterCount { resetDelays(filter: i) }
             }
         }
     }
@@ -476,8 +530,9 @@ final class EQProcessor: @unchecked Sendable {
             let b2 = filter.b2
             let a1 = filter.a1
             let a2 = filter.a2
-            var z1 = channel == 0 ? filters[i].z1L : filters[i].z1R
-            var z2 = channel == 0 ? filters[i].z2L : filters[i].z2R
+            let slot = delayIndex(filter: i, channel: channel)
+            var z1 = delays[slot]
+            var z2 = delays[slot + 1]
 
             var index = 0
             for _ in 0..<frames {
@@ -492,13 +547,8 @@ final class EQProcessor: @unchecked Sendable {
             // Flush denormals so idle audio does not burn CPU.
             if abs(z1) < 1e-15 { z1 = 0 }
             if abs(z2) < 1e-15 { z2 = 0 }
-            if channel == 0 {
-                filters[i].z1L = z1
-                filters[i].z2L = z2
-            } else {
-                filters[i].z1R = z1
-                filters[i].z2R = z2
-            }
+            delays[slot] = z1
+            delays[slot + 1] = z2
         }
     }
 }

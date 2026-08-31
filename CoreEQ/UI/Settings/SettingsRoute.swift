@@ -1,8 +1,9 @@
 import Foundation
 
-/// The Settings window's two panes.
+/// The Settings window's panes.
 enum SettingsTab: Hashable {
     case general
+    case diagnostics
     case about
 }
 

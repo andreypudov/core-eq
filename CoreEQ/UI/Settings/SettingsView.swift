@@ -21,8 +21,15 @@ struct SettingsView: View {
     /// the taller one's height and About centres inside it.
     ///
     /// Set here rather than on each pane so there is one number to change when
-    /// General grows another row.
-    private static let size = CGSize(width: 460, height: 268)
+    /// General grows another row. Diagnostics is the tallest of the three: it is
+    /// the one pane whose content is meant to be read at length.
+    ///
+    /// The width is set by General's permission row, which is a long label and a
+    /// status side by side — at 460 the status wrapped onto its own line, which
+    /// reads as though it belonged to nothing. Diagnostics wants the width too:
+    /// its report is monospaced, and every line it has to wrap is a line someone
+    /// has to reassemble by eye.
+    private static let size = CGSize(width: 560, height: 420)
 
     var body: some View {
         TabView(selection: $route.tab) {
@@ -30,6 +37,11 @@ struct SettingsView: View {
                 .frame(width: Self.size.width, height: Self.size.height, alignment: .top)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(SettingsTab.general)
+
+            DiagnosticsSettingsView()
+                .frame(width: Self.size.width, height: Self.size.height, alignment: .top)
+                .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
+                .tag(SettingsTab.diagnostics)
 
             AboutSettingsView()
                 .frame(width: Self.size.width, height: Self.size.height)

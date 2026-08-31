@@ -22,7 +22,10 @@ final class AudioEngine: ObservableObject {
     enum Status: Equatable {
         case stopped
         case running(deviceName: String)
-        case failed(String)
+        /// `summary` is a few words, for surfaces that cannot afford a sentence
+        /// — a menu is as wide as its widest item. `message` says what to
+        /// change, and is what every surface with room for it shows.
+        case failed(summary: String, message: String)
 
         var description: String {
             switch self {
@@ -30,13 +33,15 @@ final class AudioEngine: ObservableObject {
                 return "Audio engine stopped."
             case .running(let deviceName):
                 return "Processing system audio on “\(deviceName)”."
-            case .failed(let message):
+            case .failed(_, let message):
                 return "Audio engine error: \(message)"
             }
         }
     }
 
     @Published private(set) var status: Status = .stopped
+
+    @Published private(set) var tapAccess: TapAccess = .unknown
 
     /// Rate assumed before a device has reported one. Only ever seen during
     /// launch, and replaced as soon as the aggregate device exists.
@@ -45,6 +50,40 @@ final class AudioEngine: ObservableObject {
     /// Nominal sample rate of the active aggregate device. The response curve
     /// uses it so the drawn filters match what the processor actually renders.
     @Published private(set) var sampleRate = AudioEngine.defaultSampleRate
+
+    /// What the engine actually settled on, for the diagnostics report.
+    ///
+    /// Published rather than queried because the Settings window is a separate
+    /// scene that cannot reach the engine, and because these are decisions
+    /// rather than device facts — nothing outside the engine can rediscover
+    /// which tap it got or where it decided to put the channels.
+    @Published private(set) var diagnostics: DiagnosticsReport.Engine?
+
+    /// Whether the EQ is actually shaping audio: switched on *and* running.
+    ///
+    /// The one question the UI should ask about appearance. "Switched off" and
+    /// "cannot run on this device" differ in how they are fixed, not in what
+    /// they mean for the sound, so a control drawn at full strength in either
+    /// case claims something untrue. Deriving this rather than forcing
+    /// `isEnabled` off keeps the two apart where they do differ: the switch
+    /// still holds what the user asked for, and asking for it back is still the
+    /// way out.
+    var isProcessing: Bool {
+        guard isEnabled else { return false }
+        if case .running = status { return true }
+        return false
+    }
+
+    /// Whether asking for the equalizer to be on can achieve anything.
+    ///
+    /// False while the engine cannot run at all — an output device it has to
+    /// refuse, say. Switching on then changes a stored preference and nothing
+    /// else, so the switch is disabled rather than left to report a state the
+    /// sound does not have.
+    var canProcess: Bool {
+        if case .failed = status { return false }
+        return true
+    }
 
     /// Global bypass. When false the engine keeps running but passes audio
     /// through untouched, so toggling is instant and glitch-free.
@@ -70,6 +109,7 @@ final class AudioEngine: ObservableObject {
 
     private var defaultDeviceListener: AudioObjectPropertyListenerBlock?
     private var sampleRateListener: AudioObjectPropertyListenerBlock?
+    private var streamConfigListener: AudioObjectPropertyListenerBlock?
     private var wakeObserver: (any NSObjectProtocol)?
     private var pendingRestart: DispatchWorkItem?
     private var retryCount = 0
@@ -95,6 +135,16 @@ final class AudioEngine: ObservableObject {
 
     func start() {
         pendingRestart?.cancel()
+        // Before the attempt, not after it. These two outlive any single
+        // aggregate device — that is the point of them — and installing them at
+        // the end of `startEngine` meant a start that threw never installed
+        // them at all. Refusing an unsupported output device does throw, and
+        // deliberately does not retry, so the engine was left with no way to
+        // learn that the user had switched to a device it could serve: the
+        // failure was permanent in the strong sense, until the app was
+        // relaunched. Installed here, a device change always gets a hearing.
+        installDefaultDeviceListenerIfNeeded()
+        installWakeObserverIfNeeded()
         do {
             try startEngine()
             retryCount = 0
@@ -103,7 +153,9 @@ final class AudioEngine: ObservableObject {
             let message =
                 (error as? CoreAudioError)?.localizedDescription ?? error.localizedDescription
             logger.error("Engine start failed: \(message, privacy: .public)")
-            status = .failed(message)
+            diagnostics = nil
+            if error is TapUnavailable { tapAccess = .denied }
+            status = .failed(summary: Self.summary(for: error), message: message)
             let isPermanent = (error as? UnusableOutputDevice)?.isPermanent ?? false
             if !isPermanent, retryCount < Self.maxRetries {
                 retryCount += 1
@@ -123,6 +175,7 @@ final class AudioEngine: ObservableObject {
         pendingRestart?.cancel()
         removeSystemObservers()
         teardownEngine()
+        diagnostics = nil
         status = .stopped
     }
 
@@ -168,16 +221,8 @@ final class AudioEngine: ObservableObject {
         if let selfObject = try? processObjectID(for: getpid()) {
             excluded.append(selfObject)
         }
-        let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: excluded)
-        tapDescription.name = "CoreEQ System Tap"
-        tapDescription.muteBehavior = .mutedWhenTapped
-        tapDescription.isPrivate = true
-
-        var newTapID = AudioObjectID(kAudioObjectUnknown)
-        try check(
-            AudioHardwareCreateProcessTap(tapDescription, &newTapID),
-            "creating the system audio tap (check System Audio Recording permission)")
-        tapID = newTapID
+        let tap = try makeTap(excluding: excluded, outputUID: outputUID, outputID: outputID)
+        tapID = tap.id
 
         let description: [String: Any] = [
             kAudioAggregateDeviceNameKey: "CoreEQ Aggregate",
@@ -192,7 +237,7 @@ final class AudioEngine: ObservableObject {
             ],
             kAudioAggregateDeviceTapListKey: [
                 [
-                    kAudioSubTapUIDKey: tapDescription.uuid.uuidString,
+                    kAudioSubTapUIDKey: tap.uuid.uuidString,
                     kAudioSubTapDriftCompensationKey: true,
                 ]
             ],
@@ -216,13 +261,14 @@ final class AudioEngine: ObservableObject {
         sampleRate = rate
 
         // Tell the processor what this device actually looks like, so the render
-        // thread never has to guess. The stereo pair goes to the first two output
-        // channels: on a single device those are its front left and right, and on
-        // an aggregate they are the main sub-device's, which is the one the user
-        // nominated. Every other channel the device has stays silent.
-        processor.setOutputLayout(
-            EQProcessor.OutputLayout(
-                tapChannels: tapChannelCount(of: tapID), leftChannel: 0, rightChannel: 1))
+        // thread never has to guess.
+        let layout = OutputPlan.layout(
+            for: DeviceDescription(
+                tapChannels: tap.channels,
+                isDeviceBound: tap.isDeviceBound,
+                deviceChannels: AudioDevices.outputChannelCount(of: outputID),
+                preferredStereo: AudioDevices.preferredStereoPair(of: outputID)))
+        processor.setOutputLayout(layout)
 
         let processor = self.processor
         var newProcID: AudioDeviceIOProcID?
@@ -234,9 +280,21 @@ final class AudioEngine: ObservableObject {
 
         try check(AudioDeviceStart(aggregateID, newProcID), "starting the aggregate device")
 
+        // Only the two tied to this aggregate. The device and wake observers
+        // are installed by `start()`, so that they exist even when this throws.
         installSampleRateListener()
-        installDefaultDeviceListenerIfNeeded()
-        installWakeObserverIfNeeded()
+        installStreamConfigurationListener()
+
+        diagnostics = DiagnosticsReport.Engine(
+            status: "running",
+            deviceName: outputName,
+            sampleRate: rate,
+            tapChannels: tap.channels,
+            isDeviceBound: tap.isDeviceBound,
+            boundStream: tap.stream,
+            destinations: layout.destinations,
+            aggregateChannels: AudioDevices.outputChannelCount(of: aggregateID)
+        )
 
         status = .running(deviceName: outputName)
         logger.info("Engine running on \(outputName, privacy: .public)")
@@ -268,6 +326,13 @@ final class AudioEngine: ObservableObject {
             AudioObjectRemovePropertyListenerBlock(aggregateID, &addr, .main, sampleRateListener)
         }
         sampleRateListener = nil
+
+        if let streamConfigListener, aggregateID != kAudioObjectUnknown {
+            var addr = propertyAddress(
+                kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeOutput)
+            AudioObjectRemovePropertyListenerBlock(aggregateID, &addr, .main, streamConfigListener)
+        }
+        streamConfigListener = nil
 
         if let ioProcID, aggregateID != kAudioObjectUnknown {
             AudioDeviceStop(aggregateID, ioProcID)
@@ -313,12 +378,45 @@ final class AudioEngine: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
+    /// Rebuilds when the device changes the shape of its output.
+    ///
+    /// The channel map is worked out once, at start, from the stream
+    /// configuration as it was then. A device that renegotiates afterwards
+    /// leaves the map describing a layout that no longer exists, and the audio
+    /// goes to the wrong channels or nowhere. That is a candidate explanation
+    /// for the report of an interface that plays "for a split second and then
+    /// it's gone" — audio starts correct and the device then changes under it.
+    ///
+    /// A rebuild rather than a recomputed map: a device changing its channel
+    /// count invalidates the aggregate built around it, not just the map.
+    private func installStreamConfigurationListener() {
+        var addr = propertyAddress(
+            kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeOutput)
+        let deviceID = aggregateID
+        let block: AudioObjectPropertyListenerBlock = { _, _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.aggregateID == deviceID else { return }
+                self.scheduleRestart(after: 0.3, reason: "output stream configuration changed")
+            }
+        }
+        let status = AudioObjectAddPropertyListenerBlock(deviceID, &addr, .main, block)
+        if status == noErr {
+            streamConfigListener = block
+        } else {
+            logger.error("Failed to install stream configuration listener: \(status)")
+        }
+    }
+
     private func installDefaultDeviceListenerIfNeeded() {
         guard defaultDeviceListener == nil else { return }
         var addr = propertyAddress(kAudioHardwarePropertyDefaultOutputDevice)
         let block: AudioObjectPropertyListenerBlock = { _, _ in
             Task { @MainActor [weak self] in
-                self?.scheduleRestart(after: 0.5, reason: "default output device changed")
+                guard let self else { return }
+                // A different device is a fresh situation: whatever the previous
+                // one exhausted in retries says nothing about this one.
+                self.retryCount = 0
+                self.scheduleRestart(after: 0.5, reason: "default output device changed")
             }
         }
         let status = AudioObjectAddPropertyListenerBlock(
@@ -363,6 +461,19 @@ final class AudioEngine: ObservableObject {
 
     // MARK: - Core Audio property helpers
 
+    /// The tap could not be created.
+    ///
+    /// Its own type because it is the one failure that means the permission was
+    /// refused, and the only one the Settings pane may describe that way.
+    private struct TapUnavailable: Error, LocalizedError {
+        let status: OSStatus
+
+        var errorDescription: String? {
+            "CoreEQ could not capture system audio (OSStatus \(status)). Check that "
+                + "System Audio Recording is allowed in Privacy & Security."
+        }
+    }
+
     /// A default output device the engine cannot render through.
     ///
     /// Separate from `CoreAudioError` because nothing here is a failed Core
@@ -405,6 +516,15 @@ final class AudioEngine: ObservableObject {
         let operation: String
 
         var errorDescription: String? { "\(operation) failed (OSStatus \(status))" }
+    }
+
+    /// A few words naming what went wrong, for the menu.
+    private static func summary(for error: any Error) -> String {
+        switch error {
+        case is UnusableOutputDevice: return "Unsupported output device"
+        case is TapUnavailable: return "System audio not allowed"
+        default: return "Audio engine error"
+        }
     }
 
     private func check(_ status: OSStatus, _ operation: String) throws {
@@ -456,9 +576,72 @@ final class AudioEngine: ObservableObject {
         return name?.takeRetainedValue() as String? ?? ""
     }
 
+    /// The system audio tap, and what it will deliver.
+    private struct Tap {
+        let id: AudioObjectID
+        let uuid: UUID
+        let channels: Int
+        /// Output stream it was bound to, or -1 for the stereo global tap.
+        let stream: Int
+        /// Whether this is the device- and stream-bound tap, whose format
+        /// matches the device's, rather than the stereo mixdown.
+        let isDeviceBound: Bool
+    }
+
+    /// Creates the tap, preferring the one that does not mix the audio down.
+    ///
+    /// A tap bound to the output device's stream takes the format of that
+    /// stream, so a device presenting eight channels is captured as eight. The
+    /// stereo global tap — what CoreEQ has always used — instead delivers a two
+    /// channel mixdown, which on a surround device means the surround content is
+    /// gone and, because the tap mutes the original at the hardware, gone
+    /// irrecoverably while CoreEQ runs.
+    ///
+    /// The device-bound form binds the tap to one device and stream, which is
+    /// newer ground and a per-device failure mode CoreEQ has never had. So it is
+    /// attempted and not required: a device it cannot serve degrades to the
+    /// stereo behaviour that already worked rather than to no audio at all.
+    private func makeTap(
+        excluding excluded: [AudioObjectID], outputUID: String, outputID: AudioDeviceID
+    ) throws -> Tap {
+        let numbers = excluded.map(NSNumber.init(value:))
+        // A device can present several output streams and the tap binds to one,
+        // so bind it to the widest rather than to whichever happens to be first.
+        let stream = OutputPlan.widestStream(
+            of: AudioDevices.outputStreamChannelCounts(of: outputID))
+        if let tap = try? makeTap(
+            CATapDescription(
+                __excludingProcesses: numbers, andDeviceUID: outputUID, withStream: stream),
+            isDeviceBound: true, stream: stream)
+        {
+            logger.info("Device-bound tap: \(tap.channels, privacy: .public) channels")
+            return tap
+        }
+
+        logger.info("Device-bound tap unavailable; using the stereo global tap")
+        return try makeTap(
+            CATapDescription(stereoGlobalTapButExcludeProcesses: excluded),
+            isDeviceBound: false, stream: -1)
+    }
+
+    private func makeTap(
+        _ description: CATapDescription, isDeviceBound: Bool, stream: Int
+    ) throws -> Tap {
+        description.name = "CoreEQ System Tap"
+        description.muteBehavior = .mutedWhenTapped
+        description.isPrivate = true
+
+        var id = AudioObjectID(kAudioObjectUnknown)
+        let status = AudioHardwareCreateProcessTap(description, &id)
+        guard status == noErr else { throw TapUnavailable(status: status) }
+        tapAccess = .granted
+        return Tap(
+            id: id, uuid: description.uuid, channels: tapChannelCount(of: id),
+            stream: stream, isDeviceBound: isDeviceBound)
+    }
+
     /// Channels the tap will deliver, read from the tap's own format rather than
-    /// assumed from what we asked for. Falls back to stereo, which is what
-    /// `CATapDescription(stereoGlobalTapButExcludeProcesses:)` builds.
+    /// assumed from what we asked for.
     private func tapChannelCount(of tap: AudioObjectID) -> Int {
         var addr = propertyAddress(kAudioTapPropertyFormat)
         var format = AudioStreamBasicDescription()

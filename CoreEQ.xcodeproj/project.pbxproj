@@ -50,6 +50,7 @@
 				UI/MenuBar/QuickEQMenuMetrics.swift,
 				UI/PowerToggleStyle.swift,
 				UI/Settings/AboutSettingsView.swift,
+				UI/Settings/DiagnosticsSettingsView.swift,
 				UI/Settings/GeneralSettingsView.swift,
 				UI/Settings/SettingsOpener.swift,
 				UI/Settings/SettingsView.swift,

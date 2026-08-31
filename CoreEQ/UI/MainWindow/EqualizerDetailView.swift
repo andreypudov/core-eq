@@ -49,6 +49,16 @@ struct EqualizerDetailView: View {
             header
 
             graph
+                // The same dimming as every other control, from the same rule.
+                // The curve is the one that actively misleads while nothing is
+                // being processed — it draws a shaped response for audio that is
+                // not being shaped — so it also carries the explanation.
+                .opacity(audioEngine.isProcessing ? 1.0 : 0.5)
+                .overlay {
+                    if let failure = engineFailure {
+                        engineOverlay(failure)
+                    }
+                }
 
             editor
         }
@@ -95,7 +105,7 @@ struct EqualizerDetailView: View {
                 // state should not hold a phrase's worth of the row open at
                 // every other moment — and at the window's minimum width, that
                 // phrase is what would push the preset out of the header.
-                if let warning = engineWarning {
+                if let warning = engineWarning, engineFailure == nil {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
@@ -109,12 +119,22 @@ struct EqualizerDetailView: View {
                 // window, so it belongs at the end of the row rather than inside
                 // any one section. Deliberately not dimmed with the rest when
                 // off — it is the way back on.
+                //
+                // When the engine cannot run at all it is dimmed, because then
+                // it is not the way back on: the way back is a different output
+                // device. Its position still shows what the user asked for, so
+                // the setting is waiting rather than lost.
                 Toggle("", isOn: $audioEngine.isEnabled)
                     .toggleStyle(.power)
                     .labelsHidden()
+                    .disabled(!audioEngine.canProcess)
+                    .opacity(audioEngine.canProcess ? 1.0 : 0.5)
                     .accessibilityLabel("Equalizer")
                     .help(
-                        audioEngine.isEnabled ? "Turn the equalizer off" : "Turn the equalizer on")
+                        audioEngine.canProcess
+                            ? (audioEngine.isEnabled
+                                ? "Turn the equalizer off" : "Turn the equalizer on")
+                            : audioEngine.status.description)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -323,8 +343,8 @@ struct EqualizerDetailView: View {
                 .fill(Color.primary.opacity(0.035))
                 .strokeBorder(Theme.blockBorder, lineWidth: 1)
         )
-        .opacity(audioEngine.isEnabled ? 1.0 : 0.5)
-        .allowsHitTesting(audioEngine.isEnabled)
+        .opacity(audioEngine.isProcessing ? 1.0 : 0.5)
+        .allowsHitTesting(audioEngine.isProcessing)
         .help("Point at a handle to read its value; drag it to adjust; double-click to reset it")
     }
 
@@ -369,7 +389,7 @@ struct EqualizerDetailView: View {
                     }
                 }
             }
-            .opacity(audioEngine.isEnabled ? 1.0 : 0.5)
+            .opacity(audioEngine.isProcessing ? 1.0 : 0.5)
         }
     }
 
@@ -387,7 +407,7 @@ struct EqualizerDetailView: View {
                 case .parametric:
                     FilterListView(
                         profileManager: profileManager,
-                        isEnabled: audioEngine.isEnabled,
+                        isEnabled: audioEngine.isProcessing,
                         selectedFilterID: $selectedFilterID
                     )
                 }
@@ -400,7 +420,7 @@ struct EqualizerDetailView: View {
             .contentBlock()
             .borderLabel { editorTabs }
 
-            GlobalGainView(profileManager: profileManager, isEnabled: audioEngine.isEnabled)
+            GlobalGainView(profileManager: profileManager, isEnabled: audioEngine.isProcessing)
         }
         .frame(height: Theme.editorHeight)
         // Room for the labels hanging off the top border, so they cut the stroke
@@ -527,7 +547,7 @@ struct EqualizerDetailView: View {
                 value: gainBinding(at: slot),
                 range: BuiltInProfiles.gainRange,
                 step: 0.5,
-                isEnabled: audioEngine.isEnabled,
+                isEnabled: audioEngine.isProcessing,
                 isActive: isActive,
                 onDragChange: { isDragging in draggingBand = isDragging ? slot : nil },
                 onReset: { profileManager.resetBand(at: slot) }
@@ -551,7 +571,7 @@ struct EqualizerDetailView: View {
         }
         .simultaneousGesture(
             TapGesture(count: 2).onEnded {
-                guard audioEngine.isEnabled else { return }
+                guard audioEngine.isProcessing else { return }
                 profileManager.resetBand(at: slot)
             }
         )
@@ -575,6 +595,65 @@ struct EqualizerDetailView: View {
 
     /// Nil while the engine is processing normally — a healthy engine needs no
     /// chrome in a window meant to look like a system utility.
+    /// The message for a failure, or nil when the engine is running or merely
+    /// stopped.
+    ///
+    /// Separate from `engineWarning` because the two states deserve different
+    /// treatment. Stopped is benign and the symbol alone is enough. Failed means
+    /// the audio is *not* being equalized and there is usually one specific
+    /// thing to change — which no one will ever discover from a tooltip on a
+    /// 12-point icon.
+    private var engineFailure: String? {
+        guard case .failed(_, let message) = audioEngine.status else { return nil }
+        return message
+    }
+
+    /// The failure, stated over the curve it invalidates.
+    ///
+    /// On the graph rather than above it for two reasons. The curve is what
+    /// misleads while the engine is down, so the explanation belongs on the
+    /// thing being contradicted. And a block inserted into the column would move
+    /// the editor down every time the engine faltered, which is a layout change
+    /// the size of the message — the header comment above was protecting exactly
+    /// that, and an overlay costs nothing.
+    ///
+    /// Only the card takes clicks. The rest of the plot stays live, because an
+    /// engine that cannot run is not a reason to stop someone setting up the EQ
+    /// they want when it does.
+    private func engineOverlay(_ message: String) -> some View {
+        VStack(spacing: 8) {
+            Label("Not processing audio", systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            Text(message)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button("Details") {
+                SettingsOpener.shared.open(tab: .diagnostics)
+            }
+            .controlSize(.small)
+            .help("Open the diagnostics report")
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(maxWidth: 320)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.primary.opacity(0.12))
+        )
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+        .accessibilityElement(children: .combine)
+        .transition(.opacity)
+    }
+
     private var engineWarning: String? {
         switch audioEngine.status {
         case .running: return nil

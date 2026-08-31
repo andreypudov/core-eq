@@ -588,6 +588,121 @@ struct EQProcessorTests {
             unfed.allSatisfy { $0 == 0 }, "the chain wrote into a channel the tap does not feed")
     }
 
+    // MARK: - Multichannel
+
+    /// Interleaved frames where channel `c` carries a value identifying itself,
+    /// so a channel arriving in the wrong place is visible.
+    private func identifiableChannels(channels: Int, frames: Int) -> [Float] {
+        (0..<frames).flatMap { frame in
+            (0..<channels).map { Float(($0 + 1) * 100 + frame) }
+        }
+    }
+
+    /// A tap that is not a stereo mixdown: every channel it delivers reaches the
+    /// device, in order and untouched.
+    @Test func aMultichannelTapCarriesEveryChannel() {
+        let processor = makeProcessor()
+        processor.setOutputLayout(.init(tapChannels: 6, destinations: Array(0..<6)))
+        let frames = 8
+        let input = identifiableChannels(channels: 6, frames: frames)
+
+        let output = renderAcrossLayout(
+            processor, input: input, inputChannels: 6, outputBuffers: [6], frames: frames)[0]
+
+        #expect(output == input, "a channel was dropped, reordered, or altered")
+    }
+
+    /// Delay lines are per channel. Feeding every channel the same signal must
+    /// produce the same output on every channel — if any state were shared, the
+    /// channels would diverge as the filter rings.
+    @Test func everyChannelKeepsItsOwnFilterState() {
+        let boost = EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)
+        let processor = makeProcessor(filters: [boost])
+        processor.setOutputLayout(.init(tapChannels: 6, destinations: Array(0..<6)))
+        let frames = 512
+        let tone = sine(1_000, frames: frames)
+        let input = tone.flatMap { sample in [Float](repeating: sample, count: 6) }
+
+        var last: [Float] = []
+        for _ in 0..<12 {
+            last =
+                renderAcrossLayout(
+                    processor, input: input, inputChannels: 6, outputBuffers: [6], frames: frames)[
+                    0]
+        }
+
+        let first = stride(from: 0, to: frames * 6, by: 6).map { last[$0] }
+        for channel in 1..<6 {
+            let samples = stride(from: channel, to: frames * 6, by: 6).map { last[$0] }
+            #expect(samples == first, "channel \(channel) diverged from channel 0")
+        }
+        #expect(rms(first) > rms(tone) * 1.5, "the boost never reached the channels")
+    }
+
+    /// The stereo pair goes where the device says it keeps one, which the Core
+    /// Audio header is explicit need not be the first two channels.
+    @Test func theStereoPairFollowsTheDevicesPreferredChannels() {
+        let processor = makeProcessor()
+        processor.setOutputLayout(.init(tapChannels: 2, destinations: [2, 3]))
+        let frames = 4
+
+        let output = renderAcrossLayout(
+            processor, input: stereoRamp(frames: frames), inputChannels: 2,
+            outputBuffers: [6], frames: frames
+        )[0]
+
+        for frame in 0..<frames {
+            let base = frame * 6
+            #expect(output[base + 2] == Float(frame + 1), "left did not land on channel 2")
+            #expect(output[base + 3] == -Float(frame + 1), "right did not land on channel 3")
+            #expect(
+                output[base] == 0 && output[base + 1] == 0,
+                "audio reached channels the device does not use for stereo")
+        }
+    }
+
+    /// A tap wider than the device drops the channels that have nowhere to go,
+    /// rather than writing past the end of a buffer.
+    @Test func channelsWithNowhereToGoAreDropped() {
+        let processor = makeProcessor()
+        processor.setOutputLayout(.init(tapChannels: 6, destinations: Array(0..<6)))
+        let frames = 4
+        let input = identifiableChannels(channels: 6, frames: frames)
+
+        let output = renderAcrossLayout(
+            processor, input: input, inputChannels: 6, outputBuffers: [2], frames: frames)[0]
+
+        for frame in 0..<frames {
+            #expect(output[frame * 2] == Float(100 + frame), "channel 0 was lost")
+            #expect(output[frame * 2 + 1] == Float(200 + frame), "channel 1 was lost")
+        }
+    }
+
+    /// The chain applies to every channel, LFE included. That is the policy —
+    /// channel roles are not reliably reported, so a rule that depends on them
+    /// would behave differently from device to device with nothing to explain it.
+    @Test func theChainAppliesUniformlyToEveryChannel() {
+        let boost = EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)
+        let processor = makeProcessor(filters: [boost])
+        processor.setOutputLayout(.init(tapChannels: 6, destinations: Array(0..<6)))
+        let frames = 512
+        let tone = sine(1_000, frames: frames)
+        let input = tone.flatMap { sample in [Float](repeating: sample, count: 6) }
+
+        var last: [Float] = []
+        for _ in 0..<12 {
+            last =
+                renderAcrossLayout(
+                    processor, input: input, inputChannels: 6, outputBuffers: [6], frames: frames)[
+                    0]
+        }
+
+        for channel in 0..<6 {
+            let samples = stride(from: channel, to: frames * 6, by: 6).map { last[$0] }
+            #expect(rms(samples) > rms(tone) * 1.5, "channel \(channel) was left unequalized")
+        }
+    }
+
     // MARK: - The spectrum tap
 
     /// The analyzer draws what reaches the speakers, so the tap has to carry

@@ -13,14 +13,28 @@ final class EngineStatusBridge: ObservableObject {
 
     @Published private(set) var status: AudioEngine.Status = .stopped
 
-    private var cancellable: AnyCancellable?
+    /// What the engine settled on, for the Diagnostics pane. Nil when it is not
+    /// running, which the report says rather than hides.
+    @Published private(set) var diagnostics: DiagnosticsReport.Engine?
+
+    /// What the engine observed about the system audio permission, which is not
+    /// the same question as whether it is running.
+    @Published private(set) var tapAccess: TapAccess = .unknown
+
+    private var cancellables: Set<AnyCancellable> = []
 
     private init() {}
 
     /// Called once, by whoever owns the engine.
     func follow(_ engine: AudioEngine) {
-        cancellable = engine.$status.sink { [weak self] status in
-            self?.status = status
-        }
+        engine.$status
+            .sink { [weak self] status in self?.status = status }
+            .store(in: &cancellables)
+        engine.$diagnostics
+            .sink { [weak self] diagnostics in self?.diagnostics = diagnostics }
+            .store(in: &cancellables)
+        engine.$tapAccess
+            .sink { [weak self] access in self?.tapAccess = access }
+            .store(in: &cancellables)
     }
 }
