@@ -109,7 +109,7 @@ struct EqualizerDetailView: View {
                 // phrase is what would push the preset out of the header.
                 if let warning = engineWarning, engineFailure == nil {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12))
+                        .font(Theme.Font.label)
                         .foregroundStyle(.secondary)
                         .help(audioEngine.status.description)
                         .accessibilityLabel(warning)
@@ -235,13 +235,13 @@ struct EqualizerDetailView: View {
     private func deviceLines(showsChevron: Bool) -> some View {
         HStack(spacing: 7) {
             Image(systemName: outputs.defaultDeviceSymbolName)
-                .font(.system(size: 13))
+                .font(Theme.Font.body)
                 .foregroundStyle(
                     outputs.devices.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(outputs.defaultDeviceName)
-                    .font(.system(size: 13))
+                    .font(Theme.Font.body)
                     .foregroundStyle(
                         outputs.devices.isEmpty
                             ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
@@ -251,7 +251,7 @@ struct EqualizerDetailView: View {
 
                 HStack(spacing: 4) {
                     Text(profileManager.activeProfileName)
-                        .font(.system(size: 11))
+                        .font(Theme.Font.secondary)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -272,7 +272,7 @@ struct EqualizerDetailView: View {
                 // The menu's own indicator is suppressed, so the control has to
                 // say it is one.
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(Theme.Font.labelEmphasized)
                     .foregroundStyle(.secondary)
             }
         }
@@ -441,7 +441,7 @@ struct EqualizerDetailView: View {
             SettingsOpener.shared.open(tab: .general)
         } label: {
             Image(systemName: "gearshape")
-                .font(.system(size: 13))
+                .font(Theme.Font.body)
                 .foregroundStyle(.secondary)
                 .padding(3)
                 .contentShape(Rectangle())
@@ -538,7 +538,7 @@ struct EqualizerDetailView: View {
             // quiet line rather than eleven numbers competing with the ones that
             // moved.
             Text(BandFormat.gain(band.gain))
-                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .font(Theme.Font.value)
                 .foregroundStyle(
                     band.gain == 0 ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary)
                 )
@@ -559,7 +559,7 @@ struct EqualizerDetailView: View {
             .accessibilityValue(String(format: "%+.1f decibels", band.gain))
 
             Text(BandFormat.frequency(band.frequency))
-                .font(.system(size: 11))
+                .font(Theme.Font.secondary)
                 .foregroundStyle(.secondary)
                 .frame(height: Theme.BandRow.labelHeight)
         }
@@ -619,7 +619,7 @@ struct EqualizerDetailView: View {
     private func permissionOverlay(_ offer: AudioPermissionGate.Offer) -> some View {
         VStack(spacing: 10) {
             Label("CoreEQ needs permission to process audio", systemImage: "waveform")
-                .font(.system(size: 12, weight: .semibold))
+                .font(Theme.Font.heading)
                 .foregroundStyle(.primary)
 
             Text(
@@ -628,7 +628,7 @@ struct EqualizerDetailView: View {
                     + "recorded, stored, or sent anywhere, and quitting CoreEQ hands the audio "
                     + "back immediately."
             )
-            .font(.system(size: 11))
+            .font(Theme.Font.label)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -641,7 +641,7 @@ struct EqualizerDetailView: View {
                     .keyboardShortcut(.defaultAction)
 
                 Text("macOS will ask you to confirm.")
-                    .font(.system(size: 10))
+                    .font(Theme.Font.label)
                     .foregroundStyle(.tertiary)
             case .openSystemSettings:
                 // macOS raises its prompt once. After that only System Settings
@@ -652,7 +652,7 @@ struct EqualizerDetailView: View {
                     .controlSize(.large)
 
                 Text("Allow CoreEQ under Screen & System Audio Recording.")
-                    .font(.system(size: 10))
+                    .font(Theme.Font.label)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -683,11 +683,11 @@ struct EqualizerDetailView: View {
     private func engineOverlay(_ message: String) -> some View {
         VStack(spacing: 8) {
             Label("Not processing audio", systemImage: "exclamationmark.triangle.fill")
-                .font(.system(size: 12, weight: .semibold))
+                .font(Theme.Font.heading)
                 .foregroundStyle(.primary)
 
             Text(message)
-                .font(.system(size: 11))
+                .font(Theme.Font.label)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

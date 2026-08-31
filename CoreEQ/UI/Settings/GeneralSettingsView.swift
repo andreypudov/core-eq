@@ -26,12 +26,12 @@ struct GeneralSettingsView: View {
                         "macOS refused the change. Open System Settings → General → Login Items to set it there.",
                         systemImage: "exclamationmark.triangle"
                     )
-                    .font(.callout)
+                    .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
                 }
             } footer: {
                 Text("CoreEQ has no window at login — it waits in the menu bar.")
-                    .font(.callout)
+                    .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
             }
 
@@ -68,7 +68,7 @@ struct GeneralSettingsView: View {
                 }
             } footer: {
                 Text(permission.explanation)
-                    .font(.callout)
+                    .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
             }
         }

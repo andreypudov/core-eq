@@ -34,14 +34,14 @@ struct ValueField: View {
             TextField("", value: $value, format: format)
                 .textFieldStyle(.plain)
                 .multilineTextAlignment(.trailing)
-                .font(.system(size: 11).monospacedDigit())
+                .font(Theme.Font.value)
                 .focused($isFocused)
                 .disabled(!isEnabled)
                 .accessibilityLabel(accessibilityLabel)
 
             if let unit {
                 Text(unit)
-                    .font(.system(size: 11))
+                    .font(Theme.Font.secondary)
                     .foregroundStyle(.tertiary)
             }
         }

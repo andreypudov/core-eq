@@ -70,7 +70,7 @@ struct FilterListView: View {
             // The size the Preamp readout and the band captions use, so the
             // window has one voice for the small print rather than a different
             // one per section.
-            .font(.system(size: 11, weight: .medium))
+            .font(Theme.Font.value)
             .foregroundStyle(.tertiary)
             .fixedSize()
             .frame(width: width, alignment: alignment)
@@ -91,7 +91,7 @@ struct FilterListView: View {
                     Image(systemName: "plus")
                     Text("Add Band")
                 }
-                .font(.system(size: 12))
+                .font(Theme.Font.label)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -202,13 +202,13 @@ struct FilterListView: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("No bands yet.")
-                .font(.system(size: 12))
+                .font(Theme.Font.label)
                 .foregroundStyle(.secondary)
 
             Text(
                 "A band boosts or cuts one frequency, on top of the Graphic sliders. Add one below, or double-click the graph where you want it."
             )
-            .font(.system(size: 12))
+            .font(Theme.Font.label)
             .foregroundStyle(.tertiary)
             .fixedSize(horizontal: false, vertical: true)
         }

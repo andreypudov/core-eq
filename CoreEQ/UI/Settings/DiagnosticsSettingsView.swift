@@ -19,20 +19,20 @@ struct DiagnosticsSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Audio diagnostics")
-                .font(.headline)
+                .font(Theme.Font.heading)
 
             Text(
                 "What CoreEQ sees on this Mac. Include this with a bug report — it "
                     + "answers most questions about audio problems. It lists your audio "
                     + "device names and contains nothing else about you."
             )
-            .font(.caption)
+            .font(Theme.Font.label)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
             ScrollView([.horizontal, .vertical]) {
                 Text(report)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(Theme.Font.report)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(6)

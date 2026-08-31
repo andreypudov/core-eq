@@ -50,7 +50,7 @@ struct GlobalGainView: View {
                     // being computed then, and dimming it would say the control
                     // is idle at the moment it is doing the most work.
                     Text(BandFormat.gain(profileManager.currentPreamp))
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .font(Theme.Font.value)
                         .foregroundStyle(
                             profileManager.currentPreamp == 0 && !profileManager.isAutoGain
                                 ? AnyShapeStyle(.tertiary)
@@ -107,7 +107,7 @@ struct GlobalGainView: View {
         // Centred on the block's top border, over the track it names.
         .borderLabel {
             Text("Preamp")
-                .font(.system(size: 12, weight: .semibold))
+                .font(Theme.Font.labelEmphasized)
                 .accessibilityAddTraits(.isHeader)
         }
         .opacity(isEnabled ? 1.0 : 0.5)
@@ -131,7 +131,7 @@ struct GlobalGainView: View {
             profileManager.setAutoGain(!profileManager.isAutoGain)
         } label: {
             Text("AUTO")
-                .font(.system(size: 9, weight: .semibold))
+                .font(Theme.Font.labelEmphasized)
                 .kerning(0.6)
                 // Sized to the word, not to the column: a switch stretched the
                 // full width would read as a bar across the bottom of the block
