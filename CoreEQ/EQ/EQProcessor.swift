@@ -92,6 +92,13 @@ final class EQProcessor: @unchecked Sendable {
         /// Used only to recognise the buffer, never to route.
         var primaryTapChannels: Int
 
+        /// Channels the render path will actually carry.
+        ///
+        /// A tap wider than `maxChannels` is routed as far as the delay lines
+        /// reach and the rest is dropped. Derived here rather than recomputed by
+        /// callers, so the cap is stated in one place.
+        var routedChannels: Int { min(tapChannels, EQProcessor.maxChannels) }
+
         /// One tap, whose channels are read in order — every device CoreEQ has
         /// ever seen presents its output as a single stream, and this is that
         /// case written down.

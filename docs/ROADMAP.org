@@ -104,21 +104,31 @@ Two things to do, and they are probably one change:
 device reporting more than two channels either works or is reported in the UI
 rather than failing silently.
 
-*Implemented, not yet confirmed.* Both bullets are done. =EQProcessor= now takes
-an explicit output layout, worked out once on the main thread from the
-aggregate's stream configuration and the tap's format, and places the tap's
-stereo pair at named global output channels instead of pairing buffers by
-position — so a stereo tap against an eight channel device fills the front pair
-and silences the other six, where it used to pack four frames of stereo into one
-frame of eight and zero the remaining three quarters. It also finds the tap in
-the input list by matching its format rather than by index, which is the second
-bullet. Regression tests cover eight channel interleaved, one buffer per
-sub-device, fully non-interleaved, a tap that is not the first input buffer, and
-an output list with no buffers at all.
+*Done.* =EQProcessor= takes an explicit output layout, worked out once on the
+main thread from the device's streams and the taps' formats, and places each
+tap channel at a named output channel instead of pairing buffers by position. A
+tap is bound to every output stream the device presents, because a tap binds to
+one stream and takes that stream's format — binding to the widest alone captured
+two channels of sixteen on an interface presenting eight stereo streams. The
+chain runs on every routed channel with its own delay lines.
 
-What is missing is a listening test. No multichannel hardware was available, so
-none of the three reported configurations has been confirmed by ear. That is
-what actually closes this item.
+Confirmed on hardware, against a sixteen channel device:
+
+- The device-bound tap delivers sixteen channels of 32-bit float, not a stereo
+  mixdown.
+- The aggregate built around it presents sixteen output channels, and the
+  device's own input buffers are accounted for — the tap is not buffer zero on a
+  duplex device.
+- Six channel content arrives as six discrete channels and is placed one to one,
+  with the remaining ten silent.
+- Flat is bit-exact. A +12 dB bell measures +12.0 dB.
+- Driving six channels with six different tones, each channel's measured
+  response matched the drawn curve to within 0.01 dB — which is only true if the
+  chain runs per channel with per-channel state.
+
+What remains untested on hardware is the per-stream path itself: every device
+available here presents a single output stream, so one-tap-per-stream is covered
+by unit tests against a fake tap factory rather than by a real interface.
 
 ** Permission text before the system prompt, not after
 
@@ -154,14 +164,18 @@ be a handful of buffers and inaudible.
 
 ** Echo and doubled audio
 
-Four symptoms that sound like one another, and the third is the one that makes
+Three symptoms that sound like one another, and the second is the one that makes
 this a defect rather than an explanation:
 
 - Running alongside SoundSource produces a flangey delay.
 - With CoreEQ active, screen recording fails in *every* capture tool tested, and
-  the captured audio has “a Doppler echo delay”.
+  the captured audio has “a Doppler echo delay”. Reported twice.
 - After waking from sleep, audio sometimes plays with an echo.
-- The Audio4C reports above, where sound starts and then vanishes.
+
+A fourth symptom was listed here — the Audio4C reports where sound starts and
+then vanishes — and has been removed. It was the channel layout bug in
+*Multichannel outputs* above, not doubling, and is fixed. It is named here so
+nobody reads it back as evidence for this item.
 
 The SoundSource case has an easy story: two processors in one path, so the
 signal arrives twice slightly offset. The wake-from-sleep case does not — no
@@ -170,6 +184,15 @@ of the audio by itself. The likely shape is an IO proc or an aggregate device
 that survives a state change it should not have survived, leaving two of them
 running. That would explain the echo after wake, and it is worth testing
 whether it also explains the capture-tool case.
+
+The feedback shape is not hypothetical, and it is worth writing down because it
+was observed accidentally. While verifying the multichannel work, a test harness
+tapped system audio and wrote its own output back to the same device without
+excluding itself from the tap. It captured what it had just written, and the
+level compounded across the run — a 0.4 peak measured 1.56, then 26, then 71.
+=AudioEngine= excludes its own process for exactly this reason. Two taps in one
+path, one of them playing back what the other captures, is the same shape, and
+that is what a capture tool and CoreEQ are doing to each other.
 
 Three things to do:
 
@@ -312,13 +335,27 @@ elsewhere and offered to help.
 There is already an FFT feeding the spectrum analyser; a time-domain view is a
 second read of the same buffer, tied to the A/B toggle.
 
-** Browsing the AutoEQ database in-app
+** Loading presets from the AutoEQ database
+
+Requested, naming [[https://autoeq.app][autoeq.app]] as the source.
 
 The step past file import: search the community database by headphone model and
-apply, the way Poweramp does. Open data, so it is a network fetch plus the 1.9
-parser. Note that this would be CoreEQ's first outbound network connection,
-which is currently a privacy claim worth keeping. If it happens, it happens on
-explicit user action and is stated as such.
+apply it, the way Poweramp does. Open data, so the work is a network fetch plus
+the parser 1.9 already has to write.
+
+*Automatic* is worth pinning down before any of this is built, because it reads
+two ways. Fetching a profile without the user downloading a file by hand is this
+item, and is well defined. Choosing a profile for whatever headphones happen to
+be connected is *Preset recommendation* below, and needs the app to identify the
+device rather than the user to name it — a different and much larger problem.
+
+The two readings also differ on privacy, which is the part that decides the
+shape. This would be CoreEQ's first outbound network connection, and "nothing is
+recorded, stored, or transmitted" is a claim worth keeping. A fetch the user
+asks for by searching a model name is compatible with that and can be stated
+plainly. A fetch that happens on its own — on launch, or whenever a device
+appears — is not, whatever it is fetching. So if this ships, it ships on explicit
+user action, and the wording in the app says so.
 
 ** Preset recommendation
 

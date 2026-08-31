@@ -103,6 +103,36 @@ enum OutputPlan {
         }
     }
 
+    /// The layout for whatever taps were assembled.
+    ///
+    /// The single entry point. Which shape applies is a fact about the taps —
+    /// one per stream, or one covering the device — and not a decision a caller
+    /// should be making a second time.
+    static func layout(
+        forTaps taps: [AssembledTap],
+        deviceChannels: Int,
+        preferredStereo: StereoPair?,
+        inputBuffers: Int
+    ) -> EQProcessor.OutputLayout {
+        guard let first = taps.first else {
+            return EQProcessor.OutputLayout(tapChannels: 0, destinations: [])
+        }
+        guard taps.count == 1 else {
+            return layout(
+                forTaps: taps.map {
+                    TapPlan(channels: $0.channels, firstOutputChannel: $0.firstChannel)
+                },
+                inputBuffers: inputBuffers)
+        }
+        return layout(
+            for: DeviceDescription(
+                tapChannels: first.channels,
+                isDeviceBound: first.isDeviceBound,
+                deviceChannels: deviceChannels,
+                preferredStereo: preferredStereo,
+                inputBuffers: inputBuffers))
+    }
+
     /// A tap for every output stream, in the device's own stream order.
     ///
     /// A tap binds to exactly one stream and takes that stream's format —

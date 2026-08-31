@@ -273,4 +273,87 @@ struct OutputPlanTests {
         #expect(ChannelRoles.labels(fromBitmap: []).isEmpty)
     }
 
+    // MARK: - One entry point for whatever was assembled
+
+    private func tap(
+        channels: Int, firstOutputChannel: Int = 0, isDeviceBound: Bool = true, stream: Int = 0
+    ) -> AssembledTap {
+        AssembledTap(
+            id: 1, uuid: UUID(), channels: channels, stream: stream,
+            isDeviceBound: isDeviceBound, firstChannel: firstOutputChannel)
+    }
+
+    /// One tap covering the device maps straight through.
+    @Test func oneAssembledTapIsTheDeviceLayout() {
+        let layout = OutputPlan.layout(
+            forTaps: [tap(channels: 16)], deviceChannels: 16, preferredStereo: nil,
+            inputBuffers: 0)
+
+        #expect(layout.tapChannels == 16)
+        #expect(layout.destinations == Array(0..<16))
+    }
+
+    /// Several taps are routed tap by tap, at the offsets they were given.
+    @Test func severalAssembledTapsAreRoutedInOrder() {
+        let taps = [
+            tap(channels: 2, firstOutputChannel: 0, stream: 0),
+            tap(channels: 2, firstOutputChannel: 2, stream: 1),
+            tap(channels: 4, firstOutputChannel: 4, stream: 2),
+        ]
+
+        let layout = OutputPlan.layout(
+            forTaps: taps, deviceChannels: 8, preferredStereo: nil, inputBuffers: 0)
+
+        #expect(layout.tapChannels == 8)
+        #expect(layout.destinations == Array(0..<8))
+        #expect(layout.sourceBuffers == [0, 0, 1, 1, 2, 2, 2, 2])
+        #expect(layout.sourceChannels == [0, 1, 0, 1, 0, 1, 2, 3])
+    }
+
+    /// A mixdown still follows the device's stereo pair, through the same call.
+    @Test func anAssembledMixdownIsStillPlaced() {
+        let layout = OutputPlan.layout(
+            forTaps: [tap(channels: 2, isDeviceBound: false, stream: -1)],
+            deviceChannels: 8, preferredStereo: StereoPair(left: 4, right: 5), inputBuffers: 0)
+
+        #expect(layout.destinations == [4, 5])
+    }
+
+    /// A duplex device pushes every tap past its own input buffers, whichever
+    /// shape applies.
+    @Test func assembledTapsAreOffsetPastTheDevicesInput() {
+        let single = OutputPlan.layout(
+            forTaps: [tap(channels: 16)], deviceChannels: 16, preferredStereo: nil,
+            inputBuffers: 1)
+        #expect(single.tapBufferIndex == 1)
+
+        let several = OutputPlan.layout(
+            forTaps: [
+                tap(channels: 2, stream: 0), tap(channels: 2, firstOutputChannel: 2, stream: 1),
+            ],
+            deviceChannels: 4, preferredStereo: nil, inputBuffers: 1)
+        #expect(several.tapBufferIndex == 1)
+        #expect(several.sourceBuffers == [1, 1, 2, 2])
+    }
+
+    /// No taps at all is an empty layout rather than a crash: the engine refuses
+    /// to start in that case, and the render path must survive being told so.
+    @Test func noAssembledTapsIsAnEmptyLayout() {
+        let layout = OutputPlan.layout(
+            forTaps: [], deviceChannels: 16, preferredStereo: nil, inputBuffers: 0)
+
+        #expect(layout.tapChannels == 0)
+        #expect(layout.destinations.isEmpty)
+    }
+
+    /// The cap is stated once, on the layout, rather than recomputed by callers.
+    @Test func aTapWiderThanTheProcessorReportsWhatItCanRoute() {
+        let layout = OutputPlan.layout(
+            forTaps: [tap(channels: EQProcessor.maxChannels + 8)],
+            deviceChannels: EQProcessor.maxChannels + 8, preferredStereo: nil, inputBuffers: 0)
+
+        #expect(layout.tapChannels == EQProcessor.maxChannels + 8)
+        #expect(layout.routedChannels == EQProcessor.maxChannels)
+    }
+
 }

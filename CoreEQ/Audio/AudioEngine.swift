@@ -189,72 +189,145 @@ final class AudioEngine: ObservableObject {
 
     // MARK: - Engine assembly
 
+    /// Builds the whole audio path, or throws having built none of it.
+    ///
+    /// Deliberately a sequence of named steps rather than one procedure: each
+    /// one is a place the path has actually broken, and the order matters more
+    /// than any individual call. In particular the device is refused *before*
+    /// the tap exists, because the tap is what mutes the machine.
     private func startEngine() throws {
         teardownEngine()
 
-        let outputID = try defaultOutputDeviceID()
-        let outputUID = try deviceUID(of: outputID)
-        let outputName = (try? deviceName(of: outputID)) ?? "Unknown Device"
+        let device = try resolveOutputDevice()
+        try refuseUnusableDevice(device)
 
-        // Core Audio will not nest one aggregate device inside another, and it
-        // does not say so. Handed an Aggregate or Multi-Output Device as a
-        // sub-device, `AudioHardwareCreateAggregateDevice` still returns noErr —
-        // it silently drops the sub-device, leaving an aggregate with no active
-        // sub-devices and no output streams at all. `AudioDeviceStart` then
-        // succeeds on that empty device and the IO proc runs normally, handed
-        // real tapped audio and an output buffer list with zero buffers, so
-        // `EQProcessor.render` writes nowhere and every stage no-ops in silence.
-        //
-        // Meanwhile the tap goes on muting every other process at the hardware.
-        // The result is a completely silent Mac while the app reports that it is
-        // working, and bypass does not rescue it because bypass does not release
-        // the tap. Refusing here — before the tap exists — is what keeps a
-        // configuration CoreEQ cannot serve from taking the machine's audio down
-        // with it.
-        guard !AudioDevices.isAggregate(outputID) else {
-            throw UnusableOutputDevice.aggregateDevice(name: outputName)
+        let taps = try makeTaps(for: device)
+        tapIDs = taps.map(\.id)
+
+        aggregateID = try makeAggregate(around: device, taps: taps)
+        try refuseAggregateWithoutOutput(aggregateID, deviceName: device.name)
+
+        let rate = try nominalSampleRate(of: aggregateID)
+        processor.setSampleRate(rate)
+        sampleRate = rate
+
+        let layout = OutputPlan.layout(
+            forTaps: taps,
+            deviceChannels: AudioDevices.outputChannelCount(of: device.id),
+            preferredStereo: AudioDevices.preferredStereoPair(of: device.id),
+            inputBuffers: AudioDevices.inputBufferChannels(of: device.id).count)
+        processor.setOutputLayout(layout)
+
+        try startIOProc(on: aggregateID)
+
+        // Only the two tied to this aggregate. The device and wake observers are
+        // installed by `start()`, so that they exist even when this throws.
+        installSampleRateListener()
+        installStreamConfigurationListener()
+
+        diagnostics = DiagnosticsReport.Engine(
+            status: "running",
+            deviceName: device.name,
+            sampleRate: rate,
+            tapChannels: layout.tapChannels,
+            isDeviceBound: taps[0].isDeviceBound,
+            boundStream: taps[0].stream,
+            destinations: layout.destinations,
+            aggregateChannels: AudioDevices.outputChannelCount(of: aggregateID),
+            tapBufferIndex: layout.tapBufferIndex,
+            routedChannels: layout.routedChannels,
+            tapCount: taps.count
+        )
+
+        status = .running(deviceName: device.name)
+        logger.info("Engine running on \(device.name, privacy: .public)")
+    }
+
+    /// The output device everything is built around.
+    private struct OutputDevice {
+        let id: AudioDeviceID
+        let uid: String
+        let name: String
+    }
+
+    /// Reads the current default output through `AudioDevices`, which is the one
+    /// place these properties are read, and turns "no device" into an error
+    /// rather than a nil that has to be handled six lines later.
+    private func resolveOutputDevice() throws -> OutputDevice {
+        guard let id = AudioDevices.defaultOutputDeviceID() else {
+            throw CoreAudioError(
+                status: OSStatus(kAudioHardwareBadDeviceError),
+                operation: "reading the default output device")
         }
+        guard let uid = AudioDevices.persistentID(of: id) else {
+            throw CoreAudioError(
+                status: OSStatus(kAudioHardwareBadDeviceError), operation: "reading the device UID")
+        }
+        return OutputDevice(id: id, uid: uid, name: AudioDevices.name(of: id) ?? "Unknown Device")
+    }
 
+    /// Core Audio will not nest one aggregate device inside another, and it does
+    /// not say so. Handed an Aggregate or Multi-Output Device as a sub-device,
+    /// `AudioHardwareCreateAggregateDevice` still returns noErr — it silently
+    /// drops the sub-device, leaving an aggregate with no active sub-devices and
+    /// no output streams at all. `AudioDeviceStart` then succeeds on that empty
+    /// device and the IO proc runs normally, handed real tapped audio and an
+    /// output buffer list with zero buffers, so `EQProcessor.render` writes
+    /// nowhere and every stage no-ops in silence.
+    ///
+    /// Meanwhile the tap goes on muting every other process at the hardware. The
+    /// result is a completely silent Mac while the app reports that it is
+    /// working, and bypass does not rescue it because bypass does not release
+    /// the tap. Refusing here — before the tap exists — is what keeps a
+    /// configuration CoreEQ cannot serve from taking the machine's audio down
+    /// with it.
+    private func refuseUnusableDevice(_ device: OutputDevice) throws {
+        guard AudioDevices.isAggregate(device.id) else { return }
+        throw UnusableOutputDevice.aggregateDevice(name: device.name)
+    }
+
+    /// The taps this device needs, and the permission fact that follows.
+    private func makeTaps(for device: OutputDevice) throws -> [AssembledTap] {
         // Tap every process except our own output, otherwise the equalized
         // signal we play back would be captured again as a feedback loop.
         var excluded: [AudioObjectID] = []
         if let selfObject = try? processObjectID(for: getpid()) {
             excluded.append(selfObject)
         }
-        let factory = LiveTapFactory(outputUID: outputUID, excluded: excluded)
-        let taps: [AssembledTap]
-        do {
-            taps = try TapAssembly.taps(
-                forStreams: AudioDevices.outputStreamChannelCounts(of: outputID),
-                using: factory)
-        } catch {
-            // A tap was made and then rejected, or none could be made at all.
-            // The permission question is answered by whether one was ever
-            // created, not by whether the engine went on to start.
-            if factory.didCreateATap { tapAccess = .granted }
-            throw error
-        }
-        tapAccess = .granted
-        let tappedChannels = taps.reduce(0) { $0 + $1.channels }
-        logger.info(
-            "Taps: \(taps.count, privacy: .public), \(tappedChannels, privacy: .public) channels"
-        )
-        tapIDs = taps.map(\.id)
-        let tap = taps[0]
 
+        let factory = LiveTapFactory(outputUID: device.uid, excluded: excluded)
+        defer {
+            // Whether a tap was ever created is the only ground truth about the
+            // permission, and it is true whether or not the engine went on to
+            // start.
+            if factory.didCreateATap { tapAccess = .granted }
+        }
+
+        let taps = try TapAssembly.taps(
+            forStreams: AudioDevices.outputStreamChannelCounts(of: device.id), using: factory)
+        let channels = taps.reduce(0) { $0 + $1.channels }
+        logger.info(
+            "Taps: \(taps.count, privacy: .public), \(channels, privacy: .public) channels")
+        return taps
+    }
+
+    /// The private aggregate that carries the device and the taps together.
+    private func makeAggregate(
+        around device: OutputDevice, taps: [AssembledTap]
+    ) throws
+        -> AudioObjectID
+    {
         let description: [String: Any] = [
             kAudioAggregateDeviceNameKey: "CoreEQ Aggregate",
             kAudioAggregateDeviceUIDKey:
                 "\(AudioDevices.coreEQAggregateUIDPrefix)\(UUID().uuidString)",
-            kAudioAggregateDeviceMainSubDeviceKey: outputUID,
+            kAudioAggregateDeviceMainSubDeviceKey: device.uid,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,
             kAudioAggregateDeviceTapAutoStartKey: true,
-            kAudioAggregateDeviceSubDeviceListKey: [
-                [kAudioSubDeviceUIDKey: outputUID]
-            ],
-            // One entry per tap. A device presenting several output streams
-            // needs one tap each, and the aggregate carries them all.
+            kAudioAggregateDeviceSubDeviceListKey: [[kAudioSubDeviceUIDKey: device.uid]],
+            // One entry per tap. A device presenting several output streams needs
+            // one tap each, and the aggregate carries them all.
             kAudioAggregateDeviceTapListKey: taps.map { tap in
                 [
                     kAudioSubTapUIDKey: tap.uuid.uuidString,
@@ -262,76 +335,29 @@ final class AudioEngine: ObservableObject {
                 ]
             },
         ]
-        var newAggregateID = AudioObjectID(kAudioObjectUnknown)
+        var id = AudioObjectID(kAudioObjectUnknown)
         try check(
-            AudioHardwareCreateAggregateDevice(description as CFDictionary, &newAggregateID),
+            AudioHardwareCreateAggregateDevice(description as CFDictionary, &id),
             "creating the aggregate device")
-        aggregateID = newAggregateID
+        return id
+    }
 
-        // The guard above covers the one cause of this we know of. This is the
-        // invariant itself: an aggregate reporting success is not evidence that
-        // it has anywhere to put audio, and running an IO proc against one that
-        // does not is indistinguishable from working, from the inside.
-        guard AudioDevices.hasOutputChannels(aggregateID) else {
-            throw UnusableOutputDevice.noOutputStreams(name: outputName)
-        }
+    /// The invariant the guard above cannot cover: an aggregate reporting
+    /// success is not evidence that it has anywhere to put audio, and running an
+    /// IO proc against one that does not is indistinguishable from working, from
+    /// the inside.
+    private func refuseAggregateWithoutOutput(_ id: AudioObjectID, deviceName: String) throws {
+        guard !AudioDevices.hasOutputChannels(id) else { return }
+        throw UnusableOutputDevice.noOutputStreams(name: deviceName)
+    }
 
-        let rate = try nominalSampleRate(of: aggregateID)
-        processor.setSampleRate(rate)
-        sampleRate = rate
-
-        // Tell the processor what this device actually looks like, so the render
-        // thread never has to guess.
-        let inputBuffers = AudioDevices.inputBufferChannels(of: outputID).count
-        let layout: EQProcessor.OutputLayout
-        if taps.count > 1 {
-            layout = OutputPlan.layout(
-                forTaps: taps.map {
-                    OutputPlan.TapPlan(channels: $0.channels, firstOutputChannel: $0.firstChannel)
-                },
-                inputBuffers: inputBuffers)
-        } else {
-            layout = OutputPlan.layout(
-                for: DeviceDescription(
-                    tapChannels: tap.channels,
-                    isDeviceBound: tap.isDeviceBound,
-                    deviceChannels: AudioDevices.outputChannelCount(of: outputID),
-                    preferredStereo: AudioDevices.preferredStereoPair(of: outputID),
-                    inputBuffers: inputBuffers))
-        }
-        processor.setOutputLayout(layout)
-
-        let processor = self.processor
-        var newProcID: AudioDeviceIOProcID?
+    private func startIOProc(on aggregate: AudioObjectID) throws {
+        var id: AudioDeviceIOProcID?
         try check(
-            AudioDeviceCreateIOProcIDWithBlock(
-                &newProcID, aggregateID, nil, Self.ioBlock(for: processor)),
+            AudioDeviceCreateIOProcIDWithBlock(&id, aggregate, nil, Self.ioBlock(for: processor)),
             "creating the IO proc")
-        ioProcID = newProcID
-
-        try check(AudioDeviceStart(aggregateID, newProcID), "starting the aggregate device")
-
-        // Only the two tied to this aggregate. The device and wake observers
-        // are installed by `start()`, so that they exist even when this throws.
-        installSampleRateListener()
-        installStreamConfigurationListener()
-
-        diagnostics = DiagnosticsReport.Engine(
-            status: "running",
-            deviceName: outputName,
-            sampleRate: rate,
-            tapChannels: layout.tapChannels,
-            isDeviceBound: tap.isDeviceBound,
-            boundStream: tap.stream,
-            destinations: layout.destinations,
-            aggregateChannels: AudioDevices.outputChannelCount(of: aggregateID),
-            tapBufferIndex: layout.tapBufferIndex,
-            routedChannels: min(layout.tapChannels, EQProcessor.maxChannels),
-            tapCount: taps.count
-        )
-
-        status = .running(deviceName: outputName)
-        logger.info("Engine running on \(outputName, privacy: .public)")
+        ioProcID = id
+        try check(AudioDeviceStart(aggregate, id), "starting the aggregate device")
     }
 
     /// The block Core Audio calls on its realtime IO thread.
@@ -558,43 +584,6 @@ final class AudioEngine: ObservableObject {
     ) -> AudioObjectPropertyAddress {
         AudioObjectPropertyAddress(
             mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
-    }
-
-    private func defaultOutputDeviceID() throws -> AudioDeviceID {
-        var addr = propertyAddress(kAudioHardwarePropertyDefaultOutputDevice)
-        var deviceID = AudioDeviceID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        try check(
-            AudioObjectGetPropertyData(
-                AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID),
-            "reading the default output device"
-        )
-        guard deviceID != kAudioObjectUnknown else {
-            throw CoreAudioError(
-                status: OSStatus(kAudioHardwareBadDeviceError),
-                operation: "reading the default output device")
-        }
-        return deviceID
-    }
-
-    private func deviceUID(of deviceID: AudioDeviceID) throws -> String {
-        var addr = propertyAddress(kAudioDevicePropertyDeviceUID)
-        var uid: Unmanaged<CFString>?
-        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        try check(
-            AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &uid),
-            "reading the device UID")
-        return uid?.takeRetainedValue() as String? ?? ""
-    }
-
-    private func deviceName(of deviceID: AudioDeviceID) throws -> String {
-        var addr = propertyAddress(kAudioObjectPropertyName)
-        var name: Unmanaged<CFString>?
-        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        try check(
-            AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &name),
-            "reading the device name")
-        return name?.takeRetainedValue() as String? ?? ""
     }
 
     /// The live tap factory: the Core Audio calls, and nothing else.
