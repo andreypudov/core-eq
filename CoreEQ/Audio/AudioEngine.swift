@@ -267,7 +267,8 @@ final class AudioEngine: ObservableObject {
                 tapChannels: tap.channels,
                 isDeviceBound: tap.isDeviceBound,
                 deviceChannels: AudioDevices.outputChannelCount(of: outputID),
-                preferredStereo: AudioDevices.preferredStereoPair(of: outputID)))
+                preferredStereo: AudioDevices.preferredStereoPair(of: outputID),
+                inputBuffers: AudioDevices.inputBufferChannels(of: outputID).count))
         processor.setOutputLayout(layout)
 
         let processor = self.processor
@@ -293,7 +294,8 @@ final class AudioEngine: ObservableObject {
             isDeviceBound: tap.isDeviceBound,
             boundStream: tap.stream,
             destinations: layout.destinations,
-            aggregateChannels: AudioDevices.outputChannelCount(of: aggregateID)
+            aggregateChannels: AudioDevices.outputChannelCount(of: aggregateID),
+            tapBufferIndex: layout.tapBufferIndex
         )
 
         status = .running(deviceName: outputName)

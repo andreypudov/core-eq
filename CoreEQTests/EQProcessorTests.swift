@@ -720,4 +720,121 @@ struct EQProcessorTests {
         #expect(rms(tapped).isClose(to: rms(output), within: 0.02))
         #expect(rms(tapped) > rms(input) * 1.5, "the tap is carrying the input")
     }
+    // MARK: - Finding the tap among several input buffers
+
+    /// Renders with an input list of several buffers, as an aggregate built on a
+    /// duplex device presents it: the device's own input buffers first, the tap
+    /// after them. `inputBuffers` gives each buffer's samples, interleaved.
+    private func renderAcrossInputBuffers(
+        _ processor: EQProcessor,
+        inputBuffers: [[Float]],
+        inputChannels: Int,
+        outputChannels: Int,
+        frames: Int
+    ) -> [Float] {
+        let storage = inputBuffers.map { samples -> UnsafeMutablePointer<Float> in
+            let p = UnsafeMutablePointer<Float>.allocate(capacity: samples.count)
+            p.initialize(from: samples, count: samples.count)
+            return p
+        }
+        defer {
+            for (index, samples) in inputBuffers.enumerated() {
+                storage[index].deinitialize(count: samples.count)
+                storage[index].deallocate()
+            }
+        }
+
+        // Variable-length C struct, so it has to be built in raw memory.
+        let bytes =
+            MemoryLayout<AudioBufferList>.size
+            + max(0, inputBuffers.count - 1) * MemoryLayout<AudioBuffer>.size
+        let raw = UnsafeMutableRawPointer.allocate(
+            byteCount: bytes, alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { raw.deallocate() }
+        let inList = raw.bindMemory(to: AudioBufferList.self, capacity: 1)
+        inList.pointee.mNumberBuffers = UInt32(inputBuffers.count)
+        let inABL = UnsafeMutableAudioBufferListPointer(inList)
+        for (index, samples) in inputBuffers.enumerated() {
+            inABL[index] = AudioBuffer(
+                mNumberChannels: UInt32(inputChannels),
+                mDataByteSize: UInt32(samples.count * MemoryLayout<Float>.size),
+                mData: UnsafeMutableRawPointer(storage[index])
+            )
+        }
+
+        var outputSamples = [Float](repeating: 0, count: frames * outputChannels)
+        return outputSamples.withUnsafeMutableBufferPointer { outPtr in
+            var outList = AudioBufferList(
+                mNumberBuffers: 1,
+                mBuffers: AudioBuffer(
+                    mNumberChannels: UInt32(outputChannels),
+                    mDataByteSize: UInt32(frames * outputChannels * MemoryLayout<Float>.size),
+                    mData: outPtr.baseAddress
+                )
+            )
+            processor.render(input: inList, output: &outList)
+            return Array(UnsafeBufferPointer(start: outPtr.baseAddress, count: outPtr.count))
+        }
+    }
+
+    /// The BlackHole 16ch bug, at the level the samples actually move.
+    ///
+    /// A duplex output device contributes an input buffer of its own, listed
+    /// before the tap's. When it is as wide as the tap, finding the tap by
+    /// channel count returns the device's input instead — and because the tap
+    /// mutes every other process at the hardware, that buffer is silent. The
+    /// symptom was a completely silent Mac with the engine reporting `running`.
+    @Test func theTapIsFoundPastTheDevicesOwnInputBuffer() {
+        let processor = makeProcessor()
+        let frames = 8
+        processor.setOutputLayout(
+            EQProcessor.OutputLayout(
+                tapChannels: 2, destinations: [0, 1], tapBufferIndex: 1))
+
+        let output = renderAcrossInputBuffers(
+            processor,
+            inputBuffers: [
+                [Float](repeating: 0, count: frames * 2),  // the device's own input: silent
+                stereoRamp(frames: frames),  // the tap
+            ],
+            inputChannels: 2, outputChannels: 2, frames: frames)
+
+        #expect(output == stereoRamp(frames: frames))
+    }
+
+    /// The offset is not a fixed "skip one": an output-only device has no input
+    /// buffer of its own and the tap really is first.
+    @Test func theTapIsStillFoundWhenItIsTheOnlyInputBuffer() {
+        let processor = makeProcessor()
+        let frames = 8
+        processor.setOutputLayout(
+            EQProcessor.OutputLayout(
+                tapChannels: 2, destinations: [0, 1], tapBufferIndex: 0))
+
+        let output = renderAcrossInputBuffers(
+            processor,
+            inputBuffers: [stereoRamp(frames: frames)],
+            inputChannels: 2, outputChannels: 2, frames: frames)
+
+        #expect(output == stereoRamp(frames: frames))
+    }
+
+    /// A described position that is not there means the description is wrong,
+    /// and dropping every block would be the worst answer available. The search
+    /// that used to be the only path stays as the fallback.
+    @Test func aTapIndexBeyondTheListFallsBackToSearching() {
+        let processor = makeProcessor()
+        let frames = 8
+        processor.setOutputLayout(
+            EQProcessor.OutputLayout(
+                tapChannels: 2, destinations: [0, 1], tapBufferIndex: 7))
+
+        let output = renderAcrossInputBuffers(
+            processor,
+            inputBuffers: [stereoRamp(frames: frames)],
+            inputChannels: 2, outputChannels: 2, frames: frames)
+
+        #expect(output == stereoRamp(frames: frames))
+    }
+
 }

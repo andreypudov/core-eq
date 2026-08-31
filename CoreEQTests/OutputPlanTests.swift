@@ -110,4 +110,51 @@ struct OutputPlanTests {
 
         #expect(layout.destinations.isEmpty)
     }
+    // MARK: - Finding the tap in the aggregate's input list
+
+    /// An output-only device contributes no input buffers, so the tap is the
+    /// only thing in the list and sits first.
+    @Test func anOutputOnlyDeviceLeavesTheTapFirst() {
+        let layout = OutputPlan.layout(
+            for: DeviceDescription(tapChannels: 2, isDeviceBound: true, deviceChannels: 2))
+
+        #expect(layout.tapBufferIndex == 0)
+    }
+
+    /// The BlackHole 16ch bug. A duplex device presents an input stream of its
+    /// own, and the aggregate lists it *before* the tap. Matching by channel
+    /// count picked that stream — same width as the tap, and silent, because the
+    /// tap had muted everything — so CoreEQ equalized silence and played it back
+    /// while every other process stayed muted.
+    @Test func aDuplexDevicePushesTheTapPastItsOwnInput() {
+        let layout = OutputPlan.layout(
+            for: DeviceDescription(
+                tapChannels: 16, isDeviceBound: true, deviceChannels: 16, inputBuffers: 1))
+
+        #expect(layout.tapBufferIndex == 1)
+        #expect(layout.destinations == Array(0..<16))
+    }
+
+    /// The mixdown path is bound to the same aggregate, so it needs the offset
+    /// just as much — and a stereo tap behind a 2-in device is the collision
+    /// that hides most easily.
+    @Test func aMixdownOnADuplexDeviceIsAlsoOffset() {
+        let layout = OutputPlan.layout(
+            for: DeviceDescription(
+                tapChannels: 2, isDeviceBound: false, deviceChannels: 2, inputBuffers: 1))
+
+        #expect(layout.tapBufferIndex == 1)
+        #expect(layout.destinations == [0, 1])
+    }
+
+    /// A device reporting several input streams pushes the tap that much
+    /// further down.
+    @Test func severalInputBuffersPushTheTapFurther() {
+        let layout = OutputPlan.layout(
+            for: DeviceDescription(
+                tapChannels: 8, isDeviceBound: true, deviceChannels: 8, inputBuffers: 3))
+
+        #expect(layout.tapBufferIndex == 3)
+    }
+
 }

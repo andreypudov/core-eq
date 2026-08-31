@@ -68,12 +68,17 @@ final class EQProcessor: @unchecked Sendable {
         /// `setOutputLayout` copies it into storage the render thread already
         /// owns, the same way a filter chain is staged.
         var destinations: [Int]
+        /// Which buffer of the input list carries the tap. The aggregate lists
+        /// its sub-device's input buffers first, so this is nonzero whenever the
+        /// output device is duplex.
+        var tapBufferIndex: Int
 
         /// Plain interleaved stereo — what every device was assumed to be
         /// before the engine started describing them.
-        init(tapChannels: Int = 2, destinations: [Int] = [0, 1]) {
+        init(tapChannels: Int = 2, destinations: [Int] = [0, 1], tapBufferIndex: Int = 0) {
             self.tapChannels = tapChannels
             self.destinations = destinations
+            self.tapBufferIndex = tapBufferIndex
         }
     }
 
@@ -138,6 +143,8 @@ final class EQProcessor: @unchecked Sendable {
     /// storage that already exists so no array is handed to the render thread.
     private var pendingDestinations = [Int](repeating: -1, count: EQProcessor.maxChannels)
     private var pendingRoutedChannels: Int?
+    private var pendingTapBufferIndex: Int?
+    private var pendingTapChannelCount: Int?
 
     // Render-thread-only state.
     private var filters = [FilterState](repeating: FilterState(), count: EQProcessor.maxFilters)
@@ -162,6 +169,12 @@ final class EQProcessor: @unchecked Sendable {
     private var destinations = Array(0..<EQProcessor.maxChannels)
     /// Tap channels currently routed, never more than `destinations` holds.
     private var routedChannels = 2
+    /// Input buffer the tap arrives in, render-thread owned. Zero is correct for
+    /// an output-only device, which presents no input buffers of its own.
+    private var tapBufferIndex = 0
+    /// Channels the tap delivers, *unclamped* — `routedChannels` is capped at
+    /// `maxChannels`, and recognising the tap needs its real width.
+    private var tapChannelCount = 2
     // Output trim, smoothed like the band gains so dragging the preamp slider
     // is a fade rather than a step.
     private var targetPreampLinear = 1.0
@@ -203,6 +216,8 @@ final class EQProcessor: @unchecked Sendable {
             pendingDestinations[channel] = newLayout.destinations[safe: channel] ?? -1
         }
         pendingRoutedChannels = count
+        pendingTapBufferIndex = max(0, newLayout.tapBufferIndex)
+        pendingTapChannelCount = max(0, newLayout.tapChannels)
         lock.unlock()
     }
 
@@ -329,14 +344,34 @@ final class EQProcessor: @unchecked Sendable {
     /// aggregate device is not obliged to put the tap's buffers first in the
     /// list, and a developer shipping the same kind of tool reported lists where
     /// they were not.
+    /// The buffer the tap arrives in.
+    ///
+    /// Taken from the layout rather than searched for. The aggregate lists its
+    /// sub-device's input buffers before the tap's, so the position is known on
+    /// the main thread, where device properties may be read — see
+    /// `OutputPlan.tapBufferIndex`.
+    ///
+    /// Searching by channel count was wrong, and wrong in the quietest possible
+    /// way. A duplex output device presents an input stream of its own, and when
+    /// that stream is as wide as the tap it matches first: on BlackHole 16ch —
+    /// sixteen in, sixteen out — CoreEQ equalized the device's own silent input
+    /// and wrote silence to the speakers, while the tap went on muting every
+    /// other process. The engine reported `running` throughout.
     private func tapBuffer(in inABL: UnsafeMutableAudioBufferListPointer) -> AudioBuffer? {
+        if tapBufferIndex < inABL.count, inABL[tapBufferIndex].mData != nil,
+            inABL[tapBufferIndex].mNumberChannels == UInt32(tapChannelCount)
+        {
+            return inABL[tapBufferIndex]
+        }
+        // Either the named buffer is not there or it is not the width the tap
+        // was described as, so the description no longer fits the device.
+        // Prefer a buffer matching the tap's width, then anything at all:
+        // keeping audio flowing on a device we described wrongly beats dropping
+        // every block.
         for i in 0..<inABL.count
         where inABL[i].mNumberChannels == UInt32(routedChannels) && inABL[i].mData != nil {
             return inABL[i]
         }
-        // Nothing matched the tap's format. Falling back to the first buffer
-        // holding anything keeps audio flowing on a device we described wrongly,
-        // which beats dropping every block.
         for i in 0..<inABL.count where inABL[i].mData != nil {
             return inABL[i]
         }
@@ -400,6 +435,8 @@ final class EQProcessor: @unchecked Sendable {
         let newBypass = pendingBypass
         let newRate = pendingSampleRate
         let newRouted = pendingRoutedChannels
+        let newTapBuffer = pendingTapBufferIndex
+        let newTapChannels = pendingTapChannelCount
         if let newRouted {
             for channel in 0..<newRouted {
                 stagedDestinations[channel] = pendingDestinations[channel]
@@ -410,7 +447,18 @@ final class EQProcessor: @unchecked Sendable {
         pendingBypass = nil
         pendingSampleRate = nil
         pendingRoutedChannels = nil
+        pendingTapBufferIndex = nil
+        pendingTapChannelCount = nil
         lock.unlock()
+
+        if let newTapChannels { tapChannelCount = newTapChannels }
+
+        if let newTapBuffer, newTapBuffer != tapBufferIndex {
+            tapBufferIndex = newTapBuffer
+            // A different input buffer is different audio, so the delay lines
+            // are describing something that is no longer arriving.
+            resetAllDelays()
+        }
 
         if let newRouted {
             var changed = newRouted != routedChannels

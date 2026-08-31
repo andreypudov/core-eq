@@ -39,6 +39,9 @@ enum DiagnosticsReport {
         /// Output channel each tap channel is written to.
         var destinations: [Int]
         var aggregateChannels: Int
+        /// Input buffer the tap was read from. Nonzero means the output device
+        /// is duplex and contributes input buffers ahead of the tap's.
+        var tapBufferIndex: Int = 0
     }
 
     /// How the saved EQ is keyed, which is the fact that settles "my preset did
@@ -101,6 +104,7 @@ enum DiagnosticsReport {
                     "                   NOTE: audio is mixed to stereo before CoreEQ sees it.")
             }
             lines.append("  aggregate:       \(engine.aggregateChannels) output channel(s)")
+            lines.append("  tap buffer:      input buffer \(engine.tapBufferIndex)")
             lines.append("  channel map:     \(describeMap(engine.destinations))")
         } else {
             lines.append("  not running")

@@ -61,8 +61,23 @@ enum AudioDevices {
 
     /// Channels in each output buffer, in the shape the render path receives.
     static func outputBufferChannels(of deviceID: AudioDeviceID) -> [Int] {
-        var configAddress = address(
-            kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeOutput)
+        bufferChannels(of: deviceID, scope: kAudioObjectPropertyScopeOutput)
+    }
+
+    /// Channels in each *input* buffer the device presents.
+    ///
+    /// Not for capture — CoreEQ never records anything. This is how the tap is
+    /// found. The aggregate lists its sub-device's input buffers first and the
+    /// tap's after them, so a duplex output device pushes the tap down the input
+    /// list by exactly this many buffers.
+    static func inputBufferChannels(of deviceID: AudioDeviceID) -> [Int] {
+        bufferChannels(of: deviceID, scope: kAudioObjectPropertyScopeInput)
+    }
+
+    private static func bufferChannels(
+        of deviceID: AudioDeviceID, scope: AudioObjectPropertyScope
+    ) -> [Int] {
+        var configAddress = address(kAudioDevicePropertyStreamConfiguration, scope: scope)
         var dataSize: UInt32 = 0
         guard
             AudioObjectGetPropertyDataSize(deviceID, &configAddress, 0, nil, &dataSize) == noErr,
