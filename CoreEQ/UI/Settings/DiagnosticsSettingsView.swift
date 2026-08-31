@@ -19,20 +19,20 @@ struct DiagnosticsSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Audio diagnostics")
-                .font(.headline)
+                .font(Theme.Font.heading)
 
             Text(
                 "What CoreEQ sees on this Mac. Include this with a bug report — it "
                     + "answers most questions about audio problems. It lists your audio "
                     + "device names and contains nothing else about you."
             )
-            .font(.caption)
+            .font(Theme.Font.label)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
             ScrollView([.horizontal, .vertical]) {
                 Text(report)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(Theme.Font.report)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(6)
@@ -75,7 +75,7 @@ struct DiagnosticsSettingsView: View {
             systemVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             permission: bridge.tapAccess,
             devices: AudioDevices.deviceReports(),
-            engine: bridge.diagnostics,
+            engine: Self.liveEngine(bridge.diagnostics),
             profiles: Self.profiles(live: profiles)
         )
     }
@@ -102,6 +102,21 @@ struct DiagnosticsSettingsView: View {
             systemDeviceUID: AudioDevices.defaultOutputDeviceID()
                 .flatMap(AudioDevices.persistentID(of:))
         )
+    }
+
+    /// The engine's snapshot, with the one fact that goes stale refreshed.
+    ///
+    /// The snapshot is taken when the engine starts, and at that moment the tap
+    /// has by definition delivered nothing. Reporting it from there would say
+    /// "no audio seen" forever.
+    private static func liveEngine(
+        _ snapshot: DiagnosticsReport.Engine?
+    )
+        -> DiagnosticsReport.Engine?
+    {
+        guard var snapshot else { return nil }
+        snapshot.hasReceivedAudio = EngineStatusBridge.shared.hasReceivedAudio
+        return snapshot
     }
 
     private static var appVersion: String {

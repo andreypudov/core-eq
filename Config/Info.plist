@@ -31,7 +31,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Andrey Pudov · Apache License 2.0</string>
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>CoreEQ processes system audio so the equalizer applies to everything you hear.</string>
+	<string>An equalizer has to reach the sound to change it. CoreEQ reads audio on its way to your speakers, adjusts it, and plays it straight back. Nothing is recorded, stored, or sent anywhere, and quitting CoreEQ hands the audio back immediately.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

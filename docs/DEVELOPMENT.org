@@ -46,10 +46,14 @@ open build/Debug/CoreEQ.app
 
 - CoreEQ is a menu bar app (=LSUIElement=): no Dock icon, look for the sliders
   icon in the menu bar.
-- First launch triggers the macOS *System Audio Recording* permission dialog
-  (the usage string comes from =NSAudioCaptureUsageDescription= in
-  =Config/Info.plist=). Without the permission the tap cannot be created and
-  the engine reports a failure in the UI, retrying up to three times.
+- First launch triggers the macOS *System Audio Recording* permission dialog.
+  The explanation shown in it is the usage string in =Config/Info.plist=
+  (=NSAudioCaptureUsageDescription=), which is macOS's own mechanism for saying
+  what a permission is for at the moment it is asked for.
+- Refusing does *not* fail loudly. =AudioHardwareCreateProcessTap= returns
+  success even when the permission was refused: the tap reports a plausible
+  format, the aggregate runs, the IO proc fires, and every sample is zero. See
+  *Proving the tap* below for what the engine does about it.
 - Note that TCC ties the permission to the code signature; rebuilding with a
   different signature may re-prompt.
 
@@ -262,6 +266,55 @@ the indentation and line-length settings that =.swift-format= already holds, fre
 to drift out of step with it. It earns its place the day someone edits this
 project in VS Code or Vim, and not before.
 
+* Design tokens
+
+Every font in the app comes from =Theme.Font=, and every colour from
+=.primary= / =.secondary= / =.tertiary= or from =Theme=. A view that writes
+=.font(.system(size: 12))= is a bug in the same way an unformatted file is:
+nothing will fail, and the app will drift.
+
+It did drift. Before the tokens existed there were eight hardcoded point sizes —
+9, 10, 11, 12, 13, 14, 17 — *and* three of the system's semantic styles
+(=.callout=, =.caption=, =.headline=) used alongside them. Which one a view used
+depended on when it was written, so the Settings panes had ended up a different
+size from the window and from each other, and text people had to read was being
+set at 9 and 10 points.
+
+Ten roles, and adding an eleventh should feel like it needs an argument:
+
+| =title=            | 17 semibold        | the app's name in About, and nothing else |
+| =heading=          | 13 semibold        | the heading of a pane or a block          |
+| =body=             | 13                 | row text naming something: a device, a preset |
+| =label=            | 12                 | labels and controls — the app's default   |
+| =labelEmphasized=  | 12 semibold        | a label titling the group beneath it      |
+| =secondary=        | 11                 | supporting text, axis legends             |
+| =value=            | 11 medium, mono    | a number that changes as it is dragged    |
+| =valueEmphasized=  | 11 semibold, mono  | the same, where the number is the subject |
+| =report=           | 11 monospaced      | the diagnostics report                    |
+| =tick=             | 10 mono digits     | axis ticks, and nothing else              |
+
+Two rules behind the table. *Eleven points is the floor for anything anyone
+reads* — =tick= is below it because axis numerals are glanced at, never read, and
+it is the only role allowed there. And *monospaced digits are for numbers that
+change*: a value that updates during a drag makes the row twitch between glyph
+widths otherwise.
+
+Fixed point sizes rather than the semantic styles, which means CoreEQ does not
+follow Dynamic Type. That trade was already made — the window, the menu and the
+Settings panes are laid out to fixed sizes and would break — so the tokens make
+it consistent rather than accidental. Revisiting it is a layout project, not a
+typography one.
+
+One exception, and it should stay the only one: =PowerToggleStyle= sizes its
+glyph from the toggle's own diameter. That is icon geometry, not typography.
+
+Colour is in better shape and only half tidied. Text uses the three system
+hierarchies; the response curve and the block borders come from =Theme.signal=
+and =Theme.blockBorder=. What has *not* been collapsed is opacity: there are
+around a dozen distinct values in use for fills, borders and dimming, several of
+which are probably meant to be the same number. Prefer an existing one over
+inventing another, and the whole set is worth naming the way the fonts now are.
+
 * Project structure
 
 #+begin_example
@@ -413,18 +466,47 @@ relationship between the graphic and parametric editors.
 
 Implemented in =AudioEngine.swift=:
 
-1. *Process tap.* The engine creates a global Core Audio process tap
+1. *Process tap.* The engine creates Core Audio process taps
    (=AudioHardwareCreateProcessTap=, macOS 14.2+) covering every process
-   except CoreEQ itself — excluding itself prevents a feedback loop. The tap
-   uses =muteBehavior = .mutedWhenTapped=, so the tapped processes' original
-   audio is silenced at the hardware; the only signal reaching the speakers is
-   what CoreEQ writes back.
+   except CoreEQ itself — excluding itself prevents a feedback loop. One tap
+   per output stream, because a tap binds to a single stream and takes its
+   format. Once capture is proven the taps use
+   =muteBehavior = .mutedWhenTapped=, so the tapped processes' original audio is
+   silenced at the hardware and the only signal reaching the speakers is what
+   CoreEQ writes back. Until then they are unmuted — see *Proving the tap*.
 2. *Private aggregate device.* The tap and the current default output device
    are combined into a private (invisible) aggregate device with drift
    compensation, so tap input and device output share one IO cycle.
 3. *IO proc.* An IO proc on the aggregate receives the tapped system mix each
    cycle, runs it through =EQProcessor=, and writes it to the real device's
    output buffers.
+
+*** Proving the tap
+
+A tap is created *unmuted*, and the render path writes nothing, until the engine
+has seen it deliver a non-zero sample. Only then does it rebuild with
+=.mutedWhenTapped= and start processing.
+
+This is not caution for its own sake. =AudioHardwareCreateProcessTap= returns
+success when the user has refused permission — measured, not assumed: with a
+refusal recorded, the engine reported =status: running=, a two channel
+device-bound tap, and not one sample. Muting on the strength of that gives a
+completely silent Mac with every layer of the app reporting that it works, which
+is the worst state this engine has.
+
+Unmuted, the same refusal costs only that the audio is not equalized. That is
+how an equalizer should fail, and it is why the order matters: prove, then mute.
+
+The proof is polled every 250 ms and gives up after ten seconds, at which point
+the engine says it is not capturing and *leaves the audio alone*. Returning to
+the app after a refusal starts a fresh attempt, which is how allowing the
+permission in System Settings takes effect — audio capture has no permission API
+to consult, so coming back is the only signal available.
+
+=EQProcessor.hasReceivedAudio= is the observation, and it is reported in
+Settings ▸ Diagnostics alongside whether the tap is muting yet. The two have to
+be read together: not capturing *while muting* is a silent Mac; not capturing
+*while unmuted* is CoreEQ standing aside.
 
 Because the tap dies with the process, a crash or quit always returns the
 system to normal, unprocessed audio — there is no persistent driver state to

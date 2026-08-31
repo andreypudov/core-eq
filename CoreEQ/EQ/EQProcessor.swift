@@ -45,6 +45,33 @@ final class EQProcessor: @unchecked Sendable {
 
     private static let smoothingSeconds = 0.05
 
+    /// Whether the tap has ever delivered anything but digital silence.
+    ///
+    /// Set on the render thread, read on the main one, and deliberately not
+    /// synchronised: it only ever goes false to true, a reader that sees the
+    /// old value simply asks again, and a lock on every block would cost more
+    /// than the fact is worth.
+    ///
+    /// It exists because a tap can be created without permission. It reports a
+    /// plausible format, the aggregate runs, the IO proc fires — and every
+    /// sample is zero, while `muteBehavior` silences every other process at the
+    /// hardware. Nothing in the Core Audio API tells that apart from a Mac that
+    /// happens to be quiet, so the engine watches for it instead.
+    nonisolated(unsafe) private(set) var hasReceivedAudio = false
+
+    /// Whether the engine is still proving the tap works.
+    ///
+    /// While true the render path watches the input and writes nothing. That is
+    /// deliberate: during the proof the tap is *unmuted*, so every other
+    /// process is still audible, and writing our copy as well would play
+    /// everything twice.
+    ///
+    /// Unsynchronised for the same reason as `hasReceivedAudio`: written once
+    /// per engine start from the main thread, read on the render thread, and a
+    /// block either side of the change is of no consequence — one buffer of
+    /// silence, or one buffer unprocessed.
+    nonisolated(unsafe) var isProvingCapture = false
+
     /// Mono copy of the played-back output, tapped for the spectrum analyzer.
     /// 8192 samples is well beyond the analyzer's 4096-sample window, so the
     /// consumer can snapshot without the producer overtaking the read region.
@@ -261,6 +288,11 @@ final class EQProcessor: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Forgets what the tap has delivered, for a fresh engine.
+    func resetAudioObservation() {
+        hasReceivedAudio = false
+    }
+
     /// Stages the output layout. Set by `AudioEngine` once per engine start,
     /// after it knows the aggregate's stream configuration and the tap's format.
     func setOutputLayout(_ newLayout: OutputLayout) {
@@ -313,6 +345,19 @@ final class EQProcessor: @unchecked Sendable {
             memset(data, 0, Int(outABL[i].mDataByteSize))
         }
 
+        // Watched whether or not anything is written: while the tap is being
+        // proved this is the only thing the render path is here to do.
+        if !hasReceivedAudio, carriesSignal(inABL) {
+            hasReceivedAudio = true
+        }
+
+        // Nothing is written while proving. The tap is unmuted then, so every
+        // other process is still audible and adding our copy would double it.
+        guard !isProvingCapture else {
+            feedSpectrum(outABL)
+            return
+        }
+
         // Where the primary tap actually turned up, which may not be where it
         // was described. Resolved once per block rather than per channel.
         let substitute = substituteTapBuffer(in: inABL)
@@ -324,6 +369,23 @@ final class EQProcessor: @unchecked Sendable {
         }
 
         feedSpectrum(outABL)
+    }
+
+    /// Whether any buffer holds a sample that is not zero.
+    ///
+    /// Stops at the first one, so on a Mac that is playing this costs a single
+    /// comparison — and it is only called until the answer is yes.
+    private func carriesSignal(_ abl: UnsafeMutableAudioBufferListPointer) -> Bool {
+        for i in 0..<abl.count {
+            guard let data = abl[i].mData?.assumingMemoryBound(to: Float.self) else {
+                continue
+            }
+            let count = Int(abl[i].mDataByteSize) / MemoryLayout<Float>.size
+            for sample in 0..<count where data[sample] != 0 {
+                return true
+            }
+        }
+        return false
     }
 
     /// Copies each routed channel from the input channel the layout names to the

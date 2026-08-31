@@ -1,0 +1,30 @@
+<svg width="510" height="620" viewBox="270 200 510 620" xmlns="http://www.w3.org/2000/svg">
+  <!-- menubar.svg struck through: CoreEQ is not processing audio.
+
+       The same five bars, at the same heights. The curve is the icon's
+       identity, so the shape is left alone and only the slash carries the
+       meaning.
+
+       The slash follows the SF Symbols treatment, measured off bell.slash:
+       45 degrees, top-left to bottom-right, a stroke about 7% of the glyph
+       width, and a transparent gap either side of roughly the same width.
+       The gap is not decoration. A menu bar icon is a template image, drawn
+       from its alpha channel alone, so a black slash laid over black bars
+       would be invisible; the gap is the only thing that separates them.
+
+       Each bar is the *rounded* bar clipped against the gap, not a sharp one
+       clipped and then rounded — a cut landing near a corner has to truncate
+       that corner's curve, not replace it with a tighter one. Corners are
+       identical to menubar.svg; only the cut edges are straight. Paths rather
+       than rects behind a mask because the renderer `make icons` falls back to
+       supports neither masks nor strokes. Re-derive if menubar.svg changes. -->
+  <path d="M 340,644 A 16,16 0 0 1 324,660 L 286,660 A 16,16 0 0 1 270,644 L 270,376 A 16,16 0 0 1 286,360 L 301.46,360 L 340,398.54 Z" fill="#000000" />
+  <path d="M 434,280 A 16,16 0 0 1 450,296 L 450,361.46 L 380.52,291.98 L 380.55,291.86 A 16,16 0 0 1 396,280 Z" fill="#000000" />
+  <path d="M 450,714 A 16,16 0 0 1 434,730 L 396,730 A 16,16 0 0 1 380,714 L 380,438.54 L 450,508.54 Z" fill="#000000" />
+  <path d="M 544,200 A 16,16 0 0 1 560,216 L 560,471.46 L 490,401.46 L 490,216 A 16,16 0 0 1 506,200 Z" fill="#000000" />
+  <path d="M 560,804 A 16,16 0 0 1 544,820 L 506,820 A 16,16 0 0 1 490,804 L 490,548.54 L 560,618.54 Z" fill="#000000" />
+  <path d="M 654,280 A 16,16 0 0 1 670,296 L 670,581.46 L 600,511.46 L 600,296 A 16,16 0 0 1 616,280 Z" fill="#000000" />
+  <path d="M 665.31,725.31 A 16,16 0 0 1 654,730 L 616,730 A 16,16 0 0 1 600,714 L 600,658.54 L 666.02,724.56 Z" fill="#000000" />
+  <path d="M 764,360 A 16,16 0 0 1 780,376 L 780,644 A 16,16 0 0 1 764,660 L 748.54,660 L 710,621.46 L 710,376 A 16,16 0 0 1 726,360 Z" fill="#000000" />
+  <polygon points="245,204.54 805,764.54 805,815.46 245,255.46" fill="#000000" />
+</svg>

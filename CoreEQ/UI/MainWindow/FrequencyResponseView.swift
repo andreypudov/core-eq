@@ -362,7 +362,7 @@ struct FrequencyResponseView: View {
 
         for frequency in anchors {
             let label = Text(BandFormat.frequency(frequency))
-                .font(.system(size: 11))
+                .font(Theme.Font.secondary)
                 .foregroundStyle(.secondary)
             context.draw(
                 label, at: CGPoint(x: axis.x(frequency), y: bottom + labelStripHeight / 2),
@@ -372,7 +372,7 @@ struct FrequencyResponseView: View {
         // eye off the curve.
         for dB in Self.labeledDBs {
             let label = Text(BandFormat.axisGain(dB))
-                .font(.system(size: 11))
+                .font(Theme.Font.secondary)
                 .foregroundStyle(.tertiary)
             context.draw(label, at: CGPoint(x: left - 8, y: yPosition(dB, size)), anchor: .trailing)
         }
@@ -542,7 +542,7 @@ struct FrequencyResponseView: View {
             )
 
             let number = Text("\(index + 1)")
-                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .font(Theme.Font.valueEmphasized)
                 .foregroundStyle(Color.black.opacity(isActive ? 0.75 : 0.3))
             context.draw(number, at: center, anchor: .center)
         }
@@ -582,7 +582,7 @@ struct FrequencyResponseView: View {
         _ context: GraphicsContext, _ size: CGSize, center: CGPoint, text: String
     ) {
         let label = Text(text)
-            .font(.system(size: 11, weight: .medium).monospacedDigit())
+            .font(Theme.Font.value)
             .foregroundStyle(.primary)
         let position = CGPoint(
             x: min(max(center.x, 60), size.width - 60),

@@ -37,6 +37,14 @@ final class AudioEngine: ObservableObject {
                 return "Audio engine error: \(message)"
             }
         }
+
+        /// A few words for surfaces that cannot afford a sentence.
+        var summary: String? {
+            switch self {
+            case .stopped, .running: return nil
+            case .failed(let summary, _): return summary
+            }
+        }
     }
 
     @Published private(set) var status: Status = .stopped
@@ -68,10 +76,16 @@ final class AudioEngine: ObservableObject {
     /// `isEnabled` off keeps the two apart where they do differ: the switch
     /// still holds what the user asked for, and asking for it back is still the
     /// way out.
-    var isProcessing: Bool {
-        guard isEnabled else { return false }
-        if case .running = status { return true }
-        return false
+    var isProcessing: Bool { Self.isProcessing(status: status, isEnabled: isEnabled) }
+
+    /// The same question, asked of values rather than of the engine.
+    ///
+    /// `@Published` emits in `willSet`, so a subscriber reading these properties
+    /// back is reading the value being replaced. Anything reacting to a change
+    /// has to answer from what Combine handed it, and this is how.
+    nonisolated static func isProcessing(status: Status, isEnabled: Bool) -> Bool {
+        guard isEnabled, case .running = status else { return false }
+        return true
     }
 
     /// Whether asking for the equalizer to be on can achieve anything.
@@ -80,9 +94,31 @@ final class AudioEngine: ObservableObject {
     /// refuse, say. Switching on then changes a stored preference and nothing
     /// else, so the switch is disabled rather than left to report a state the
     /// sound does not have.
-    var canProcess: Bool {
-        if case .failed = status { return false }
-        return true
+    var canProcess: Bool { Self.canProcess(status: status) }
+
+    /// Whether the tap has delivered anything but silence since it started.
+    ///
+    /// Read on demand rather than published. It changes once, on the render
+    /// thread, and the only thing that wants it is a diagnostics report being
+    /// drawn — publishing it would mean waking the UI for a fact nobody is
+    /// looking at.
+    var hasReceivedAudio: Bool { processor.hasReceivedAudio }
+
+    /// Whether what stands between the user and their equalizer is the
+    /// permission, rather than anything about their device.
+    ///
+    /// True when capturing was refused. Declining otherwise leaves the app
+    /// running with an error saying the audio was not allowed — accurate, and
+    /// useless. This is what swaps that for a screen saying where to allow it.
+    var needsAudioPermission: Bool { tapAccess == .denied }
+
+    /// As `canProcess`, from a status rather than from the engine. See
+    /// `isProcessing(status:isEnabled:)`.
+    nonisolated static func canProcess(status: Status) -> Bool {
+        switch status {
+        case .failed: return false
+        case .stopped, .running: return true
+        }
     }
 
     /// Global bypass. When false the engine keeps running but passes audio
@@ -111,7 +147,15 @@ final class AudioEngine: ObservableObject {
     private var sampleRateListener: AudioObjectPropertyListenerBlock?
     private var streamConfigListener: AudioObjectPropertyListenerBlock?
     private var wakeObserver: (any NSObjectProtocol)?
+    private var activationObserver: (any NSObjectProtocol)?
     private var pendingRestart: DispatchWorkItem?
+    private var capturePoll: DispatchWorkItem?
+    /// Whether a tap has been seen delivering audio in this session.
+    ///
+    /// Not persisted. A permission can be withdrawn between launches, and the
+    /// cost of proving it again is a moment of unprocessed audio — far less than
+    /// the cost of trusting a stale yes and muting the Mac.
+    private var captureProven = false
     private var retryCount = 0
 
     private static let maxRetries = 3
@@ -135,6 +179,10 @@ final class AudioEngine: ObservableObject {
 
     func start() {
         pendingRestart?.cancel()
+        // The verdict belongs to the attempt that produced it. Carrying it into
+        // the next one would leave the app reporting a refusal it is in the
+        // middle of retrying.
+        if tapAccess == .denied { tapAccess = .unknown }
         // Before the attempt, not after it. These two outlive any single
         // aggregate device — that is the point of them — and installing them at
         // the end of `startEngine` meant a start that threw never installed
@@ -145,6 +193,7 @@ final class AudioEngine: ObservableObject {
         // relaunched. Installed here, a device change always gets a hearing.
         installDefaultDeviceListenerIfNeeded()
         installWakeObserverIfNeeded()
+        installActivationObserverIfNeeded()
         do {
             try startEngine()
             retryCount = 0
@@ -236,8 +285,13 @@ final class AudioEngine: ObservableObject {
             aggregateChannels: AudioDevices.outputChannelCount(of: aggregateID),
             tapBufferIndex: layout.tapBufferIndex,
             routedChannels: layout.routedChannels,
-            tapCount: taps.count
+            tapCount: taps.count,
+            isMuting: captureProven
         )
+
+        processor.resetAudioObservation()
+        processor.isProvingCapture = !captureProven
+        if !captureProven { startProvingCapture() }
 
         status = .running(deviceName: device.name)
         logger.info("Engine running on \(device.name, privacy: .public)")
@@ -295,7 +349,9 @@ final class AudioEngine: ObservableObject {
             excluded.append(selfObject)
         }
 
-        let factory = LiveTapFactory(outputUID: device.uid, excluded: excluded)
+        let factory = LiveTapFactory(
+            outputUID: device.uid, excluded: excluded,
+            muteBehavior: captureProven ? .mutedWhenTapped : .unmuted)
         defer {
             // Whether a tap was ever created is the only ground truth about the
             // permission, and it is true whether or not the engine went on to
@@ -381,6 +437,9 @@ final class AudioEngine: ObservableObject {
     }
 
     private func teardownEngine() {
+        capturePoll?.cancel()
+        capturePoll = nil
+
         if let sampleRateListener, aggregateID != kAudioObjectUnknown {
             var addr = propertyAddress(kAudioDevicePropertyNominalSampleRate)
             AudioObjectRemovePropertyListenerBlock(aggregateID, &addr, .main, sampleRateListener)
@@ -411,6 +470,56 @@ final class AudioEngine: ObservableObject {
         tapIDs = []
     }
 
+    /// How often to look for the first sample, and how long before saying that
+    /// none has arrived.
+    private static let capturePollInterval: TimeInterval = 0.25
+    private static let captureProofTimeout: TimeInterval = 10
+
+    /// Waits for evidence that the tap is delivering, then mutes.
+    ///
+    /// Until the first sample arrives the tap is unmuted and the render path
+    /// writes nothing, so the Mac sounds exactly as it would without CoreEQ. The
+    /// equalizer is not applied during that window, which is the price of not
+    /// muting a machine we might not be able to capture from.
+    ///
+    /// The engine is rebuilt rather than the live tap being modified. A tap's
+    /// description is writable in principle, but a rebuild uses only operations
+    /// already proven to work here, and it happens once per session.
+    private func startProvingCapture(elapsed: TimeInterval = 0) {
+        capturePoll?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard case .running = self.status else { return }
+
+            if self.processor.hasReceivedAudio {
+                self.logger.info("Tap is delivering audio; muting and restarting to process it")
+                self.captureProven = true
+                self.start()
+                return
+            }
+
+            let waited = elapsed + Self.capturePollInterval
+            guard waited < Self.captureProofTimeout else {
+                // Nothing has arrived. Say so, and leave the audio alone — the
+                // tap is unmuted, so the only thing wrong is that CoreEQ is not
+                // equalizing. This is what a refused permission looks like:
+                // creating the tap succeeded and it captures nothing.
+                self.logger.error("No audio from the tap; leaving it unmuted")
+                self.tapAccess = .denied
+                self.status = .failed(
+                    summary: "Not capturing audio",
+                    message:
+                        "CoreEQ is not receiving any audio, so it is leaving your sound alone "
+                        + "rather than replacing it. This is what a refused permission looks "
+                        + "like.")
+                return
+            }
+            self.startProvingCapture(elapsed: waited)
+        }
+        capturePoll = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.capturePollInterval, execute: work)
+    }
+
     // MARK: - Change handling
 
     /// Removes the observers that survive a restart. `start()` reinstalls both,
@@ -428,6 +537,12 @@ final class AudioEngine: ObservableObject {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
         }
         wakeObserver = nil
+
+        if let activationObserver {
+            NotificationCenter.default.removeObserver(activationObserver)
+        }
+        activationObserver = nil
+
     }
 
     private func scheduleRestart(after delay: TimeInterval, reason: String) {
@@ -506,6 +621,31 @@ final class AudioEngine: ObservableObject {
         } else {
             logger.error("Failed to install sample rate listener: \(status)")
         }
+    }
+
+    /// Tries again when the app comes back to the front, but only after a
+    /// refusal.
+    ///
+    /// Someone sent to System Settings to allow capture returns to an app that
+    /// gave up ten seconds after starting and has no way to learn the answer
+    /// changed — audio capture has no permission API to consult. Coming back is
+    /// the signal, and starting is the only way to find out.
+    ///
+    /// Guarded on the refusal so this is not a restart on every activation: a
+    /// working engine is left alone.
+    private func installActivationObserverIfNeeded() {
+        guard activationObserver == nil else { return }
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor [weak self] in self?.retryAfterRefusal() }
+        }
+    }
+
+    private func retryAfterRefusal() {
+        guard tapAccess == .denied else { return }
+        logger.info("Returned to the foreground after a refusal; trying to capture again")
+        start()
     }
 
     private func installWakeObserverIfNeeded() {
@@ -595,13 +735,15 @@ final class AudioEngine: ObservableObject {
     private final class LiveTapFactory: TapFactory {
         let outputUID: String
         let excluded: [AudioObjectID]
+        let muteBehavior: CATapMuteBehavior
         /// Set the moment any tap is created, which is the only ground truth
         /// about the permission there is.
         private(set) var didCreateATap = false
 
-        init(outputUID: String, excluded: [AudioObjectID]) {
+        init(outputUID: String, excluded: [AudioObjectID], muteBehavior: CATapMuteBehavior) {
             self.outputUID = outputUID
             self.excluded = excluded
+            self.muteBehavior = muteBehavior
         }
 
         func makeDeviceBoundTap(stream: Int) throws -> AssembledTap {
@@ -626,7 +768,13 @@ final class AudioEngine: ObservableObject {
             _ description: CATapDescription, isDeviceBound: Bool, stream: Int
         ) throws -> AssembledTap {
             description.name = "CoreEQ System Tap"
-            description.muteBehavior = .mutedWhenTapped
+            // Muting is earned, not assumed. `AudioHardwareCreateProcessTap`
+            // returns success when the user has refused permission — the tap
+            // reports a plausible format and delivers nothing — so a tap created
+            // muted silences the Mac on the strength of a promise Core Audio has
+            // not made. Unmuted, the same refusal costs only that the audio is
+            // not equalized, which is how an equalizer should fail.
+            description.muteBehavior = muteBehavior
             description.isPrivate = true
 
             var id = AudioObjectID(kAudioObjectUnknown)

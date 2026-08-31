@@ -53,7 +53,7 @@ struct EqualizerSidebarView: View {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         if matches.user.isEmpty && matches.builtIn.isEmpty {
                             Text("No presets match “\(search)”.")
-                                .font(.system(size: 12))
+                                .font(Theme.Font.label)
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 10)
                                 .padding(.top, 8)
@@ -122,11 +122,11 @@ struct EqualizerSidebarView: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text("CoreEQ")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(Theme.Font.heading)
                     // States what CoreEQ does that Music.app's equalizer doesn't:
                     // it shapes every application's output, not one player's.
                     Text("System-wide equalizer")
-                        .font(.system(size: 11))
+                        .font(Theme.Font.secondary)
                         .foregroundStyle(.secondary)
                 }
 
@@ -153,7 +153,7 @@ struct EqualizerSidebarView: View {
     private var searchField: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12))
+                .font(Theme.Font.label)
                 .foregroundStyle(.secondary)
 
             TextField("Search", text: $search)
@@ -162,7 +162,7 @@ struct EqualizerSidebarView: View {
                 // what the list below it is showing, so the two should read as
                 // one control, and System Settings sizes its own sidebar search
                 // to its rows the same way.
-                .font(.system(size: 13))
+                .font(Theme.Font.body)
                 .focused($searchFieldFocused)
                 // Escape leaves the search as it was found.
                 .onExitCommand {
@@ -175,7 +175,7 @@ struct EqualizerSidebarView: View {
                     search = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11))
+                        .font(Theme.Font.secondary)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -198,7 +198,7 @@ struct EqualizerSidebarView: View {
 
     private func caption(_ text: String) -> some View {
         Text(text.uppercased())
-            .font(.system(size: 11, weight: .medium))
+            .font(Theme.Font.value)
             .kerning(0.6)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
@@ -231,7 +231,7 @@ struct EqualizerSidebarView: View {
                     }
             } else {
                 Text(profile.name)
-                    .font(.system(size: 13))
+                    .font(Theme.Font.body)
                     .lineLimit(1)
                     .truncationMode(.tail)
 

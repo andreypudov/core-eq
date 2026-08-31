@@ -53,6 +53,19 @@ enum DiagnosticsReport {
         /// Taps the engine created. More than one means the device presents its
         /// channels as several streams and each needed its own tap.
         var tapCount: Int = 1
+        /// Whether the tap has delivered anything but silence since the engine
+        /// started.
+        ///
+        /// The one fact that separates "nothing is playing" from "nothing is
+        /// reaching us", and it cannot be worked out from outside the render
+        /// loop. Reported rather than acted on: a Mac that is simply quiet looks
+        /// identical from here, so this is for a reader to weigh, not for the
+        /// app to conclude from.
+        var hasReceivedAudio: Bool = false
+        /// Whether the tap is muting other processes yet. It does not until the
+        /// engine has seen it deliver audio, so an unmuted tap means CoreEQ is
+        /// still proving it can capture — or has concluded that it cannot.
+        var isMuting: Bool = false
     }
 
     /// How the saved EQ is keyed, which is the fact that settles "my preset did
@@ -121,6 +134,14 @@ enum DiagnosticsReport {
             lines.append(
                 "  channel map:     "
                     + describeMap(engine.destinations, routed: engine.routedChannels))
+            lines.append(
+                "  capturing:       "
+                    + (engine.hasReceivedAudio
+                        ? "yes" : "no audio seen since the engine started"))
+            lines.append(
+                "  muting others:   "
+                    + (engine.isMuting
+                        ? "yes" : "no — not proven able to capture, so audio is left alone"))
             if let routed = engine.routedChannels, engine.destinations.count > routed {
                 lines.append(
                     "                   NOTE: this device presents more channels than CoreEQ "

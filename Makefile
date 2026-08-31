@@ -52,8 +52,13 @@ icons:
 	  magick build/logo_1024.png -resize $$((s*2))x$$((s*2)) build/AppIcon.iconset/icon_$${s}x$${s}@2x.png; \
 	done
 	iconutil -c icns build/AppIcon.iconset -o $(APP)/Resources/AppIcon.icns
-	magick -background none -density 96 design/menubar.svg -resize x18 $(APP)/Resources/MenuBarIconTemplate.png
-	magick -background none -density 192 design/menubar.svg -resize x36 $(APP)/Resources/MenuBarIconTemplate@2x.png
+	for v in "" -slash; do \
+	  name=$$(printf '%s' "$$v" | sed 's/-slash/Slash/'); \
+	  magick -background none -density 96 design/menubar$$v.svg -resize x18 \
+	    $(APP)/Resources/MenuBarIcon$${name}Template.png; \
+	  magick -background none -density 192 design/menubar$$v.svg -resize x36 \
+	    $(APP)/Resources/MenuBarIcon$${name}Template@2x.png; \
+	done
 	@echo "Regenerated $(APP)/Resources/AppIcon.icns and $(APP)/Resources/MenuBarIconTemplate*.png"
 
 clean:

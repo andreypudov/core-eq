@@ -90,7 +90,7 @@ struct FilterRowView: View {
             }
 
             Text("\(index)")
-                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .font(Theme.Font.valueEmphasized)
                 .foregroundStyle(.secondary)
                 // A band number is two glyphs at most and must stay on one line.
                 // Given the room to sit on one it will, but wrapping is the one
@@ -182,7 +182,7 @@ struct FilterRowView: View {
             profileManager.removeFilter(id: filter.id)
         } label: {
             Image(systemName: "trash")
-                .font(.system(size: 12))
+                .font(Theme.Font.label)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

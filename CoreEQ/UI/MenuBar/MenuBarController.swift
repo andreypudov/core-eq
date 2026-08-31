@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import CoreAudio
 import Foundation
 
@@ -41,6 +42,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// Kept between rebuilds so tone-slider changes can redraw the graph in
     /// place while the menu stays open.
     private weak var quickEQBody: QuickEQBodyView?
+    private var cancellables: Set<AnyCancellable> = []
 
     /// The two rows that can unfold a list under themselves.
     private enum ListSection {
@@ -74,21 +76,39 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         super.init()
 
         if let button = statusItem.button {
-            let image =
-                NSImage(named: "MenuBarIconTemplate")
-                ?? NSImage(
-                    systemSymbolName: "slider.vertical.3", accessibilityDescription: "CoreEQ")
-            image?.isTemplate = true
-            image?.accessibilityDescription = "CoreEQ"
-            button.image = image
             button.toolTip = "CoreEQ"
             settingsOpener.install(in: button)
         }
+        updateStatusItemIcon()
+        followEngineState()
 
         let menu = NSMenu()
         menu.delegate = self
         menu.autoenablesItems = false
         statusItem.menu = menu
+    }
+
+    /// Keeps the icon in step with the engine.
+    ///
+    /// The menu itself is rebuilt on open and needs no subscription, but the
+    /// icon is the one thing that has to change while nobody is looking — that
+    /// is the whole reason it carries the state.
+    private func followEngineState() {
+        // Delivered synchronously, and from the values Combine hands over.
+        //
+        // Two reasons, both of which showed up as the icon lagging. `@Published`
+        // emits in `willSet`, so a sink that reads the engine back sees the
+        // value being replaced and the icon trails a click behind. And hopping
+        // through `RunLoop.main` delivers only in the default run loop mode,
+        // while an open menu runs a nested loop in event tracking mode — so
+        // clicking the switch in the menu left the icon unchanged until the menu
+        // closed, which is precisely when nobody is looking at it.
+        audioEngine.$isEnabled
+            .combineLatest(audioEngine.$status)
+            .sink { [weak self] isEnabled, status in
+                self?.applyStatusIcon(for: .init(status: status, isEnabled: isEnabled))
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Menu construction
@@ -181,6 +201,73 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// change, which makes it a sentence and the menu the wrong place for it:
     /// this names the fault, the tooltip carries the sentence, and the click
     /// opens the full report.
+    /// What the menu bar icon says about the engine.
+    ///
+    /// The one signal visible without clicking anything, which for an accessory
+    /// app with no window is the only way to say that something needs
+    /// attention.
+    private enum StatusIcon {
+        case shaping
+        case off
+        case unavailable
+
+        /// Two images for three states.
+        ///
+        /// "Is my audio being shaped" is the only question an icon this size can
+        /// answer, and switched-off and cannot-run give it the same answer; why
+        /// is a click away. An earlier attempt drew switched-off as flat bars,
+        /// on the reasoning that the icon is a frequency response — but the
+        /// curve is what makes it recognisable as CoreEQ, and levelling it read
+        /// as a barcode.
+        var resourceName: String {
+            switch self {
+            case .shaping: return "MenuBarIconTemplate"
+            case .off, .unavailable: return "MenuBarIconSlashTemplate"
+            }
+        }
+
+        /// Spoken by VoiceOver, and the icon's tooltip. Three labels where there
+        /// are only two images: the tooltip has room to say which of the two
+        /// reasons applies, and the icon does not.
+        var label: String {
+            switch self {
+            case .shaping: return "CoreEQ"
+            case .off: return "CoreEQ, equalizer off"
+            case .unavailable: return "CoreEQ, not processing audio"
+            }
+        }
+    }
+
+    /// Everything the icon depends on, in one value that can be passed around
+    /// rather than read back off the engine mid-change.
+    private struct EngineState {
+        let status: AudioEngine.Status
+        let isEnabled: Bool
+
+        var icon: StatusIcon {
+            guard AudioEngine.canProcess(status: status) else { return .unavailable }
+            return AudioEngine.isProcessing(status: status, isEnabled: isEnabled)
+                ? .shaping : .off
+        }
+    }
+
+    private func updateStatusItemIcon() {
+        applyStatusIcon(for: .init(status: audioEngine.status, isEnabled: audioEngine.isEnabled))
+    }
+
+    private func applyStatusIcon(for state: EngineState) {
+        guard let button = statusItem.button else { return }
+        let icon = state.icon
+        let image =
+            NSImage(named: icon.resourceName)
+            ?? NSImage(named: "MenuBarIconTemplate")
+            ?? NSImage(systemSymbolName: "slider.vertical.3", accessibilityDescription: nil)
+        image?.isTemplate = true
+        image?.accessibilityDescription = icon.label
+        button.image = image
+        button.toolTip = icon.label
+    }
+
     /// Opacity for the EQ controls: the engine's own answer, not a rule of the
     /// menu's own. Off and failed both mean nothing is being shaped.
     private var eqControlsAlpha: CGFloat {
@@ -188,20 +275,32 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func engineFailureItem() -> NSMenuItem? {
-        guard case .failed(let summary, let message) = audioEngine.status else { return nil }
+        guard let summary = audioEngine.status.summary else { return nil }
+        let isPermission = audioEngine.needsAudioPermission
 
+        // Always General, whichever kind of warning this is. Someone clicking a
+        // warning wants to know what is wrong and what to do; Diagnostics is a
+        // report to paste into an issue, which is a different errand and reads
+        // as a wall of text when it is not the one you are on. General states
+        // the problem and offers Diagnostics as the next step.
         let item = NSMenuItem(
-            title: summary, action: #selector(openDiagnostics), keyEquivalent: "")
+            title: isPermission ? "Audio permission needed" : summary,
+            action: #selector(openPermission), keyEquivalent: "")
         item.target = self
         item.image = NSImage(
-            systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)?
+            systemSymbolName:
+                isPermission
+                ? "exclamationmark.circle.fill" : "exclamationmark.triangle.fill",
+            accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
-        item.toolTip = message
+        item.toolTip = audioEngine.status.description
         return item
     }
 
-    @objc private func openDiagnostics() {
-        SettingsOpener.shared.open(tab: .diagnostics)
+    /// Whatever the warning was about is explained in Settings, not here: this
+    /// row can hold about four words before the whole menu grows to its width.
+    @objc private func openPermission() {
+        SettingsOpener.shared.open(tab: .general)
     }
 
     private func headerItem() -> NSMenuItem {

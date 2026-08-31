@@ -38,7 +38,7 @@ struct GainScale: View {
             Color.clear
             ForEach(values, id: \.self) { gain in
                 Text(showsUnit ? BandFormat.axisGain(gain) : BandFormat.axisValue(gain))
-                    .font(.system(size: 10).monospacedDigit())
+                    .font(Theme.Font.tick)
                     .foregroundStyle(.tertiary)
                     .fixedSize()
                     .frame(height: Self.rowHeight)

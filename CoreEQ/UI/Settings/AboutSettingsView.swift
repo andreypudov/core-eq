@@ -20,14 +20,14 @@ struct AboutSettingsView: View {
 
             VStack(spacing: 3) {
                 Text("CoreEQ")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(Theme.Font.title)
                 Text(versionLine)
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(Theme.Font.value)
                     .foregroundStyle(.secondary)
             }
 
             Text("Equalizes everything you hear, with no driver and nothing left behind.")
-                .font(.system(size: 12))
+                .font(Theme.Font.label)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 300)
@@ -36,10 +36,10 @@ struct AboutSettingsView: View {
                 Link("Source code", destination: Self.repository)
                 Link("Release notes", destination: Self.releases)
             }
-            .font(.system(size: 12))
+            .font(Theme.Font.label)
 
             Text(copyright)
-                .font(.system(size: 10))
+                .font(Theme.Font.secondary)
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

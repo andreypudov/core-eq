@@ -14,9 +14,33 @@ struct GeneralSettingsView: View {
     @State private var loginItemFailed = false
 
     @ObservedObject private var engine = EngineStatusBridge.shared
+    @ObservedObject private var route = SettingsRoute.shared
+
+    /// What is stopping the equalizer, if anything.
+    ///
+    /// Waiting for permission is deliberately not a problem: the section below
+    /// is already about exactly that, and saying it twice on one pane would read
+    /// as two faults rather than one.
+    private var engineProblem: String? {
+        guard case .failed(_, let message) = engine.status else { return nil }
+        return message
+    }
 
     var body: some View {
         Form {
+            // First, when there is one: someone who arrives here from a warning
+            // came to find out what is wrong, and should not have to look.
+            if let problem = engineProblem {
+                Section {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .font(Theme.Font.label)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button("Show Diagnostics") { route.tab = .diagnostics }
+                }
+            }
+
             Section {
                 Toggle("Open CoreEQ at login", isOn: loginItemBinding)
                     .help("Start CoreEQ automatically, in the menu bar, when you log in")
@@ -26,37 +50,51 @@ struct GeneralSettingsView: View {
                         "macOS refused the change. Open System Settings → General → Login Items to set it there.",
                         systemImage: "exclamationmark.triangle"
                     )
-                    .font(.callout)
+                    .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
                 }
             } footer: {
                 Text("CoreEQ has no window at login — it waits in the menu bar.")
-                    .font(.callout)
+                    .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
             }
 
             Section {
-                LabeledContent("System Audio Recording") {
-                    HStack(spacing: 8) {
-                        Label(permission.title, systemImage: permission.symbol)
-                            .labelStyle(.titleAndIcon)
-                            .foregroundStyle(
-                                permission.isGranted
-                                    ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                // Laid out here rather than with `LabeledContent`, which places
+                // its value column on its own alignment and insets — that is
+                // what left the button at a different margin from every other
+                // row. An `HStack` with a `Spacer` puts the trailing edge on the
+                // form's own margin, so the button lines up with the toggle in
+                // the section above.
+                HStack(spacing: 12) {
+                    Text("System Audio Recording")
 
-                        // Only when it has actually been refused. "Not
-                        // determined" is not a problem to fix, and offering the
-                        // fix for it is the same mistake as calling it refused:
-                        // it sends someone to System Settings to correct
-                        // something that is not wrong.
-                        if permission == .refused {
-                            Button("Open System Settings…") { openPrivacySettings() }
+                    Spacer(minLength: 12)
+
+                    Label(permission.title, systemImage: permission.symbol)
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(
+                            permission.isGranted
+                                ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+
+                    // Only when there is genuinely something to do. "Not
+                    // determined" is not a problem, and offering to fix it is
+                    // the same mistake as calling it refused: it sends someone
+                    // to correct something that is not wrong.
+                    //
+                    // Prominent because arriving here from the menu bar means
+                    // having been sent to do something, and the something has to
+                    // be obvious at a glance.
+                    if permission.needsAction {
+                        Button("Open System Settings…") {
+                            SystemSettingsLink.openAudioCapturePrivacy()
                         }
+                        .buttonStyle(.borderedProminent)
                     }
                 }
             } footer: {
                 Text(permission.explanation)
-                    .font(.callout)
+                    .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
             }
         }
@@ -106,6 +144,19 @@ struct GeneralSettingsView: View {
 
         var isGranted: Bool { self == .granted }
 
+        /// Whether there is anything for the user to do here.
+        ///
+        /// Both "never asked" and "refused" get the same button. macOS cannot
+        /// distinguish them for us, and an app that guesses shows the wrong one
+        /// sometimes; the fallback named in the footer covers the case where the
+        /// button cannot help.
+        var needsAction: Bool {
+            switch self {
+            case .refused: return true
+            case .granted, .notRunning: return false
+            }
+        }
+
         var explanation: String {
             switch self {
             case .granted:
@@ -113,8 +164,8 @@ struct GeneralSettingsView: View {
                     "CoreEQ processes the sound you hear. Nothing is recorded, stored, or transmitted."
             case .refused:
                 return
-                    "Without it CoreEQ cannot process system audio. Grant it under Privacy & Security → "
-                    + "Screen & System Audio Recording, then quit and reopen CoreEQ."
+                    "Without it CoreEQ cannot process system audio.\n\n"
+                    + Theme.audioPermissionInstruction
             case .notRunning:
                 return
                     "CoreEQ has not needed the permission yet, so there is nothing to report."
@@ -128,16 +179,6 @@ struct GeneralSettingsView: View {
         case .denied: return .refused
         case .unknown: return .notRunning
         }
-    }
-
-    private func openPrivacySettings() {
-        guard
-            let url = URL(
-                string:
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-            )
-        else { return }
-        NSWorkspace.shared.open(url)
     }
 
     // MARK: - Login item
