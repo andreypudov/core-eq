@@ -1,6 +1,7 @@
 import Combine
 import CoreAudio
 import Foundation
+import os
 
 /// Observable mirror of the system's output devices for the main window's
 /// Output popup. Core Audio property listeners keep it current, so plugging in
@@ -11,7 +12,18 @@ final class AudioDeviceList: ObservableObject {
     @Published private(set) var devices: [AudioDevices.Device] = []
     @Published private(set) var defaultDeviceID: AudioDeviceID?
 
+    /// Persistent UID of the current default output, published rather than
+    /// derived.
+    ///
+    /// A computed property over `defaultDeviceID` looks equivalent and is not.
+    /// `@Published` emits in `willSet`, so a subscriber that re-reads the object
+    /// instead of using the emitted value sees the *previous* device — and per
+    /// device settings keyed on that answer get filed under the device the user
+    /// just left. Publishing the UID lets a subscriber use what it was handed.
+    @Published private(set) var defaultDeviceUID: String?
+
     private var listeners: [(AudioObjectPropertySelector, AudioObjectPropertyListenerBlock)] = []
+    private let logger = Logger(subsystem: "com.andreypudov.coreeq", category: "AudioDeviceList")
 
     init() {
         refresh()
@@ -46,8 +58,10 @@ final class AudioDeviceList: ObservableObject {
             ?? "speaker.slash"
     }
 
-    /// Persistent UID of the current default output, which is what per-device
-    /// settings are keyed by. Nil when there is no usable output device.
+    /// Persistent UID of the current default output, read on demand.
+    ///
+    /// For callers outside a subscription. Anything reacting to a change must
+    /// use `$defaultDeviceUID` and the value it emits — see the note there.
     var defaultDevicePersistentID: String? {
         defaultDeviceID.flatMap(AudioDevices.persistentID(of:))
     }
@@ -66,7 +80,9 @@ final class AudioDeviceList: ObservableObject {
 
     func refresh() {
         devices = AudioDevices.outputDevices()
-        defaultDeviceID = AudioDevices.defaultOutputDeviceID()
+        let id = AudioDevices.defaultOutputDeviceID()
+        defaultDeviceID = id
+        defaultDeviceUID = id.flatMap(AudioDevices.persistentID(of:))
     }
 
     private func observe(_ selector: AudioObjectPropertySelector) {
@@ -79,6 +95,12 @@ final class AudioDeviceList: ObservableObject {
         )
         if status == noErr {
             listeners.append((selector, block))
+        } else {
+            // Silently ignoring this is how the device list can go stale for a
+            // whole session while everything else follows the hardware: the EQ
+            // keeps filing under a device the user left.
+            logger.error(
+                "Failed to observe audio property \(selector, privacy: .public): \(status)")
         }
     }
 }

@@ -44,7 +44,12 @@ struct GeneralSettingsView: View {
                                 permission.isGranted
                                     ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
 
-                        if !permission.isGranted {
+                        // Only when it has actually been refused. "Not
+                        // determined" is not a problem to fix, and offering the
+                        // fix for it is the same mistake as calling it refused:
+                        // it sends someone to System Settings to correct
+                        // something that is not wrong.
+                        if permission == .refused {
                             Button("Open System Settings…") { openPrivacySettings() }
                         }
                     }
@@ -70,9 +75,14 @@ struct GeneralSettingsView: View {
     /// What CoreEQ can honestly say about the permission.
     ///
     /// There is no API that answers "may I tap system audio". The only ground
-    /// truth is whether the tap was created, so this reports the engine rather
-    /// than guessing — which also means it can distinguish "refused" from "not
-    /// running" instead of blaming the user for a stopped engine.
+    /// truth is whether a tap was created, so this reports what the engine
+    /// actually observed.
+    ///
+    /// Notably *not* derived from the engine failing. The engine has failures
+    /// that happen before a tap is ever attempted — refusing an unsupported
+    /// output device is one — and reading those as a refusal tells the user
+    /// their permission is missing when it is granted, sending them to System
+    /// Settings to fix something that is not broken.
     private enum Permission {
         case granted
         case refused
@@ -107,16 +117,16 @@ struct GeneralSettingsView: View {
                     + "Screen & System Audio Recording, then quit and reopen CoreEQ."
             case .notRunning:
                 return
-                    "The equalizer is not processing at the moment, so there is nothing to report yet."
+                    "CoreEQ has not needed the permission yet, so there is nothing to report."
             }
         }
     }
 
     private var permission: Permission {
-        switch engine.status {
-        case .running: return .granted
-        case .failed: return .refused
-        case .stopped: return .notRunning
+        switch engine.tapAccess {
+        case .granted: return .granted
+        case .denied: return .refused
+        case .unknown: return .notRunning
         }
     }
 

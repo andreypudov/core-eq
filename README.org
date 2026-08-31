@@ -190,8 +190,12 @@ preset, and the on/off state are restored on every launch, per output device.
 
 * Limitations
 
-- Stereo processing: on multi-channel devices, channels beyond the first two
-  pass through unequalized.
+- Aggregate and Multi-Output Devices are not supported. Core Audio will not
+  nest one aggregate device inside another, so CoreEQ refuses them and names the
+  device and the reason rather than failing silently.
+- On a device CoreEQ cannot capture stream by stream it falls back to a stereo
+  mixdown, and channels beyond the pair the device calls stereo are silent.
+  Settings → Diagnostics says when that has happened.
 - Presets cannot yet be imported or exported as files.
 
 * Development

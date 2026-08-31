@@ -21,9 +21,50 @@ commitment, the schedule is not.
 
 Public feedback produced three defects that are not edge cases. One stops audio
 entirely on USB interfaces and display-connected outputs. One doubles the audio
-and breaks every screen capture tool. One keeps the Mac awake indefinitely. All
-three affect people doing nothing unusual, and none of them can be worked
-around from inside the app. Nothing else ships until they are fixed.
+and breaks every screen capture tool. One keeps the Mac awake indefinitely.
+Reproducing the first turned up a fourth that nobody reported: an Aggregate or
+Multi-Output Device as the system output silences the Mac outright while the app
+reports that it is working. All four affect people doing nothing unusual, and
+none of them can be worked around from inside the app. Nothing else ships until
+they are fixed.
+
+** Aggregate and Multi-Output Devices silence the Mac
+
+Found while trying to reproduce the multichannel reports below rather than from
+public feedback — which probably means it has been silencing people who had no
+way to work out what to blame.
+
+Core Audio will not nest one aggregate device inside another, and it does not
+say so. Handed an Aggregate or Multi-Output Device as a sub-device,
+=AudioHardwareCreateAggregateDevice= returns =noErr= and silently drops it,
+leaving an aggregate with no active sub-devices and no output streams at all.
+=AudioDeviceStart= then succeeds on that empty device, the engine reports
+=running=, and the IO proc is handed real tapped audio together with an output
+buffer list of zero buffers. =EQProcessor.render= iterates over nothing. Every
+stage succeeds and no audio is ever written.
+
+The tap, meanwhile, goes on muting every other process at the hardware. So the
+result is a completely silent Mac, an app reporting that it is processing audio,
+and no recovery from inside the app — global bypass skips the DSP without
+releasing the tap, so quitting CoreEQ is the only fix. That is not a
+discoverable one for a menu bar app that can launch at login.
+
+Measured rather than inferred. The same call, wrapping two different devices:
+the built-in speakers give an aggregate with =1 buffer(s) [2ch]= and one active
+sub-device; an Aggregate Device gives =0 buffer(s) []= and zero active
+sub-devices. Both return =noErr=.
+
+This is plausibly a wider fault than the multichannel one it was found under.
+Aggregate and Multi-Output Devices are how people play to two sets of speakers
+at once, and how anyone recording through BlackHole or Loopback is set up, which
+is a larger population than 7.1 HDMI users.
+
+*Fixed.* CoreEQ refuses an aggregate default output before the tap is created,
+so the machine is never muted for a configuration the app cannot serve, and it
+says which device and why. A second check confirms the aggregate it built
+reports output channels before an IO proc is started on it, because a call
+returning =noErr= is evidently not evidence that the device works. Refusing is
+not the same as supporting, which is below under "Later".
 
 ** Multichannel outputs
 
@@ -63,6 +104,32 @@ Two things to do, and they are probably one change:
 device reporting more than two channels either works or is reported in the UI
 rather than failing silently.
 
+*Done.* =EQProcessor= takes an explicit output layout, worked out once on the
+main thread from the device's streams and the taps' formats, and places each
+tap channel at a named output channel instead of pairing buffers by position. A
+tap is bound to every output stream the device presents, because a tap binds to
+one stream and takes that stream's format — binding to the widest alone captured
+two channels of sixteen on an interface presenting eight stereo streams. The
+chain runs on every routed channel with its own delay lines.
+
+Confirmed on hardware, against a sixteen channel device:
+
+- The device-bound tap delivers sixteen channels of 32-bit float, not a stereo
+  mixdown.
+- The aggregate built around it presents sixteen output channels, and the
+  device's own input buffers are accounted for — the tap is not buffer zero on a
+  duplex device.
+- Six channel content arrives as six discrete channels and is placed one to one,
+  with the remaining ten silent.
+- Flat is bit-exact. A +12 dB bell measures +12.0 dB.
+- Driving six channels with six different tones, each channel's measured
+  response matched the drawn curve to within 0.01 dB — which is only true if the
+  chain runs per channel with per-channel state.
+
+What remains untested on hardware is the per-stream path itself: every device
+available here presents a single output stream, so one-tap-per-stream is covered
+by unit tests against a fake tap factory rather than by a real interface.
+
 ** Permission text before the system prompt, not after
 
 “System Audio Recording” sounds broader than what an equalizer does, and the
@@ -97,14 +164,18 @@ be a handful of buffers and inaudible.
 
 ** Echo and doubled audio
 
-Four symptoms that sound like one another, and the third is the one that makes
+Three symptoms that sound like one another, and the second is the one that makes
 this a defect rather than an explanation:
 
 - Running alongside SoundSource produces a flangey delay.
 - With CoreEQ active, screen recording fails in *every* capture tool tested, and
-  the captured audio has “a Doppler echo delay”.
+  the captured audio has “a Doppler echo delay”. Reported twice.
 - After waking from sleep, audio sometimes plays with an echo.
-- The Audio4C reports above, where sound starts and then vanishes.
+
+A fourth symptom was listed here — the Audio4C reports where sound starts and
+then vanishes — and has been removed. It was the channel layout bug in
+*Multichannel outputs* above, not doubling, and is fixed. It is named here so
+nobody reads it back as evidence for this item.
 
 The SoundSource case has an easy story: two processors in one path, so the
 signal arrives twice slightly offset. The wake-from-sleep case does not — no
@@ -113,6 +184,15 @@ of the audio by itself. The likely shape is an IO proc or an aggregate device
 that survives a state change it should not have survived, leaving two of them
 running. That would explain the echo after wake, and it is worth testing
 whether it also explains the capture-tool case.
+
+The feedback shape is not hypothetical, and it is worth writing down because it
+was observed accidentally. While verifying the multichannel work, a test harness
+tapped system audio and wrote its own output back to the same device without
+excluding itself from the tap. It captured what it had just written, and the
+level compounded across the run — a 0.4 peak measured 1.56, then 26, then 71.
+=AudioEngine= excludes its own process for exactly this reason. Two taps in one
+path, one of them playing back what the other captures, is the same shape, and
+that is what a capture tool and CoreEQ are doing to each other.
 
 Three things to do:
 
@@ -216,6 +296,34 @@ chain that already exists.
 
 * Later — worth doing, not yet scheduled
 
+** Rendering through Aggregate and Multi-Output Devices
+
+Refusing them with a clear message is honest, but it is still a no, and the 1.8
+fix above changes only what the app does about not being able to.
+
+Supporting them, without giving up the driver-free design, means not wrapping
+the user's aggregate at all: read its sub-device list and build an equivalent
+*flat* aggregate out of those leaf devices directly, carrying over the main
+sub-device, the drift compensation, and whether it is stacked. Nesting is the
+only thing Core Audio prohibits; the leaves are ordinary devices. Measured:
+rebuilding the same aggregate from its own leaves gives two active sub-devices
+and a real output layout, where nesting gave zero of both.
+
+The two kinds then split, and unevenly:
+
+- *Multi-Output Devices* need nothing further. Rebuilt as a stacked aggregate,
+  Core Audio does the duplication internally and presents =1 buffer(s) [2ch]= —
+  plain stereo, which the render path already handles. This is both the larger
+  population and the cheaper half.
+- *Aggregate Devices* concatenate their sub-devices' channels, so a flat rebuild
+  of two stereo devices presents four. That needed the multichannel layout work
+  above, which is now done, so this is unblocked as well.
+
+The open risk is whether two aggregates can run against the same leaf devices at
+once. Creation succeeds while the user's own aggregate exists and holds them;
+whether both can be *started* has not been tested, and that is the question that
+decides the design.
+
 ** A/B comparison export
 
 Both slots already hold complete states, so writing out both curves and their
@@ -227,13 +335,27 @@ elsewhere and offered to help.
 There is already an FFT feeding the spectrum analyser; a time-domain view is a
 second read of the same buffer, tied to the A/B toggle.
 
-** Browsing the AutoEQ database in-app
+** Loading presets from the AutoEQ database
+
+Requested, naming [[https://autoeq.app][autoeq.app]] as the source.
 
 The step past file import: search the community database by headphone model and
-apply, the way Poweramp does. Open data, so it is a network fetch plus the 1.9
-parser. Note that this would be CoreEQ's first outbound network connection,
-which is currently a privacy claim worth keeping. If it happens, it happens on
-explicit user action and is stated as such.
+apply it, the way Poweramp does. Open data, so the work is a network fetch plus
+the parser 1.9 already has to write.
+
+*Automatic* is worth pinning down before any of this is built, because it reads
+two ways. Fetching a profile without the user downloading a file by hand is this
+item, and is well defined. Choosing a profile for whatever headphones happen to
+be connected is *Preset recommendation* below, and needs the app to identify the
+device rather than the user to name it — a different and much larger problem.
+
+The two readings also differ on privacy, which is the part that decides the
+shape. This would be CoreEQ's first outbound network connection, and "nothing is
+recorded, stored, or transmitted" is a claim worth keeping. A fetch the user
+asks for by searching a model name is compatible with that and can be stated
+plainly. A fetch that happens on its own — on launch, or whenever a device
+appears — is not, whatever it is fetching. So if this ships, it ships on explicit
+user action, and the wording in the app says so.
 
 ** Preset recommendation
 

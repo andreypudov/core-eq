@@ -73,14 +73,23 @@ final class ProfileManager: ObservableObject {
 
     init(settings: SettingsStore, outputDeviceUID: String? = nil) {
         self.settings = settings
-        self.outputDeviceUID = outputDeviceUID
+        // Falling back to the device this app was last filing under, because
+        // "Core Audio has no answer yet" and "there is genuinely no device" look
+        // identical here and only one of them is true at launch. Picking the
+        // remembered device restores the session the user actually left; picking
+        // nothing files everything they then do into a slot no real device ever
+        // reads again, which is how a no-device slot ends up holding a real
+        // preset and a real A/B pair.
+        let device = outputDeviceUID ?? settings.lastOutputDeviceUID
+        self.outputDeviceUID = device
+        if device != nil { settings.lastOutputDeviceUID = device }
 
         let library = PresetLibrary(stored: settings.userProfiles)
         self.library = library
 
         let state =
-            Self.migratedStateIfNeeded(settings: settings, deviceUID: outputDeviceUID)
-            ?? settings.deviceStates[Self.slot(for: outputDeviceUID)]
+            Self.migratedStateIfNeeded(settings: settings, deviceUID: device)
+            ?? settings.deviceStates[Self.slot(for: device)]
             ?? DeviceEQState(profileName: BuiltInProfiles.defaultProfileName)
 
         let resolved = state.resolved(against: library.all)
@@ -118,6 +127,7 @@ final class ProfileManager: ObservableObject {
         guard uid != outputDeviceUID else { return }
         persistDeviceState()
         outputDeviceUID = uid
+        settings.lastOutputDeviceUID = uid
 
         let state =
             settings.deviceStates[Self.slot(for: uid)]

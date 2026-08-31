@@ -101,6 +101,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         sectionItems.removeAll()
 
         menu.addItem(headerItem())
+        if let failure = engineFailureItem() {
+            menu.addItem(failure)
+        }
         menu.addItem(.separator())
 
         // Where the sound is going comes first, right under the switch that
@@ -165,11 +168,49 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     // MARK: - Items
 
+    /// States an engine failure at the top of the menu, or nothing when the
+    /// engine is fine.
+    ///
+    /// The menu is where a menu bar app's users actually are — many never open
+    /// the main window at all — so a failure reported only there is, for most
+    /// people, not reported.
+    ///
+    /// Shows the failure's short summary, not its message. A menu is as wide as
+    /// its widest item and `NSMenuItem` titles do not wrap, so a sentence here
+    /// drags the whole menu out to its length. The message has to say what to
+    /// change, which makes it a sentence and the menu the wrong place for it:
+    /// this names the fault, the tooltip carries the sentence, and the click
+    /// opens the full report.
+    /// Opacity for the EQ controls: the engine's own answer, not a rule of the
+    /// menu's own. Off and failed both mean nothing is being shaped.
+    private var eqControlsAlpha: CGFloat {
+        audioEngine.isProcessing ? 1.0 : 0.45
+    }
+
+    private func engineFailureItem() -> NSMenuItem? {
+        guard case .failed(let summary, let message) = audioEngine.status else { return nil }
+
+        let item = NSMenuItem(
+            title: summary, action: #selector(openDiagnostics), keyEquivalent: "")
+        item.target = self
+        item.image = NSImage(
+            systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
+        item.toolTip = message
+        return item
+    }
+
+    @objc private func openDiagnostics() {
+        SettingsOpener.shared.open(tab: .diagnostics)
+    }
+
     private func headerItem() -> NSMenuItem {
         let item = NSMenuItem()
-        item.view = MenuHeaderView(isOn: audioEngine.isEnabled) { [weak self] isOn in
+        item.view = MenuHeaderView(
+            isOn: audioEngine.isEnabled, isEnabled: audioEngine.canProcess
+        ) { [weak self] isOn in
             self?.audioEngine.isEnabled = isOn
-            self?.quickEQBody?.alphaValue = isOn ? 1.0 : 0.45
+            self?.quickEQBody?.alphaValue = self?.eqControlsAlpha ?? 1.0
         }
         return item
     }
@@ -199,7 +240,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         ) { [weak self] axis, value in
             self?.applyTone(axis: axis, value: value)
         }
-        body.alphaValue = audioEngine.isEnabled ? 1.0 : 0.45
+        body.alphaValue = eqControlsAlpha
         quickEQBody = body
 
         let item = NSMenuItem()

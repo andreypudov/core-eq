@@ -7,7 +7,7 @@ final class MenuHeaderView: NSView {
     private let toggle = NSSwitch()
     private let onToggle: (Bool) -> Void
 
-    init(isOn: Bool, onToggle: @escaping (Bool) -> Void) {
+    init(isOn: Bool, isEnabled: Bool = true, onToggle: @escaping (Bool) -> Void) {
         self.onToggle = onToggle
         super.init(frame: .zero)
         // View-based menu items are sized by Auto Layout, so drive the whole
@@ -19,6 +19,9 @@ final class MenuHeaderView: NSView {
         title.translatesAutoresizingMaskIntoConstraints = false
 
         toggle.state = isOn ? .on : .off
+        // Off while the engine cannot run at all: switching on would then set a
+        // preference and change no sound.
+        toggle.isEnabled = isEnabled
         toggle.target = self
         toggle.action = #selector(switchToggled)
         toggle.translatesAutoresizingMaskIntoConstraints = false

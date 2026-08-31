@@ -19,12 +19,24 @@ final class SettingsStore {
         static let tone = "quickToneControls"
         static let userProfiles = "userProfiles"
         static let deviceStates = "deviceStates"
+        static let lastOutputDeviceUID = "lastOutputDeviceUID"
     }
 
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+    }
+
+    /// Persistent UID of the output the app was last filing state under.
+    ///
+    /// Core Audio does not always have an answer at launch — a device still
+    /// waking, or none connected at all — and without this the app files that
+    /// session under the no-device slot, where the state is invisible to every
+    /// real device afterwards.
+    var lastOutputDeviceUID: String? {
+        get { defaults.string(forKey: Key.lastOutputDeviceUID) }
+        set { defaults.set(newValue, forKey: Key.lastOutputDeviceUID) }
     }
 
     var activeProfileName: String? {

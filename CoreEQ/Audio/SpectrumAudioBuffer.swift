@@ -21,17 +21,26 @@ final class SpectrumAudioBuffer {
         self.storage = [Float](repeating: 0, count: capacity)
     }
 
-    /// Render thread. Sums the interleaved channels of one IO block to mono and
-    /// appends them. Non-blocking: skips the block if the consumer holds the
-    /// lock.
-    func write(interleaved data: UnsafePointer<Float>, frames: Int, channels: Int) {
+    /// Render thread. Sums `channels` interleaved channels of one IO block to
+    /// mono and appends them. Non-blocking: skips the block if the consumer
+    /// holds the lock.
+    ///
+    /// `stride` is how far apart successive frames are, which is the same as
+    /// `channels` for a buffer read end to end and larger when reading a pair of
+    /// channels out of a wider one — the case a multichannel device presents,
+    /// where the two channels CoreEQ writes sit inside a buffer of eight.
+    /// Omitting it keeps the plain interleaved reading.
+    func write(
+        interleaved data: UnsafePointer<Float>, frames: Int, channels: Int, stride: Int? = nil
+    ) {
         guard channels > 0, frames > 0, lock.lockIfAvailable() else { return }
+        let step = stride ?? channels
         let scale = 1.0 / Float(channels)
         var w = writeIndex
         storage.withUnsafeMutableBufferPointer { ring in
             for frame in 0..<frames {
                 var sum: Float = 0
-                let base = frame * channels
+                let base = frame * step
                 for channel in 0..<channels { sum += data[base + channel] }
                 ring[w] = sum * scale
                 w += 1
