@@ -17,6 +17,7 @@
 			membershipExceptions = (
 				App/AppDelegate.swift,
 				App/CoreEQApp.swift,
+				App/EngineActions.swift,
 				App/EngineStatusBridge.swift,
 				Audio/AudioDeviceList.swift,
 				Audio/AudioDevices.swift,

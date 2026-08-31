@@ -61,8 +61,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // engine, so the one fact it needs crosses on its own.
         EngineStatusBridge.shared.follow(audioEngine)
         ProfileStatusBridge.shared.follow(profileManager)
+        EngineActions.shared.follow(audioEngine)
 
-        audioEngine.start()
+        audioEngine.startUnlessPermissionIsUnasked()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

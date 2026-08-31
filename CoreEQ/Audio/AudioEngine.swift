@@ -2,6 +2,7 @@ import AppKit
 import AudioToolbox
 import Combine
 import CoreAudio
+import CoreGraphics
 import Foundation
 import os
 
@@ -26,6 +27,17 @@ final class AudioEngine: ObservableObject {
         /// — a menu is as wide as its widest item. `message` says what to
         /// change, and is what every surface with room for it shows.
         case failed(summary: String, message: String)
+        /// Waiting to be allowed to capture audio.
+        ///
+        /// Creating the tap is what shows the system prompt, so the engine has
+        /// to not start in order for anything to be explained first. This is the
+        /// state where CoreEQ is installed, running, and deliberately doing
+        /// nothing until the user says go.
+        ///
+        /// `offer` is what will actually help: macOS raises its prompt only the
+        /// first time, so once it has been asked, System Settings is the only
+        /// thing that can change the answer.
+        case awaitingPermission(offer: AudioPermissionGate.Offer)
 
         var description: String {
             switch self {
@@ -35,6 +47,17 @@ final class AudioEngine: ObservableObject {
                 return "Processing system audio on “\(deviceName)”."
             case .failed(_, let message):
                 return "Audio engine error: \(message)"
+            case .awaitingPermission:
+                return "CoreEQ needs permission to process system audio."
+            }
+        }
+
+        /// A few words for surfaces that cannot afford a sentence.
+        var summary: String? {
+            switch self {
+            case .stopped, .running: return nil
+            case .failed(let summary, _): return summary
+            case .awaitingPermission: return "Audio permission needed"
             }
         }
     }
@@ -68,10 +91,16 @@ final class AudioEngine: ObservableObject {
     /// `isEnabled` off keeps the two apart where they do differ: the switch
     /// still holds what the user asked for, and asking for it back is still the
     /// way out.
-    var isProcessing: Bool {
-        guard isEnabled else { return false }
-        if case .running = status { return true }
-        return false
+    var isProcessing: Bool { Self.isProcessing(status: status, isEnabled: isEnabled) }
+
+    /// The same question, asked of values rather than of the engine.
+    ///
+    /// `@Published` emits in `willSet`, so a subscriber reading these properties
+    /// back is reading the value being replaced. Anything reacting to a change
+    /// has to answer from what Combine handed it, and this is how.
+    nonisolated static func isProcessing(status: Status, isEnabled: Bool) -> Bool {
+        guard isEnabled, case .running = status else { return false }
+        return true
     }
 
     /// Whether asking for the equalizer to be on can achieve anything.
@@ -80,9 +109,15 @@ final class AudioEngine: ObservableObject {
     /// refuse, say. Switching on then changes a stored preference and nothing
     /// else, so the switch is disabled rather than left to report a state the
     /// sound does not have.
-    var canProcess: Bool {
-        if case .failed = status { return false }
-        return true
+    var canProcess: Bool { Self.canProcess(status: status) }
+
+    /// As `canProcess`, from a status rather than from the engine. See
+    /// `isProcessing(status:isEnabled:)`.
+    nonisolated static func canProcess(status: Status) -> Bool {
+        switch status {
+        case .failed, .awaitingPermission: return false
+        case .stopped, .running: return true
+        }
     }
 
     /// Global bypass. When false the engine keeps running but passes audio
@@ -133,6 +168,43 @@ final class AudioEngine: ObservableObject {
 
     // MARK: - Lifecycle
 
+    /// Starts, unless CoreEQ has never asked for permission — in which case it
+    /// waits to be asked to.
+    ///
+    /// The whole point of the waiting state: `AudioHardwareCreateProcessTap` is
+    /// what raises the system prompt, so starting automatically means the first
+    /// thing a new user sees is macOS asking to record their audio, with no app
+    /// on screen to say why. "System Audio Recording" sounds far broader than
+    /// what an equalizer does, and that is the one moment where it matters.
+    func startUnlessPermissionIsUnasked() {
+        // Already allowed: start, and never mention it. An update, or a
+        // relaunch, must not interrupt someone who has already said yes.
+        //
+        // `CGPreflightScreenCaptureAccess` answers without prompting. System
+        // audio capture and screen capture share one TCC category — "Screen &
+        // System Audio Recording" — so this is the same permission a process tap
+        // needs. It is an inference from how macOS groups them rather than a
+        // documented guarantee about taps, but it fails softly: at worst the app
+        // explains itself when it did not need to, or falls back to the prompt
+        // it would have shown anyway.
+        switch AudioPermissionGate.decision(
+            isGranted: CGPreflightScreenCaptureAccess(),
+            wasRefused: settings.wasAudioAccessRefused)
+        {
+        case .start:
+            start()
+        case .explainFirst(let offer):
+            status = .awaitingPermission(offer: offer)
+            logger.info("Waiting for the user to allow system audio capture")
+        }
+    }
+
+    /// The user has asked for the equalizer, having been told what it needs.
+    /// This is the call that lets macOS raise its prompt.
+    func requestPermission() {
+        start()
+    }
+
     func start() {
         pendingRestart?.cancel()
         // Before the attempt, not after it. These two outlive any single
@@ -154,7 +226,12 @@ final class AudioEngine: ObservableObject {
                 (error as? CoreAudioError)?.localizedDescription ?? error.localizedDescription
             logger.error("Engine start failed: \(message, privacy: .public)")
             diagnostics = nil
-            if error is TapUnavailable { tapAccess = .denied }
+            if error is TapUnavailable {
+                tapAccess = .denied
+                // Recorded so the next launch offers System Settings rather than
+                // a button that can no longer raise a prompt.
+                settings.wasAudioAccessRefused = true
+            }
             status = .failed(summary: Self.summary(for: error), message: message)
             let isPermanent = (error as? UnusableOutputDevice)?.isPermanent ?? false
             if !isPermanent, retryCount < Self.maxRetries {
@@ -305,6 +382,10 @@ final class AudioEngine: ObservableObject {
 
         let taps = try TapAssembly.taps(
             forStreams: AudioDevices.outputStreamChannelCounts(of: device.id), using: factory)
+        // Capturing worked, so whatever was refused before has been allowed
+        // since. Clearing it means the offer goes back to asking rather than
+        // sending someone to System Settings for a problem they have fixed.
+        settings.wasAudioAccessRefused = false
         let channels = taps.reduce(0) { $0 + $1.channels }
         logger.info(
             "Taps: \(taps.count, privacy: .public), \(channels, privacy: .public) channels")

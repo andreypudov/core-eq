@@ -36,22 +36,34 @@ struct GeneralSettingsView: View {
             }
 
             Section {
-                LabeledContent("System Audio Recording") {
-                    HStack(spacing: 8) {
-                        Label(permission.title, systemImage: permission.symbol)
-                            .labelStyle(.titleAndIcon)
-                            .foregroundStyle(
-                                permission.isGranted
-                                    ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                // Laid out here rather than with `LabeledContent`, which places
+                // its value column on its own alignment and insets — that is
+                // what left the button at a different margin from every other
+                // row. An `HStack` with a `Spacer` puts the trailing edge on the
+                // form's own margin, so the button lines up with the toggle in
+                // the section above.
+                HStack(spacing: 12) {
+                    Text("System Audio Recording")
 
-                        // Only when it has actually been refused. "Not
-                        // determined" is not a problem to fix, and offering the
-                        // fix for it is the same mistake as calling it refused:
-                        // it sends someone to System Settings to correct
-                        // something that is not wrong.
-                        if permission == .refused {
-                            Button("Open System Settings…") { openPrivacySettings() }
-                        }
+                    Spacer(minLength: 12)
+
+                    Label(permission.title, systemImage: permission.symbol)
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(
+                            permission.isGranted
+                                ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+
+                    // Only when there is genuinely something to do. "Not
+                    // determined" is not a problem, and offering to fix it is
+                    // the same mistake as calling it refused: it sends someone
+                    // to correct something that is not wrong.
+                    //
+                    // Prominent because arriving here from the menu bar means
+                    // having been sent to do something, and the something has to
+                    // be obvious at a glance.
+                    if let action = permission.action {
+                        Button(action.title) { perform(action) }
+                            .buttonStyle(.borderedProminent)
                     }
                 }
             } footer: {
@@ -83,16 +95,42 @@ struct GeneralSettingsView: View {
     /// output device is one — and reading those as a refusal tells the user
     /// their permission is missing when it is granted, sending them to System
     /// Settings to fix something that is not broken.
+    /// The one thing to do about the permission, when there is one.
+    private enum PermissionAction {
+        /// Let macOS raise its prompt, now that CoreEQ has explained itself.
+        case request
+        /// It was refused, and only System Settings can change that.
+        case openSystemSettings
+
+        var title: String {
+            switch self {
+            case .request: return "Allow Audio Access…"
+            case .openSystemSettings: return "Open System Settings…"
+            }
+        }
+    }
+
+    private func perform(_ action: PermissionAction) {
+        switch action {
+        case .request: EngineActions.shared.requestPermission()
+        case .openSystemSettings: openPrivacySettings()
+        }
+    }
+
     private enum Permission {
         case granted
         case refused
         case notRunning
+        /// Never asked for. The one state where CoreEQ can still explain itself
+        /// before macOS does the asking.
+        case unasked
 
         var title: String {
             switch self {
             case .granted: return "Granted"
             case .refused: return "Not granted"
             case .notRunning: return "Not running"
+            case .unasked: return "Not requested"
             }
         }
 
@@ -101,10 +139,19 @@ struct GeneralSettingsView: View {
             case .granted: return "checkmark.circle"
             case .refused: return "exclamationmark.triangle"
             case .notRunning: return "pause.circle"
+            case .unasked: return "exclamationmark.circle"
             }
         }
 
         var isGranted: Bool { self == .granted }
+
+        var action: PermissionAction? {
+            switch self {
+            case .unasked: return .request
+            case .refused: return .openSystemSettings
+            case .granted, .notRunning: return nil
+            }
+        }
 
         var explanation: String {
             switch self {
@@ -118,11 +165,23 @@ struct GeneralSettingsView: View {
             case .notRunning:
                 return
                     "CoreEQ has not needed the permission yet, so there is nothing to report."
+            case .unasked:
+                return
+                    "An equalizer has to reach the sound to change it. CoreEQ reads audio on "
+                    + "its way to your speakers, adjusts it, and plays it straight back — that "
+                    + "is the whole of what the permission is for. Nothing is recorded, stored, "
+                    + "or sent anywhere, and quitting CoreEQ hands the audio back immediately.\n\n"
+                    + "Allow access, and macOS will ask you to confirm."
             }
         }
     }
 
     private var permission: Permission {
+        if case .awaitingPermission(let offer) = engine.status {
+            // Asked once already: macOS will not offer again, so the only thing
+            // that helps is System Settings.
+            return offer == .askTheSystem ? .unasked : .refused
+        }
         switch engine.tapAccess {
         case .granted: return .granted
         case .denied: return .refused

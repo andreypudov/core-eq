@@ -55,7 +55,9 @@ struct EqualizerDetailView: View {
                 // not being shaped — so it also carries the explanation.
                 .opacity(audioEngine.isProcessing ? 1.0 : 0.5)
                 .overlay {
-                    if let failure = engineFailure {
+                    if case .awaitingPermission(let offer) = audioEngine.status {
+                        permissionOverlay(offer)
+                    } else if let failure = engineFailure {
                         engineOverlay(failure)
                     }
                 }
@@ -608,6 +610,64 @@ struct EqualizerDetailView: View {
         return message
     }
 
+    /// What the permission is for, said before macOS asks rather than after.
+    ///
+    /// "System Audio Recording" sounds far broader than what an equalizer does,
+    /// and the one moment that matters is the moment the system asks. Creating
+    /// the tap is what raises that prompt, so the engine waits here until the
+    /// button below is pressed.
+    private func permissionOverlay(_ offer: AudioPermissionGate.Offer) -> some View {
+        VStack(spacing: 10) {
+            Label("CoreEQ needs permission to process audio", systemImage: "waveform")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            Text(
+                "An equalizer has to reach the sound to change it. CoreEQ reads audio on its "
+                    + "way to your speakers, adjusts it, and plays it straight back. Nothing is "
+                    + "recorded, stored, or sent anywhere, and quitting CoreEQ hands the audio "
+                    + "back immediately."
+            )
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+
+            switch offer {
+            case .askTheSystem:
+                Button("Allow Audio Access…") { audioEngine.requestPermission() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .keyboardShortcut(.defaultAction)
+
+                Text("macOS will ask you to confirm.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            case .openSystemSettings:
+                // macOS raises its prompt once. After that only System Settings
+                // can change the answer, so offering to ask again would be an
+                // offer the app cannot keep.
+                Button("Open System Settings…") { SettingsOpener.shared.open(tab: .general) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                Text("Allow CoreEQ under Screen & System Audio Recording.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 18)
+        .frame(maxWidth: 380)
+        .background(RoundedRectangle(cornerRadius: 10).fill(.regularMaterial))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.12))
+        )
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+        .accessibilityElement(children: .combine)
+        .transition(.opacity)
+    }
+
     /// The failure, stated over the curve it invalidates.
     ///
     /// On the graph rather than above it for two reasons. The curve is what
@@ -659,6 +719,7 @@ struct EqualizerDetailView: View {
         case .running: return nil
         case .stopped: return "Audio engine stopped"
         case .failed: return "Audio engine error"
+        case .awaitingPermission: return "Waiting for permission"
         }
     }
 
