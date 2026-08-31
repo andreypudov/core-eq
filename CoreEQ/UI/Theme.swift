@@ -60,7 +60,7 @@ enum Theme {
     /// already made — the window and the menu are laid out to fixed sizes and
     /// would break — so this makes it consistent rather than accidental.
     ///
-    /// Six roles. Adding a seventh should feel like it needs an argument.
+    /// Ten roles. Adding an eleventh should feel like it needs an argument.
     enum Font {
         /// 17 semibold. The app's name in About, and nothing else.
         static let title = SwiftUI.Font.system(size: 17, weight: .semibold)

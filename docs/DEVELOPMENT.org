@@ -262,6 +262,55 @@ the indentation and line-length settings that =.swift-format= already holds, fre
 to drift out of step with it. It earns its place the day someone edits this
 project in VS Code or Vim, and not before.
 
+* Design tokens
+
+Every font in the app comes from =Theme.Font=, and every colour from
+=.primary= / =.secondary= / =.tertiary= or from =Theme=. A view that writes
+=.font(.system(size: 12))= is a bug in the same way an unformatted file is:
+nothing will fail, and the app will drift.
+
+It did drift. Before the tokens existed there were eight hardcoded point sizes —
+9, 10, 11, 12, 13, 14, 17 — *and* three of the system's semantic styles
+(=.callout=, =.caption=, =.headline=) used alongside them. Which one a view used
+depended on when it was written, so the Settings panes had ended up a different
+size from the window and from each other, and text people had to read was being
+set at 9 and 10 points.
+
+Ten roles, and adding an eleventh should feel like it needs an argument:
+
+| =title=            | 17 semibold        | the app's name in About, and nothing else |
+| =heading=          | 13 semibold        | the heading of a pane or a block          |
+| =body=             | 13                 | row text naming something: a device, a preset |
+| =label=            | 12                 | labels and controls — the app's default   |
+| =labelEmphasized=  | 12 semibold        | a label titling the group beneath it      |
+| =secondary=        | 11                 | supporting text, axis legends             |
+| =value=            | 11 medium, mono    | a number that changes as it is dragged    |
+| =valueEmphasized=  | 11 semibold, mono  | the same, where the number is the subject |
+| =report=           | 11 monospaced      | the diagnostics report                    |
+| =tick=             | 10 mono digits     | axis ticks, and nothing else              |
+
+Two rules behind the table. *Eleven points is the floor for anything anyone
+reads* — =tick= is below it because axis numerals are glanced at, never read, and
+it is the only role allowed there. And *monospaced digits are for numbers that
+change*: a value that updates during a drag makes the row twitch between glyph
+widths otherwise.
+
+Fixed point sizes rather than the semantic styles, which means CoreEQ does not
+follow Dynamic Type. That trade was already made — the window, the menu and the
+Settings panes are laid out to fixed sizes and would break — so the tokens make
+it consistent rather than accidental. Revisiting it is a layout project, not a
+typography one.
+
+One exception, and it should stay the only one: =PowerToggleStyle= sizes its
+glyph from the toggle's own diameter. That is icon geometry, not typography.
+
+Colour is in better shape and only half tidied. Text uses the three system
+hierarchies; the response curve and the block borders come from =Theme.signal=
+and =Theme.blockBorder=. What has *not* been collapsed is opacity: there are
+around a dozen distinct values in use for fills, borders and dimming, several of
+which are probably meant to be the same number. Prefer an existing one over
+inventing another, and the whole set is worth naming the way the fonts now are.
+
 * Project structure
 
 #+begin_example
