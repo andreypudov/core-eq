@@ -41,6 +41,13 @@ final class EngineStatusBridge: ObservableObject {
     /// snapshot taken at start would always say none.
     var rateWindow: RateWindow.Measurement? { engine?.rateWindow }
 
+    /// Uptime, restarts and output level, on the same terms: all three are only
+    /// true at the moment a report is drawn, and all three would read as zero
+    /// forever if they came from the snapshot taken when the engine started.
+    var uptime: TimeInterval? { engine?.uptime }
+    var restarts: DiagnosticsReport.Restarts { engine?.restarts ?? DiagnosticsReport.Restarts() }
+    var level: DiagnosticsReport.Level { engine?.level ?? DiagnosticsReport.Level() }
+
     func follow(_ engine: AudioEngine) {
         self.engine = engine
         engine.$status

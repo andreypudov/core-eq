@@ -47,6 +47,14 @@ without guaranteeing clipping away. The mix level arriving at a tap is
 unknowable from inside it. If the noise is also present at Flat, it is not
 clipping and needs a real investigation.
 
+*The report now answers this without a round trip.* The render path keeps the
+largest magnitude it has produced since the engine started and counts the
+samples that did not fit, and the diagnostics report carries both — =peak
+output: 0.71, no clipping=, or the peak with a count and what to do about it.
+Until now the only way to tell was to ask the reporter to switch to Flat and
+come back, which is two exchanges to answer a question their own machine
+already knew. Next time this is reported, ask for the report first.
+
 ** Echo and doubled audio
 
 Three symptoms that sound like one another, and the second is the one that makes
@@ -82,7 +90,10 @@ that is what a capture tool and CoreEQ are doing to each other.
 Three things to do:
 
 - Audit the teardown and rebuild path around sleep, wake, and device changes,
-  and confirm exactly one IO proc is ever running.
+  and confirm exactly one IO proc is ever running. The report now names how many
+  restarts a session has had, why the last one happened, and how long ago, so a
+  report filed alongside an echo says whether a state change preceded it — the
+  wake-from-sleep case is a restart by definition.
 - Reproduce against a screen capture tool. Capture tools take their own tap of
   the system audio, so CoreEQ's global tap and theirs are interacting.
   “Every capture tool fails” makes this a real conflict, not a quirk of one app.

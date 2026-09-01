@@ -72,6 +72,21 @@ final class EQProcessor: @unchecked Sendable {
     /// silence, or one buffer unprocessed.
     nonisolated(unsafe) var isProvingCapture = false
 
+    /// The loudest sample the EQ has produced since the engine started, and how
+    /// many left the representable range.
+    ///
+    /// A boosted preset can ask for more headroom than the signal has, and the
+    /// result is distortion the user hears as noise rather than as loudness —
+    /// two reports of exactly that are open. Nothing else can settle it: the mix
+    /// level arriving at a tap is unknowable from inside it, so the only way to
+    /// know whether CoreEQ is clipping is to look at what CoreEQ produced.
+    ///
+    /// Unsynchronised for the same reasons as `hasReceivedAudio`: written only
+    /// on the render thread, read only for a report, and a reader that catches
+    /// a stale value is a reader who asks again.
+    nonisolated(unsafe) private(set) var peakLevel: Float = 0
+    nonisolated(unsafe) private(set) var clippedSamples = 0
+
     /// Mono copy of the played-back output, tapped for the spectrum analyzer.
     /// 8192 samples is well beyond the analyzer's 4096-sample window, so the
     /// consumer can snapshot without the producer overtaking the read region.
@@ -296,6 +311,8 @@ final class EQProcessor: @unchecked Sendable {
     /// Forgets what the tap has delivered, for a fresh engine.
     func resetAudioObservation() {
         hasReceivedAudio = false
+        peakLevel = 0
+        clippedSamples = 0
     }
 
     /// Stages the output layout. Set by `AudioEngine` once per engine start,
@@ -458,7 +475,31 @@ final class EQProcessor: @unchecked Sendable {
             processChannel(
                 target.pointer, stride: target.stride, frames: count, channel: channel)
             applyPreamp(target.pointer, stride: target.stride, frames: count)
+            measureLevel(target.pointer, stride: target.stride, frames: count)
         }
+    }
+
+    /// Watches what the chain actually produced.
+    ///
+    /// Called only from `equalize`, which is deliberate: bypass passes samples
+    /// through untouched, so there is nothing CoreEQ could have clipped and
+    /// nothing worth the pass. The peak is kept for the life of the engine
+    /// rather than per block — the question is whether this ever happened, and a
+    /// value that decays answers it only for whoever is watching at the time.
+    private func measureLevel(
+        _ samples: UnsafePointer<Float>, stride: Int, frames: Int
+    ) {
+        var peak = peakLevel
+        var clipped = 0
+        var index = 0
+        for _ in 0..<frames {
+            let magnitude = abs(samples[index])
+            if magnitude > peak { peak = magnitude }
+            if magnitude > 1.0 { clipped &+= 1 }
+            index += stride
+        }
+        peakLevel = peak
+        clippedSamples &+= clipped
     }
 
     /// Locates one global output channel: which buffer holds it, where in that

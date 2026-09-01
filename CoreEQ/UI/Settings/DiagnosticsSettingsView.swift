@@ -117,6 +117,9 @@ struct DiagnosticsSettingsView: View {
         guard var snapshot else { return nil }
         snapshot.hasReceivedAudio = EngineStatusBridge.shared.hasReceivedAudio
         snapshot.rateWindow = EngineStatusBridge.shared.rateWindow
+        snapshot.uptime = EngineStatusBridge.shared.uptime
+        snapshot.restarts = EngineStatusBridge.shared.restarts
+        snapshot.level = EngineStatusBridge.shared.level
         return snapshot
     }
 

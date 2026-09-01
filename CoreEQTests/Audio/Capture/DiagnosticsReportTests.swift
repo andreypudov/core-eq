@@ -246,4 +246,92 @@ struct DiagnosticsReportTests {
         #expect(report.contains("1 kHz band sat at 363 Hz"))
     }
 
+    // MARK: - Output level
+
+    /// The line that settles the open noise reports. Both halves have to be
+    /// unambiguous: a reader who has never seen this report cannot tell a
+    /// missing line from a healthy one.
+    @Test func aChainWithHeadroomToSpareSaysSo() {
+        var quiet = engine()
+        quiet.level = DiagnosticsReport.Level(peak: 0.71, clippedSamples: 0)
+
+        let report = text(engine: quiet)
+
+        #expect(report.contains("peak output:     0.71, no clipping"))
+        #expect(report.contains("NOTE: the chain produces more than fits") == false)
+    }
+
+    /// Clipping is the first hypothesis for "it sounds broken at higher volume",
+    /// and the one thing the user cannot check for themselves — the level
+    /// arriving at a tap depends on what is playing.
+    @Test func aClippingChainIsNamedAndExplained() {
+        var loud = engine()
+        loud.level = DiagnosticsReport.Level(peak: 1.84, clippedSamples: 4_812)
+
+        let report = text(engine: loud)
+
+        #expect(report.contains("1.84"))
+        #expect(report.contains("4812 sample(s) clipped"))
+        #expect(report.contains("as distortion rather than loudness"))
+    }
+
+    /// One sample over is still clipping. A threshold that ignored a handful
+    /// would hide the intermittent case, which is the one people report.
+    @Test func aSingleClippedSampleCounts() {
+        #expect(DiagnosticsReport.Level(peak: 1.0001, clippedSamples: 1).isClipping)
+        #expect(DiagnosticsReport.Level(peak: 1.0, clippedSamples: 0).isClipping == false)
+    }
+
+    // MARK: - Restarts and uptime
+
+    /// "No audio seen" means nothing without knowing for how long.
+    @Test func theReportSaysHowLongTheEngineHasBeenUp() {
+        var running = engine()
+        running.uptime = 754
+
+        #expect(text(engine: running).contains("up 13 min"))
+    }
+
+    @Test func aFreshEngineReportsRestartsAsNone() {
+        #expect(text(engine: engine()).contains("restarts:        none"))
+    }
+
+    /// The wake-from-sleep echo is a report of something that happens after a
+    /// restart, so the reason and the age are the whole point of the line.
+    @Test func aRestartIsNamedWithItsReasonAndAge() {
+        var restarted = engine()
+        restarted.restarts = DiagnosticsReport.Restarts(
+            count: 3, lastReason: "system woke from sleep", since: 240)
+
+        let report = text(engine: restarted)
+
+        #expect(report.contains("restarts:        3"))
+        #expect(report.contains("system woke from sleep"))
+        #expect(report.contains("4 min ago"))
+    }
+
+    /// Durations are rounded to the unit a reader thinks in, and every case here
+    /// is a boundary where the wrong choice reads absurdly. The 3_599 one is the
+    /// reason minutes are tested after rounding rather than before: it used to
+    /// report "60 min", which is not how anyone says an hour.
+    @Test func durationsAreReportedInReadableUnits() {
+        let cases = [
+            (45.0, "up 45 sec"),
+            (89.0, "up 89 sec"),
+            (90.0, "up 2 min"),
+            (600.0, "up 10 min"),
+            (3_540.0, "up 59 min"),
+            (3_599.0, "up 1.0 hr"),
+            (3_600.0, "up 1.0 hr"),
+            (5_400.0, "up 1.5 hr"),
+            (86_400.0, "up 24.0 hr"),
+            (259_200.0, "up 3.0 days"),
+        ]
+        for (seconds, expected) in cases {
+            var running = engine()
+            running.uptime = seconds
+            #expect(text(engine: running).contains(expected), "\(seconds)s read wrongly")
+        }
+    }
+
 }

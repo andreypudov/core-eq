@@ -107,6 +107,27 @@ final class AudioEngine: ObservableObject {
     /// The widest interval the render path has spent filtering at a rate the
     /// device was not using. Nil when there has been none, which is every
     /// measurement so far.
+    /// How long the current audio path has been up. Nil when it is not.
+    ///
+    /// What gives "no audio seen" its meaning: after three seconds it says
+    /// nothing at all, and after twenty minutes it says a great deal.
+    var uptime: TimeInterval? { startedAt.map { -$0.timeIntervalSinceNow } }
+
+    /// What has made the engine rebuild itself this session.
+    var restarts: DiagnosticsReport.Restarts {
+        DiagnosticsReport.Restarts(
+            count: restartCount,
+            lastReason: lastRestartReason,
+            since: lastRestartAt.map { -$0.timeIntervalSinceNow })
+    }
+
+    /// The loudest thing the chain has produced, and whether any of it did not
+    /// fit.
+    var level: DiagnosticsReport.Level {
+        DiagnosticsReport.Level(
+            peak: processor.peakLevel, clippedSamples: processor.clippedSamples)
+    }
+
     var rateWindow: RateWindow.Measurement? {
         let trace = processor.rateTrace.snapshot()
         return RateWindow.widest(
@@ -155,6 +176,19 @@ final class AudioEngine: ObservableObject {
     private var defaultDeviceListener: AudioObjectPropertyListenerBlock?
     private var sampleRateListener: AudioObjectPropertyListenerBlock?
     private var rateTraceDump: DispatchWorkItem?
+
+    /// When the engine last came up, and what has made it come up again.
+    ///
+    /// Deliberately outside the diagnostics snapshot, which is rebuilt by every
+    /// start and would therefore always report a fresh engine that had never
+    /// restarted. These survive teardown because the question they answer is
+    /// about the session, not about this instance of the audio path: an echo
+    /// after waking, or audio arriving twice, is the shape of a state change
+    /// that left something behind, and a restart is the state change.
+    private var startedAt: Date?
+    private var restartCount = 0
+    private var lastRestartReason: String?
+    private var lastRestartAt: Date?
     private var streamConfigListener: AudioObjectPropertyListenerBlock?
     private var wakeObserver: (any NSObjectProtocol)?
     private var activationObserver: (any NSObjectProtocol)?
@@ -235,6 +269,7 @@ final class AudioEngine: ObservableObject {
         removeSystemObservers()
         teardownEngine()
         diagnostics = nil
+        startedAt = nil
         status = .stopped
     }
 
@@ -303,6 +338,7 @@ final class AudioEngine: ObservableObject {
         processor.isProvingCapture = !captureProven
         if !captureProven { startProvingCapture() }
 
+        startedAt = Date()
         status = .running(deviceName: device.name)
         logger.info("Engine running on \(device.name, privacy: .public)")
     }
@@ -576,6 +612,9 @@ final class AudioEngine: ObservableObject {
 
     private func scheduleRestart(after delay: TimeInterval, reason: String) {
         logger.info("Restart scheduled: \(reason, privacy: .public)")
+        restartCount += 1
+        lastRestartReason = reason
+        lastRestartAt = Date()
         pendingRestart?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.start() }
         pendingRestart = work
