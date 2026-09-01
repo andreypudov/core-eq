@@ -201,8 +201,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.delegate = self
             mainWindow = window
         }
+        // `ignoringOtherApps` deliberately, deprecated or not. The replacement,
+        // `NSApp.activate()`, goes through cooperative activation and may simply
+        // decline when another app holds focus — which is every time this is
+        // called, because an accessory app is never frontmost when its status
+        // menu is clicked. Declining leaves the window ordered in but behind
+        // whatever was in front.
         NSApp.activate(ignoringOtherApps: true)
         mainWindow?.makeKeyAndOrderFront(nil)
+        // And if activation is refused anyway, the window is still shown rather
+        // than left underneath: the user asked for it by name.
+        mainWindow?.orderFrontRegardless()
         // Nothing starts out focused.
         //
         // This window is closed by ordering out and reopened by ordering back

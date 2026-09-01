@@ -300,7 +300,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// Whatever the warning was about is explained in Settings, not here: this
     /// row can hold about four words before the whole menu grows to its width.
     @objc private func openPermission() {
-        SettingsOpener.shared.open(tab: .general)
+        MenuPresentation.afterMenuCloses { SettingsOpener.shared.open(tab: .general) }
     }
 
     private func headerItem() -> NSMenuItem {
@@ -666,12 +666,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         row.setImage(presetBadge(for: profileManager.currentFilters, selected: true))
     }
 
+    /// See `MenuPresentation` for why this is not called directly.
     @objc private func openWindow(_ sender: NSMenuItem) {
-        openMainWindow()
+        MenuPresentation.afterMenuCloses { [weak self] in self?.openMainWindow() }
     }
 
     @objc private func openSettingsItem(_ sender: NSMenuItem) {
-        settingsOpener.open()
+        MenuPresentation.afterMenuCloses { [weak self] in self?.settingsOpener.open() }
     }
 
     @objc private func quit(_ sender: NSMenuItem) {

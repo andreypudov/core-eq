@@ -17,168 +17,21 @@ Dates are deliberately absent. This is a project I wrote for myself and put on
 GitHub because it turned out to be useful to other people; the order is a
 commitment, the schedule is not.
 
+What is already fixed moves to [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]] rather than staying here marked
+done. This document is what is still owed, so that its length means something.
+
 * 1.8 — Make it work everywhere it claims to
 
-Public feedback produced three defects that are not edge cases. One stops audio
-entirely on USB interfaces and display-connected outputs. One doubles the audio
-and breaks every screen capture tool. One keeps the Mac awake indefinitely.
-Reproducing the first turned up a fourth that nobody reported: an Aggregate or
-Multi-Output Device as the system output silences the Mac outright while the app
-reports that it is working. All four affect people doing nothing unusual, and
-none of them can be worked around from inside the app. Nothing else ships until
-they are fixed.
+Public feedback produced three defects that are not edge cases, and chasing the
+first turned up two more that nobody had reported. Three of the five are fixed
+and have moved to [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]]: audio broken on multichannel outputs, an
+Aggregate or Multi-Output Device silencing the Mac outright, and a refused
+permission doing the same while every layer of the app reported success.
 
-** Aggregate and Multi-Output Devices silence the Mac
-
-Found while trying to reproduce the multichannel reports below rather than from
-public feedback — which probably means it has been silencing people who had no
-way to work out what to blame.
-
-Core Audio will not nest one aggregate device inside another, and it does not
-say so. Handed an Aggregate or Multi-Output Device as a sub-device,
-=AudioHardwareCreateAggregateDevice= returns =noErr= and silently drops it,
-leaving an aggregate with no active sub-devices and no output streams at all.
-=AudioDeviceStart= then succeeds on that empty device, the engine reports
-=running=, and the IO proc is handed real tapped audio together with an output
-buffer list of zero buffers. =EQProcessor.render= iterates over nothing. Every
-stage succeeds and no audio is ever written.
-
-The tap, meanwhile, goes on muting every other process at the hardware. So the
-result is a completely silent Mac, an app reporting that it is processing audio,
-and no recovery from inside the app — global bypass skips the DSP without
-releasing the tap, so quitting CoreEQ is the only fix. That is not a
-discoverable one for a menu bar app that can launch at login.
-
-Measured rather than inferred. The same call, wrapping two different devices:
-the built-in speakers give an aggregate with =1 buffer(s) [2ch]= and one active
-sub-device; an Aggregate Device gives =0 buffer(s) []= and zero active
-sub-devices. Both return =noErr=.
-
-This is plausibly a wider fault than the multichannel one it was found under.
-Aggregate and Multi-Output Devices are how people play to two sets of speakers
-at once, and how anyone recording through BlackHole or Loopback is set up, which
-is a larger population than 7.1 HDMI users.
-
-*Fixed.* CoreEQ refuses an aggregate default output before the tap is created,
-so the machine is never muted for a configuration the app cannot serve, and it
-says which device and why. A second check confirms the aggregate it built
-reports output channels before an IO proc is started on it, because a call
-returning =noErr= is evidently not evidence that the device works. Refusing is
-not the same as supporting, which is below under "Later".
-
-** Multichannel outputs
-
-*Configurations reported:* HDMI to a display, an iConnectivity Audio4C over USB,
-and a DisplayPort monitor output raised pre-emptively by someone who had been
-burned before. Reports arrived through both Reddit and GitHub issues and may
-overlap, so treat the count of people as unknown; the count of distinct broken
-setups is what matters and it is at least three.
-
-Symptoms are silence or badly mangled audio, and they persist at Flat, which is
-the tell: the audio still crosses the tap when it is not being filtered, so the
-fault is in the plumbing rather than the DSP.
-
-One Audio4C report adds a detail worth having: “I can hear it over my speakers
-for a split second and then it's gone.” Audio starts and then stops, rather
-than never starting, which points at the moment the aggregate device is built
-and the IO proc takes over rather than at the tap's creation.
-
-CoreEQ takes a stereo tap while the device presents more than two channels, so
-the layout does not line up. Forcing the device to 2 channels in Audio MIDI
-Setup restores sound, which confirms the diagnosis.
-
-Two things to do, and they are probably one change:
-
-- Handle devices with more than two channels honestly. Either match the tap to
-  the device's channel count, or place the stereo pair correctly in a wider
-  layout and pass the rest through untouched. The second is the smaller change
-  and is what the app already claims to do.
-- Stop assuming buffer position. =EQProcessor.render= pairs input buffer /i/
-  with output buffer /i/ across the =AudioBufferList=. That is better than
-  hardcoding buffer 0, but it is still positional, and a developer who shipped
-  the same kind of tool reported the aggregate handing them lists where the
-  tap's buffers were not the first entries. Select by matching channel count
-  and format instead.
-
-*Done when* the three reported configurations produce correct stereo, and a
-device reporting more than two channels either works or is reported in the UI
-rather than failing silently.
-
-*Done.* =EQProcessor= takes an explicit output layout, worked out once on the
-main thread from the device's streams and the taps' formats, and places each
-tap channel at a named output channel instead of pairing buffers by position. A
-tap is bound to every output stream the device presents, because a tap binds to
-one stream and takes that stream's format — binding to the widest alone captured
-two channels of sixteen on an interface presenting eight stereo streams. The
-chain runs on every routed channel with its own delay lines.
-
-Confirmed on hardware, against a sixteen channel device:
-
-- The device-bound tap delivers sixteen channels of 32-bit float, not a stereo
-  mixdown.
-- The aggregate built around it presents sixteen output channels, and the
-  device's own input buffers are accounted for — the tap is not buffer zero on a
-  duplex device.
-- Six channel content arrives as six discrete channels and is placed one to one,
-  with the remaining ten silent.
-- Flat is bit-exact. A +12 dB bell measures +12.0 dB.
-- Driving six channels with six different tones, each channel's measured
-  response matched the drawn curve to within 0.01 dB — which is only true if the
-  chain runs per channel with per-channel state.
-
-What remains untested on hardware is the per-stream path itself: every device
-available here presents a single output stream, so one-tap-per-stream is covered
-by unit tests against a fake tap factory rather than by a real interface.
-
-** Permission text before the system prompt, not after
-
-“System Audio Recording” sounds broader than what an equalizer does, and the
-one moment where that matters is the moment macOS asks. The explanation lived in
-Settings under the permission status, so it was only reachable after the dialog
-had already been answered.
-
-*Done*, and not the way this item imagined. The explanation belongs in
-=NSAudioCaptureUsageDescription=: macOS shows that string inside the permission
-dialog, which is precisely the moment in question. An in-app screen shown before
-the prompt was built first and then removed — it duplicated what the system
-already does, and required the app to predict whether a prompt was coming, which
-macOS gives no way to know.
-
-Two things were learned on the way, both worth keeping written down.
-
-The permission a process tap needs is *audio capture*, declared with
-=NSAudioCaptureUsageDescription= — Apple's own tap sample declares that key and
-nothing else. It is not screen recording, and
-=CGPreflightScreenCaptureAccess= reports a different permission entirely, even
-though the two appear under one heading in System Settings.
-
-And there is no API to ask whether audio capture is allowed. Microphone and
-camera have =AVCaptureDevice.authorizationStatus=; screen recording has a
-preflight; taps have neither, and creating one is what raises the prompt. So an
-app cannot check first — it can only try, and watch what happens.
-
-That last point turned out to matter more than the text did. See the item below.
-
-** Refusing permission silenced the Mac
-
-=AudioHardwareCreateProcessTap= returns *success* when the user has refused
-permission. The tap reports a plausible format, the aggregate runs, the IO proc
-fires — and every sample is zero, while =muteBehavior = .mutedWhenTapped=
-silences every other process at the hardware.
-
-Measured rather than inferred: with a refusal recorded and music playing, the
-engine reported =status: running=, a two channel device-bound tap, and
-=capturing: no audio seen since the engine started=. Apple's tap sample ignores
-the =OSStatus= from that call entirely, so it would behave the same way.
-
-The result was the worst state this engine has: a completely silent Mac, with
-every layer of the app reporting that it works, and nothing on screen.
-
-*Fixed.* Muting is now earned. A tap starts unmuted and the render path writes
-nothing until the engine has seen a non-zero sample; only then does it rebuild
-muted and begin processing. A refusal now costs only that the audio is not
-equalized, which is how an equalizer should fail, and the app says so and offers
-the System Settings pane rather than a retry that cannot help.
+What is left here: audio arriving twice and every screen capture tool failing, a
+Mac kept awake indefinitely, and two smaller reports. They affect people doing
+nothing unusual, none can be worked around from inside the app, and nothing else
+ships until they are fixed.
 
 ** Bluetooth noise at higher volume
 
