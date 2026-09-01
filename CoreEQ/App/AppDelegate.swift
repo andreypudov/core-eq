@@ -44,18 +44,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // way macOS keeps a volume per device. Switching outputs loads that
         // device's sound.
         let profileManager = self.profileManager
-        let outputs = self.outputs
-        // The emitted value, never a re-read of `outputs`. `@Published` emits in
-        // `willSet`, so reading the object back here returns the device being
-        // replaced: the EQ was told about the device the user had just left, and
-        // filed their edits under it.
-        outputs.$defaultDeviceUID
-            .removeDuplicates()
-            .sink { uid in
-                ProfileStatusBridge.shared.noteDeviceList(uid: uid)
-                profileManager.setOutputDevice(uid: uid)
-            }
-            .store(in: &cancellables)
+        OutputDeviceFollower.follow(
+            outputs.$defaultDeviceUID,
+            note: { ProfileStatusBridge.shared.noteDeviceList(uid: $0) },
+            adopt: { profileManager.setOutputDevice(uid: $0) }
+        )
+        .store(in: &cancellables)
 
         // The Settings window is a separate scene and cannot be handed the
         // engine, so the one fact it needs crosses on its own.
@@ -179,21 +173,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.toolbarStyle = .unified
 
             window.isReleasedWhenClosed = false
-            // The minimum is what the fixed sections actually need; every point
-            // above it goes to the response graph, which is the point of the
-            // window. The opening size is capped to the visible frame so the
-            // window always arrives fully on screen, including on a laptop
-            // display.
-            // Header, editing area, and padding come to ~400 pt — the strip
-            // spends 40 of that on `Theme.BandRow.chromeHeight`, a value row
-            // above each track and a caption below. The rest is the graph,
-            // which has a 120 pt floor.
-            window.contentMinSize = NSSize(width: 960, height: 540)
-            let visible =
-                (NSScreen.main?.visibleFrame.size).map {
-                    NSSize(width: min(1_120, $0.width - 80), height: min(760, $0.height - 80))
-                } ?? NSSize(width: 1_120, height: 760)
-            window.setContentSize(visible)
+            window.contentMinSize = MainWindowGeometry.minimum
+            window.setContentSize(
+                MainWindowGeometry.openingSize(visibleFrame: NSScreen.main?.visibleFrame.size))
             window.center()
             // Closing this window only orders it out — SwiftUI's `onDisappear`
             // never fires, so without a delegate the spectrum analyzer would
@@ -201,17 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.delegate = self
             mainWindow = window
         }
-        // `ignoringOtherApps` deliberately, deprecated or not. The replacement,
-        // `NSApp.activate()`, goes through cooperative activation and may simply
-        // decline when another app holds focus — which is every time this is
-        // called, because an accessory app is never frontmost when its status
-        // menu is clicked. Declining leaves the window ordered in but behind
-        // whatever was in front.
-        NSApp.activate(ignoringOtherApps: true)
-        mainWindow?.makeKeyAndOrderFront(nil)
-        // And if activation is refused anyway, the window is still shown rather
-        // than left underneath: the user asked for it by name.
-        mainWindow?.orderFrontRegardless()
+        if let mainWindow { AppActivation.bringForward(mainWindow) }
         // Nothing starts out focused.
         //
         // This window is closed by ordering out and reopened by ordering back

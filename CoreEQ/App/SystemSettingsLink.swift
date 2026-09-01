@@ -10,13 +10,15 @@ enum SystemSettingsLink {
     /// Privacy & Security → Screen & System Audio Recording, which is where
     /// capturing system audio is listed even though CoreEQ never records a
     /// screen.
+    /// Named and exposed rather than built at the point of use: a typo here
+    /// costs nothing at build time and produces a button that silently does
+    /// nothing — and this is the only button that can undo a refusal.
+    static let audioCapturePrivacy = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+    )
+
     static func openAudioCapturePrivacy() {
-        guard
-            let url = URL(
-                string:
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-            )
-        else { return }
-        NSWorkspace.shared.open(url)
+        guard let audioCapturePrivacy else { return }
+        NSWorkspace.shared.open(audioCapturePrivacy)
     }
 }
