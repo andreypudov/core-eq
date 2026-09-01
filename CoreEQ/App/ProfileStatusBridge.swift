@@ -20,16 +20,23 @@ final class ProfileStatusBridge: ObservableObject {
     @Published private(set) var abSlot: ABSlot?
     @Published private(set) var outputDeviceUID: String?
 
-    /// What `AudioDeviceList` last reported, and how many times it has reported
-    /// anything. The manager only learns of a device change through that list,
+    /// What `AudioDeviceList` last reported, and how many changes it has
+    /// reported. The manager only learns of a device change through that list,
     /// so a count stuck at 1 while the system default has moved says the list
     /// never noticed — which is a different fault from the manager ignoring it.
+    ///
+    /// Repeats are already dropped upstream by `OutputDeviceFollower`, so this
+    /// counts distinct outputs seen, not property notifications received. Every
+    /// hardware event republishes the same UID, and a number that climbed on its
+    /// own would answer nothing.
     @Published private(set) var deviceListUID: String?
     @Published private(set) var deviceListUpdates = 0
 
     private var cancellables: Set<AnyCancellable> = []
 
-    private init() {}
+    /// The app uses `shared`. A fresh instance exists so the counting rule can
+    /// be exercised without one test's device changes being visible to the next.
+    init() {}
 
     /// Called by whoever owns the device list, on every change it reports.
     func noteDeviceList(uid: String?) {

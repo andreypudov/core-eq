@@ -327,15 +327,26 @@ CoreEQ/
   App/
     CoreEQApp.swift         SwiftUI entry point (@main) + the Settings scene
     AppDelegate.swift       App lifecycle, main-window construction, wiring
+    AppActivation.swift     Bringing an accessory app's windows to the front
+    OutputDeviceFollower.swift Keeping the EQ on the device the system is using
     SettingsStore.swift     UserDefaults wrapper
     LoginItem.swift         Open-at-login, via SMAppService
+    SystemSettingsLink.swift The Privacy pane that can undo a refusal
     EngineStatusBridge.swift Engine status, for the Settings scene
+    ProfileStatusBridge.swift What the manager holds, for the Settings scene
   Audio/
     AudioEngine.swift       Tap + aggregate device + IO proc, device-change handling
     AudioDevices.swift      Output device enumeration + default-device get/set
     AudioDeviceList.swift   Observable device list for the main window
-    SpectrumAnalyzer.swift  Windowed FFT driving the response backdrop
-    SpectrumAudioBuffer.swift Lock-light ring buffer feeding the analyzer
+    Capture/
+      OutputPlan.swift      Which device channel each tap channel is written to
+      TapAssembly.swift     How many taps a device needs, and over which streams
+      CaptureProof.swift    Whether a tap is capturing, silent, or refused
+      TapAccess.swift       What was observed about the audio-capture permission
+      DiagnosticsReport.swift The report a user copies out of Settings
+    Spectrum/
+      SpectrumAnalyzer.swift  Windowed FFT driving the response backdrop
+      SpectrumAudioBuffer.swift Lock-light ring buffer feeding the analyzer
   EQ/
     EQProcessor.swift       Realtime biquad chain with parameter smoothing
     Biquad.swift            One RBJ biquad: coefficients + magnitude response
@@ -357,6 +368,7 @@ CoreEQ/
     PowerToggleStyle.swift  Bypasses, drawn as power buttons
     ScrollAdjuster.swift    Scroll-wheel / trackpad adjustment for any control
     MainWindow/
+      MainWindowGeometry.swift   What size the window opens at, on any display
       EqualizerSidebarView.swift Preset search + list, preset actions
       EqualizerDetailView.swift  Content column: header (device + its preset),
                                  graph, editors, preamp
@@ -390,6 +402,7 @@ CoreEQ/
       MenuListView.swift      Scrolling list a chooser row unfolds into
       MenuListMetrics.swift   Sizes shared by row and list
       FlippedStackView.swift  Top-down document view for the list
+      MenuPresentation.swift  Deferring a window past the menu's tracking loop
   Extensions/
     Double+Clamped.swift    Range clamping
     Array+SafeIndex.swift   Bounds-checked element access
@@ -399,7 +412,25 @@ CoreEQ/
     AppIcon.icns            Generated app icon (make icons)
     AppIcon.icon/           Icon Composer document (macOS 26+ app icon)
     MenuBarIconTemplate.png (+@2x) Generated menu bar template (make icons)
+    MenuBarIconSlashTemplate.png (+@2x) The same mark, struck through, for off
 #+end_example
+
+*What =Audio/Capture/= is for.* Everything under it is pure: it decides or
+describes, and never calls Core Audio. Everything directly in =Audio/= is the
+opposite — it is the boundary, and cannot be tested without hardware. That line
+is not a preference, it is the reason those types exist: each was lifted out of
+=AudioEngine= so a decision that used to be provable only by plugging something
+in could be checked in a test instead. Keeping them apart in the tree keeps the
+rule visible, and says where new code goes. If a type has to ask Core Audio
+something, it belongs at the top level; if it only has to decide, it belongs
+below, and it gets tests.
+
+*Tests mirror this tree.* =CoreEQTests/= follows the same folders, so the gap
+between a directory's sources and its tests is legible at a glance —
+=CoreEQTests/Audio/= holding nothing but =Capture/= and =Spectrum/= is the
+accurate statement that the Core Audio boundary has no unit tests and cannot
+have them. The exception is =CoreEQTests/Support/=, which holds helpers rather
+than suites.
 
 *Where model logic lives.* =ProfileManager= is the only observable object in
 the model layer, and it is deliberately not where the thinking happens. The
