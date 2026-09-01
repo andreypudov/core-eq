@@ -29,6 +29,37 @@ enum DiagnosticsReport {
         var lfeChannels: [Int] = []
     }
 
+    /// What has made the audio path rebuild itself this session.
+    ///
+    /// Two open reports — an echo after waking from sleep, and audio arriving
+    /// twice — have the shape of a state change that left something behind. The
+    /// state change is a restart, so a report that does not say whether one
+    /// happened cannot distinguish "this is what CoreEQ always does" from "this
+    /// started after the machine woke up".
+    struct Restarts: Equatable {
+        var count: Int = 0
+        /// Why the last one happened, in the engine's own words.
+        var lastReason: String?
+        /// Seconds since it did.
+        var since: TimeInterval?
+    }
+
+    /// What the chain actually produced.
+    ///
+    /// A boosted preset can ask for more headroom than the material has, and
+    /// what comes out is distortion that people report as noise rather than as
+    /// loudness. Neither the app nor the user can tell that from the settings:
+    /// the level arriving at a tap depends on what is playing. So it is
+    /// measured on the way out.
+    struct Level: Equatable {
+        /// Largest magnitude produced since the engine started. Above 1.0 the
+        /// signal did not fit.
+        var peak: Float = 0
+        var clippedSamples: Int = 0
+
+        var isClipping: Bool { clippedSamples > 0 }
+    }
+
     /// What the running engine actually settled on, as opposed to what a device
     /// says it can do. This is the half a command line tool cannot report: it
     /// would have to build its own tap and infer.
@@ -66,6 +97,20 @@ enum DiagnosticsReport {
         /// engine has seen it deliver audio, so an unmuted tap means CoreEQ is
         /// still proving it can capture — or has concluded that it cannot.
         var isMuting: Bool = false
+        /// The widest interval, if any, in which the filters ran at a rate the
+        /// device was not using.
+        ///
+        /// Measured rather than assumed to be zero. On the hardware tested there
+        /// is no such interval — Core Audio stops the device across a rate
+        /// change, and the new rate is staged long before audio resumes — but
+        /// that rests on a behaviour rather than a documented promise. A machine
+        /// where it does not hold would sound like every band moving during a
+        /// call, and nothing else in this report would show it.
+        var rateWindow: RateWindow.Measurement?
+        /// Seconds the current audio path has been up.
+        var uptime: TimeInterval?
+        var restarts = Restarts()
+        var level = Level()
     }
 
     /// How the saved EQ is keyed, which is the fact that settles "my preset did
@@ -115,7 +160,9 @@ enum DiagnosticsReport {
 
         lines.append("Engine")
         if let engine {
-            lines.append("  status:          \(engine.status)")
+            lines.append(
+                "  status:          \(engine.status)"
+                    + (engine.uptime.map { ", up \(describe(duration: $0))" } ?? ""))
             lines.append("  device:          \(engine.deviceName)")
             lines.append("  sample rate:     \(Int(engine.sampleRate)) Hz")
             lines.append(
@@ -142,6 +189,41 @@ enum DiagnosticsReport {
                 "  muting others:   "
                     + (engine.isMuting
                         ? "yes" : "no — not proven able to capture, so audio is left alone"))
+            if engine.restarts.count > 0 {
+                let reason = engine.restarts.lastReason ?? "unknown"
+                let ago = engine.restarts.since.map { ", \(describe(duration: $0)) ago" } ?? ""
+                lines.append(
+                    "  restarts:        \(engine.restarts.count) (last: \(reason)\(ago))")
+            } else {
+                lines.append("  restarts:        none")
+            }
+            lines.append(
+                String(
+                    format: "  peak output:     %.2f%@", engine.level.peak,
+                    engine.level.isClipping
+                        ? " — \(engine.level.clippedSamples) sample(s) clipped" : ", no clipping"))
+            if engine.level.isClipping {
+                lines.append(
+                    "                   NOTE: the chain produces more than fits, which is heard")
+                lines.append(
+                    "                   as distortion rather than loudness. Lower the band "
+                        + "gains or the preamp, or turn on auto gain.")
+            }
+            if let window = engine.rateWindow {
+                lines.append(
+                    String(
+                        format:
+                            "  rate window:     %.0f ms at %.0f Hz while the device ran at %.0f Hz",
+                        window.seconds * 1_000, window.configuredRate, window.observedRate))
+                lines.append(
+                    String(
+                        format:
+                            "                   NOTE: for that long every band was displaced; "
+                            + "a 1 kHz band sat at %.0f Hz.",
+                        window.displacedKilohertzBand))
+            } else {
+                lines.append("  rate window:     none seen")
+            }
             if let routed = engine.routedChannels, engine.destinations.count > routed {
                 lines.append(
                     "                   NOTE: this device presents more channels than CoreEQ "
@@ -221,6 +303,25 @@ enum DiagnosticsReport {
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    /// A rough interval, in the units a reader thinks in.
+    ///
+    /// Rounded on purpose. The question these answer is "was this a moment ago
+    /// or has it been running all afternoon", and a figure to the second invites
+    /// a precision that the answer does not have.
+    ///
+    /// Each tier hands over before its own unit starts sounding wrong. Minutes
+    /// are tested *after* rounding, so 3599 seconds becomes an hour rather than
+    /// "60 min" — the unit is chosen by what the number will read as, not by
+    /// what it was before rounding. A Mac left alone for days is ordinary, and
+    /// "72.0 hr" is arithmetic the reader should not have to do.
+    private static func describe(duration seconds: TimeInterval) -> String {
+        if seconds < 90 { return "\(Int(seconds.rounded())) sec" }
+        let minutes = (seconds / 60).rounded()
+        if minutes < 60 { return "\(Int(minutes)) min" }
+        if seconds < 172_800 { return String(format: "%.1f hr", seconds / 3_600) }
+        return String(format: "%.1f days", seconds / 86_400)
     }
 
     /// "tap 0 → 0, tap 1 → 1", or a note when a channel goes nowhere.

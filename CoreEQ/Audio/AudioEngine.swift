@@ -104,6 +104,36 @@ final class AudioEngine: ObservableObject {
     /// looking at.
     var hasReceivedAudio: Bool { processor.hasReceivedAudio }
 
+    /// The widest interval the render path has spent filtering at a rate the
+    /// device was not using. Nil when there has been none, which is every
+    /// measurement so far.
+    /// How long the current audio path has been up. Nil when it is not.
+    ///
+    /// What gives "no audio seen" its meaning: after three seconds it says
+    /// nothing at all, and after twenty minutes it says a great deal.
+    var uptime: TimeInterval? { startedAt.map { -$0.timeIntervalSinceNow } }
+
+    /// What has made the engine rebuild itself this session.
+    var restarts: DiagnosticsReport.Restarts {
+        DiagnosticsReport.Restarts(
+            count: restartCount,
+            lastReason: lastRestartReason,
+            since: lastRestartAt.map { -$0.timeIntervalSinceNow })
+    }
+
+    /// The loudest thing the chain has produced, and whether any of it did not
+    /// fit.
+    var level: DiagnosticsReport.Level {
+        DiagnosticsReport.Level(
+            peak: processor.peakLevel, clippedSamples: processor.clippedSamples)
+    }
+
+    var rateWindow: RateWindow.Measurement? {
+        let trace = processor.rateTrace.snapshot()
+        return RateWindow.widest(
+            RateWindow.readings(trace.cycles, ticksPerSecond: RateTrace.ticksPerSecond))
+    }
+
     /// Whether what stands between the user and their equalizer is the
     /// permission, rather than anything about their device.
     ///
@@ -145,6 +175,20 @@ final class AudioEngine: ObservableObject {
 
     private var defaultDeviceListener: AudioObjectPropertyListenerBlock?
     private var sampleRateListener: AudioObjectPropertyListenerBlock?
+    private var rateTraceDump: DispatchWorkItem?
+
+    /// When the engine last came up, and what has made it come up again.
+    ///
+    /// Deliberately outside the diagnostics snapshot, which is rebuilt by every
+    /// start and would therefore always report a fresh engine that had never
+    /// restarted. These survive teardown because the question they answer is
+    /// about the session, not about this instance of the audio path: an echo
+    /// after waking, or audio arriving twice, is the shape of a state change
+    /// that left something behind, and a restart is the state change.
+    private var startedAt: Date?
+    private var restartCount = 0
+    private var lastRestartReason: String?
+    private var lastRestartAt: Date?
     private var streamConfigListener: AudioObjectPropertyListenerBlock?
     private var wakeObserver: (any NSObjectProtocol)?
     private var activationObserver: (any NSObjectProtocol)?
@@ -225,6 +269,7 @@ final class AudioEngine: ObservableObject {
         removeSystemObservers()
         teardownEngine()
         diagnostics = nil
+        startedAt = nil
         status = .stopped
     }
 
@@ -293,6 +338,7 @@ final class AudioEngine: ObservableObject {
         processor.isProvingCapture = !captureProven
         if !captureProven { startProvingCapture() }
 
+        startedAt = Date()
         status = .running(deviceName: device.name)
         logger.info("Engine running on \(device.name, privacy: .public)")
     }
@@ -431,8 +477,8 @@ final class AudioEngine: ObservableObject {
     /// cannot be fixed by marking the inline closure `@Sendable`: that was
     /// tried, it compiles, and it still traps.
     private nonisolated static func ioBlock(for processor: EQProcessor) -> AudioDeviceIOBlock {
-        { _, input, _, output, _ in
-            processor.render(input: input, output: output)
+        { now, input, _, output, _ in
+            processor.render(input: input, output: output, now: now)
         }
     }
 
@@ -566,6 +612,9 @@ final class AudioEngine: ObservableObject {
 
     private func scheduleRestart(after delay: TimeInterval, reason: String) {
         logger.info("Restart scheduled: \(reason, privacy: .public)")
+        restartCount += 1
+        lastRestartReason = reason
+        lastRestartAt = Date()
         pendingRestart?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.start() }
         pendingRestart = work
@@ -625,12 +674,17 @@ final class AudioEngine: ObservableObject {
     private func installSampleRateListener() {
         var addr = propertyAddress(kAudioDevicePropertyNominalSampleRate)
         let deviceID = aggregateID
-        let block: AudioObjectPropertyListenerBlock = { _, _ in
+        let block: AudioObjectPropertyListenerBlock = { [processor] _, _ in
+            // Marked here rather than after the hop, so the trace shows what the
+            // hop itself costs.
+            processor.rateTrace.mark(.listenerFired)
             Task { @MainActor [weak self] in
                 guard let self, self.aggregateID == deviceID else { return }
                 if let rate = try? self.nominalSampleRate(of: deviceID) {
                     self.processor.setSampleRate(rate)
+                    self.processor.rateTrace.mark(.rateStaged, rate: rate)
                     self.sampleRate = rate
+                    self.scheduleRateTraceDump()
                 }
             }
         }
@@ -640,6 +694,35 @@ final class AudioEngine: ObservableObject {
         } else {
             logger.error("Failed to install sample rate listener: \(status)")
         }
+    }
+
+    /// Logs the trace once the cycles after a rate change have been recorded.
+    ///
+    /// A second, because the far edge of the window is what is being measured
+    /// and it has not happened yet when the listener fires. Cheap to be
+    /// generous: the ring holds about five seconds.
+    private func scheduleRateTraceDump() {
+        rateTraceDump?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let trace = self.processor.rateTrace.snapshot()
+            let readings = RateWindow.readings(
+                trace.cycles, ticksPerSecond: RateTrace.ticksPerSecond)
+            self.logger.notice("\(RateWindow.summary(readings), privacy: .public)")
+
+            // The full table only when there is something to explain. It runs to
+            // hundreds of rows — too long for os_log, which truncates a message
+            // well short of that — and on every measurement so far there has
+            // been nothing in it worth keeping.
+            guard RateWindow.widest(readings) != nil else { return }
+            let report = RateWindow.report(cycles: trace.cycles, events: trace.events)
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("coreeq-rate-trace.txt")
+            try? report.write(to: url, atomically: true, encoding: .utf8)
+            self.logger.notice("rate trace written to \(url.path, privacy: .public)")
+        }
+        rateTraceDump = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: work)
     }
 
     /// Tries again when the app comes back to the front, but only after a
