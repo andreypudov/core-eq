@@ -470,10 +470,16 @@ final class AudioEngine: ObservableObject {
         tapIDs = []
     }
 
-    /// How often to look for the first sample, and how long before saying that
-    /// none has arrived.
+    /// How often to look for the first sample.
     private static let capturePollInterval: TimeInterval = 0.25
-    private static let captureProofTimeout: TimeInterval = 10
+
+    /// How long the tap may deliver nothing *while something else is playing*
+    /// before the engine says it is not capturing.
+    ///
+    /// Short, because the condition is specific: audio is demonstrably flowing
+    /// and none of it is reaching us. Long enough to cover a tap that takes a
+    /// moment to start after the aggregate does.
+    private static let silenceWhilePlayingLimit: TimeInterval = 2
 
     /// Waits for evidence that the tap is delivering, then mutes.
     ///
@@ -485,26 +491,31 @@ final class AudioEngine: ObservableObject {
     /// The engine is rebuilt rather than the live tap being modified. A tap's
     /// description is writable in principle, but a rebuild uses only operations
     /// already proven to work here, and it happens once per session.
-    private func startProvingCapture(elapsed: TimeInterval = 0) {
+    private func startProvingCapture(silentWhilePlaying: TimeInterval = 0) {
         capturePoll?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            guard case .running = self.status else { return }
+            guard let self, self.ioProcID != nil, !self.captureProven else { return }
 
-            if self.processor.hasReceivedAudio {
+            let (verdict, silent) = CaptureProof.evaluate(
+                hasReceivedAudio: self.processor.hasReceivedAudio,
+                isAnythingPlaying: AudioDevices.isAnyProcessPlayingOutput(
+                    excluding: self.tapExcludedProcess),
+                silentWhilePlaying: silentWhilePlaying,
+                interval: Self.capturePollInterval,
+                limit: Self.silenceWhilePlayingLimit)
+
+            if verdict == .proven {
                 self.logger.info("Tap is delivering audio; muting and restarting to process it")
                 self.captureProven = true
                 self.start()
                 return
             }
 
-            let waited = elapsed + Self.capturePollInterval
-            guard waited < Self.captureProofTimeout else {
-                // Nothing has arrived. Say so, and leave the audio alone — the
-                // tap is unmuted, so the only thing wrong is that CoreEQ is not
-                // equalizing. This is what a refused permission looks like:
-                // creating the tap succeeded and it captures nothing.
-                self.logger.error("No audio from the tap; leaving it unmuted")
+            if verdict == .notCapturing, self.tapAccess != .denied {
+                // Audio is playing and none of it is reaching the tap. Say so,
+                // and leave the sound alone — the tap is unmuted, so the only
+                // thing wrong is that CoreEQ is not equalizing.
+                self.logger.error("Audio is playing but the tap is silent; leaving it unmuted")
                 self.tapAccess = .denied
                 self.status = .failed(
                     summary: "Not capturing audio",
@@ -512,12 +523,20 @@ final class AudioEngine: ObservableObject {
                         "CoreEQ is not receiving any audio, so it is leaving your sound alone "
                         + "rather than replacing it. This is what a refused permission looks "
                         + "like.")
-                return
             }
-            self.startProvingCapture(elapsed: waited)
+            // Kept watching either way. A verdict here is a reading of the
+            // moment, not a sentence: allow the permission and the next sound
+            // proves the tap, which promotes it and clears this.
+            self.startProvingCapture(silentWhilePlaying: silent)
         }
         capturePoll = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.capturePollInterval, execute: work)
+    }
+
+    /// Our own audio process object, so our playback is not counted as evidence
+    /// that audio is reaching everything *except* us.
+    private var tapExcludedProcess: AudioObjectID {
+        (try? processObjectID(for: getpid())) ?? AudioObjectID(kAudioObjectUnknown)
     }
 
     // MARK: - Change handling

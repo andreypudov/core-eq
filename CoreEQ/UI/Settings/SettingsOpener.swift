@@ -59,7 +59,13 @@ final class SettingsOpener {
         SettingsRoute.shared.tab = tab
 
         // An accessory application is not frontmost when its status menu is
-        // clicked, so the window would otherwise open behind whatever is.
+        // clicked, so the window would otherwise open behind whatever is. The
+        // callers that come from a menu defer this past the menu's tracking
+        // loop, where activation does not reliably take.
+        //
+        // `ignoringOtherApps` deliberately: `NSApp.activate()` is cooperative
+        // and can decline while another app holds focus, which is precisely the
+        // situation here.
         NSApp.activate(ignoringOtherApps: true)
 
         guard let openSettings else {

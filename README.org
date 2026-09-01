@@ -201,7 +201,9 @@ preset, and the on/off state are restored on every launch, per output device.
 * Development
 
 Architecture notes, build and test instructions are in
-[[file:docs/DEVELOPMENT.org][docs/DEVELOPMENT.org]].
+[[file:docs/DEVELOPMENT.org][docs/DEVELOPMENT.org]]. What has been fixed is in
+[[file:docs/RELEASE_NOTES.org][docs/RELEASE_NOTES.org]], and what is still owed is in
+[[file:docs/ROADMAP.org][docs/ROADMAP.org]].
 
 #+begin_src sh
 make build   # build the Release configuration

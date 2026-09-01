@@ -315,6 +315,42 @@ enum AudioDevices {
         outputBufferChannels(of: deviceID).reduce(0, +)
     }
 
+    /// Whether any process other than `excluding` is currently playing audio.
+    ///
+    /// This is what stops a quiet Mac being mistaken for a refused permission.
+    /// A tap that delivers nothing proves nothing on its own — silence is what
+    /// silence sounds like. A tap that delivers nothing *while something else is
+    /// playing* is a tap that is not receiving.
+    static func isAnyProcessPlayingOutput(excluding excluded: AudioObjectID) -> Bool {
+        var listAddress = address(kAudioHardwarePropertyProcessObjectList)
+        var dataSize: UInt32 = 0
+        guard
+            AudioObjectGetPropertyDataSize(
+                AudioObjectID(kAudioObjectSystemObject), &listAddress, 0, nil, &dataSize) == noErr,
+            dataSize > 0
+        else { return false }
+
+        var processes = [AudioObjectID](
+            repeating: 0, count: Int(dataSize) / MemoryLayout<AudioObjectID>.size)
+        guard
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject), &listAddress, 0, nil, &dataSize,
+                &processes) == noErr
+        else { return false }
+
+        for process in processes where process != excluded {
+            var runningAddress = address(kAudioProcessPropertyIsRunningOutput)
+            var isRunning: UInt32 = 0
+            var size = UInt32(MemoryLayout<UInt32>.size)
+            if AudioObjectGetPropertyData(process, &runningAddress, 0, nil, &size, &isRunning)
+                == noErr, isRunning != 0
+            {
+                return true
+            }
+        }
+        return false
+    }
+
     static func name(of deviceID: AudioDeviceID) -> String? {
         var address = address(kAudioObjectPropertyName)
         var name: Unmanaged<CFString>?
