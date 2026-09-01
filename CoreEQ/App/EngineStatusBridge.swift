@@ -36,6 +36,11 @@ final class EngineStatusBridge: ObservableObject {
     /// always no.
     var hasReceivedAudio: Bool { engine?.hasReceivedAudio ?? false }
 
+    /// The worst sample-rate window the engine has seen, for the same reason
+    /// and on the same terms: it can only appear after a route change, so a
+    /// snapshot taken at start would always say none.
+    var rateWindow: RateWindow.Measurement? { engine?.rateWindow }
+
     func follow(_ engine: AudioEngine) {
         self.engine = engine
         engine.$status

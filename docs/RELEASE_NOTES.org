@@ -176,3 +176,60 @@ they had granted. Silence is not evidence. The engine now waits indefinitely,
 which costs nothing while the tap is unmuted, and concludes only when audio is
 demonstrably playing elsewhere and none of it is arriving. It also keeps
 watching afterwards, so a verdict corrects itself the moment a sample appears.
+
+** The route-change window that was not there
+
+Raised by a commenter who had built a system-audio capture tool and hit it:
+a Bluetooth headset moving to its call profile drops the output rate, and
+coefficients are a function of =2pi*f/fs=, so every band lands in the wrong
+place until they are recomputed. CoreEQ takes its rate from
+=kAudioDevicePropertyNominalSampleRate= rather than =kAudioTapPropertyFormat=,
+which avoids the version of the bug he described — but it still learns of the
+change from a property listener, and a listener fires after the fact. A window
+of audio filtered at the wrong rate looked unavoidable on paper.
+
+It does not happen, because *Core Audio stops the device across a rate change*.
+
+Measured on a Jabra Evolve 75, which offers exactly 44100 and 16000 Hz — the
+A2DP and HFP pair, a 2.76x shift that would have put a 1 kHz band at 363 Hz —
+and again on the built-in speakers, to check the result was not a property of
+Bluetooth:
+
+| device    | change            | reported -> staged | device silent | margin |
+|-----------+-------------------+--------------------+---------------+--------|
+| Jabra     | A2DP -> HFP       | 2.2 ms             | 174 ms        | 120 ms |
+| Jabra     | HFP -> A2DP       | 0.2 ms             | 385 ms        | 330 ms |
+| Built-in  | 96000 -> 44100 Hz | 4.1 ms             | 206 ms        | 206 ms |
+
+The new rate is staged within about two milliseconds of Core Audio reporting it,
+and audio does not resume for another 120 to 330. The first buffer at the new
+rate arrives at a render call that consumes the staged rate before it filters
+anything. Not one cycle ran on stale coefficients, in either direction, on a
+synthetic rate change or on a real profile switch driven by opening the
+microphone.
+
+*Not a defect.* Nothing was changed in the audio path, and the two mitigations
+that had been drafted were dropped as measurably pointless: the main-actor hop
+in the listener costs 0.2 ms against a margin of 120.
+
+What did ship is the instrument. =RateTrace= records the IO cadence — frame
+count and host time per cycle, four stores and no allocation on the audio
+path — and =RateWindow= reads it afterwards on the main thread, where frames
+divided by elapsed time gives the device's real rate, the one thing nothing
+reports in time. Any genuine window logs a line naming its width and where a
+1 kHz band actually sat.
+
+It ships rather than being deleted with the investigation because the result
+rests on a Core Audio behaviour rather than a documented promise, measured on
+two devices and one Mac. The diagnostics report now carries the answer — "rate
+window: none seen", or the width of the interval and where a 1 kHz band actually
+sat — so if this does not hold on someone else's hardware it arrives in their
+report rather than being argued from first principles. A line in a log would not
+have done: the people who hit this are running a downloaded app.
+
+Two bugs in the instrument itself were found by using it, which is the argument
+for having built it before trusting any conclusion: host times subtracted
+unsigned turned an event older than the trace into 768614336339369 ms, and
+=os_log= truncated the 500-row table away exactly where the interesting rows
+were. The summary now goes to the log and the table to a file, and only when
+there is a window to explain.

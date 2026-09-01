@@ -222,4 +222,28 @@ struct DiagnosticsReportTests {
     @Test func noDevicesIsStatedRatherThanBlank() {
         #expect(text().contains("none found"))
     }
+    // MARK: - The sample-rate window
+
+    /// The quiet case has to say something. "No line" and "a line saying none"
+    /// read identically to someone who does not know the line exists, and this
+    /// report is read by people who have never seen another one.
+    @Test func aReportWithNoRateWindowSaysSo() {
+        #expect(text(engine: engine()).contains("rate window:     none seen"))
+    }
+
+    /// The number that matters is not the duration; it is where the bands went.
+    /// "41 ms" tells a reader nothing they can act on.
+    @Test func aRateWindowNamesWhereTheBandsWent() {
+        var stale = engine()
+        stale.rateWindow = RateWindow.Measurement(
+            seconds: 0.041, cycles: 4, configuredRate: 44_100, observedRate: 16_000)
+
+        let report = text(engine: stale)
+
+        #expect(report.contains("41 ms"))
+        #expect(report.contains("44100 Hz"))
+        #expect(report.contains("16000 Hz"))
+        #expect(report.contains("1 kHz band sat at 363 Hz"))
+    }
+
 }

@@ -512,6 +512,34 @@ Implemented in =AudioEngine.swift=:
    cycle, runs it through =EQProcessor=, and writes it to the real device's
    output buffers.
 
+*** Sample rate changes, and why there is no stale window
+
+Coefficients are a function of =2pi*f/fs=, so a device that changes rate while
+the filters are built for the old one puts every band in the wrong place — a
+Bluetooth headset moving to its call profile drops 44100 to 16000, which would
+put a 1 kHz bell at 363 Hz. CoreEQ learns of the change from a property
+listener, and a listener necessarily fires after the fact, so this looks like an
+unavoidable window.
+
+It is not, and the reason is worth knowing before anyone tries to close it:
+*Core Audio stops the device across a rate change*. Measured on a Jabra Evolve
+75, the new rate is staged within about two milliseconds of being reported and
+audio does not resume for another 120 to 330. The first buffer at the new rate
+lands on a render call that consumes the staged rate before filtering anything.
+
+=RateTrace= records the IO cadence — the frame count and host time of every
+cycle, four stores and no allocation — and =RateWindow= reads it afterwards, on
+the main thread, where the arithmetic is free. Frames divided by elapsed time
+*is* the device's real rate, which is the one thing nothing reports in time.
+Anything that disagrees with the configured rate by more than 10% is logged as a
+window, naming its width and where a 1 kHz band actually sat.
+
+The instrument ships rather than being deleted with the investigation. The
+guarantee above rests on a Core Audio behaviour rather than a documented
+promise, on one headset and one Mac; if it does not hold on someone else's
+hardware, this says so in a line of their log instead of being argued about from
+first principles.
+
 *** Proving the tap
 
 A tap is created *unmuted*, and the render path writes nothing, until the engine

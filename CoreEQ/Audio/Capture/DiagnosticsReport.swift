@@ -66,6 +66,16 @@ enum DiagnosticsReport {
         /// engine has seen it deliver audio, so an unmuted tap means CoreEQ is
         /// still proving it can capture — or has concluded that it cannot.
         var isMuting: Bool = false
+        /// The widest interval, if any, in which the filters ran at a rate the
+        /// device was not using.
+        ///
+        /// Measured rather than assumed to be zero. On the hardware tested there
+        /// is no such interval — Core Audio stops the device across a rate
+        /// change, and the new rate is staged long before audio resumes — but
+        /// that rests on a behaviour rather than a documented promise. A machine
+        /// where it does not hold would sound like every band moving during a
+        /// call, and nothing else in this report would show it.
+        var rateWindow: RateWindow.Measurement?
     }
 
     /// How the saved EQ is keyed, which is the fact that settles "my preset did
@@ -142,6 +152,21 @@ enum DiagnosticsReport {
                 "  muting others:   "
                     + (engine.isMuting
                         ? "yes" : "no — not proven able to capture, so audio is left alone"))
+            if let window = engine.rateWindow {
+                lines.append(
+                    String(
+                        format:
+                            "  rate window:     %.0f ms at %.0f Hz while the device ran at %.0f Hz",
+                        window.seconds * 1_000, window.configuredRate, window.observedRate))
+                lines.append(
+                    String(
+                        format:
+                            "                   NOTE: for that long every band was displaced; "
+                            + "a 1 kHz band sat at %.0f Hz.",
+                        window.displacedKilohertzBand))
+            } else {
+                lines.append("  rate window:     none seen")
+            }
             if let routed = engine.routedChannels, engine.destinations.count > routed {
                 lines.append(
                     "                   NOTE: this device presents more channels than CoreEQ "

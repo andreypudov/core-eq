@@ -104,11 +104,11 @@ struct DiagnosticsSettingsView: View {
         )
     }
 
-    /// The engine's snapshot, with the one fact that goes stale refreshed.
+    /// The engine's snapshot, with the facts that go stale refreshed.
     ///
     /// The snapshot is taken when the engine starts, and at that moment the tap
-    /// has by definition delivered nothing. Reporting it from there would say
-    /// "no audio seen" forever.
+    /// has by definition delivered nothing and no route has changed. Reporting
+    /// either from there would say "no audio seen" and "no rate window" forever.
     private static func liveEngine(
         _ snapshot: DiagnosticsReport.Engine?
     )
@@ -116,6 +116,7 @@ struct DiagnosticsSettingsView: View {
     {
         guard var snapshot else { return nil }
         snapshot.hasReceivedAudio = EngineStatusBridge.shared.hasReceivedAudio
+        snapshot.rateWindow = EngineStatusBridge.shared.rateWindow
         return snapshot
     }
 

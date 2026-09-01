@@ -26,7 +26,10 @@ Public feedback produced three defects that are not edge cases, and chasing the
 first turned up two more that nobody had reported. Three of the five are fixed
 and have moved to [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]]: audio broken on multichannel outputs, an
 Aggregate or Multi-Output Device silencing the Mac outright, and a refused
-permission doing the same while every layer of the app reported success.
+permission doing the same while every layer of the app reported success. A
+fourth suspicion — that a Bluetooth route change left a window of audio filtered
+at the wrong sample rate — was measured and turned out not to happen; it is in
+the release notes with the numbers.
 
 What is left here: audio arriving twice and every screen capture tool failing, a
 Mac kept awake indefinitely, and two smaller reports. They affect people doing
@@ -43,17 +46,6 @@ documented as such — so it removes the systematic part of the headroom problem
 without guaranteeing clipping away. The mix level arriving at a tap is
 unknowable from inside it. If the noise is also present at Flat, it is not
 clipping and needs a real investigation.
-
-** The route-change window
-
-Coefficients come from =kAudioDevicePropertyNominalSampleRate=, not from
-=kAudioTapPropertyFormat=, which is what saves CoreEQ from the bug a commenter
-described where a Bluetooth headset flipping to HFP shifts every band down by
-2 to 3x. But the property listener fires *after* the route change, so there is
-still a window filtered with stale coefficients.
-
-Measure how wide it actually is before deciding whether it needs fixing. It may
-be a handful of buffers and inaudible.
 
 ** Echo and doubled audio
 
@@ -108,6 +100,35 @@ IO proc: =AudioDeviceStart= runs the aggregate continuously from launch, by
 design, since global bypass “keeps the engine running but passes audio through”
 (=AudioEngine.swift:49=). A continuously running IOProc is active audio IO as
 far as the system is concerned, so the assertion follows automatically.
+
+*That explanation is wrong, and the real one is narrower.* Measured while
+investigating the route-change window: with the engine running and nothing
+playing, =RateTrace= recorded *no IO cycles at all* over twenty-two seconds, on
+the Jabra and again on the built-in speakers. The render callback is not being
+called. So it is not a continuously running IOProc.
+
+=pmset -g assertions=, taken at the same moment, names what it actually is:
+
+#+begin_example
+pid 401(coreaudiod): PreventUserIdleSystemSleep named:
+  "com.apple.audio.com.andreypudov.coreeq.aggregate.<uid>.context.preventuseridlesleep"
+  Created for PID: 36385.
+  Resources: audio-in audio-out BuiltInSpeakerDevice
+#+end_example
+
+The assertion belongs to *coreaudiod*, raised for CoreEQ's aggregate device and
+attributed back to CoreEQ's pid — which is why Activity Monitor blames an app
+whose own source contains no assertion, and why searching that source for one
+found nothing. It is held because the aggregate has been *started*, not because
+audio is flowing: it was there with zero callbacks in twenty-two seconds.
+
+That changes the fix. Making the IO path idle-aware achieves nothing, because it
+is already idle. The assertion goes away only by stopping the aggregate
+(=AudioDeviceStop=) when nothing is playing and starting it again on demand,
+which is a real design change: something has to notice playback beginning, the
+restart has to be fast enough not to clip the first moment of it, and the tap's
+mute behaviour has to survive the cycle. Worth doing, and worth its own design
+rather than an afternoon.
 
 The fix is to stop running when there is nothing to do: tear the IO proc down
 when the app is bypassed, and when the mix has been silent for long enough that
