@@ -173,6 +173,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.toolbarStyle = .unified
 
             window.isReleasedWhenClosed = false
+            // Tab has to reach controls that did not exist when the window was
+            // built. This defaults to false for a window created in code rather
+            // than loaded from a nib, and with it false AppKit works out the
+            // key-view loop once and never revisits it — so a parametric band
+            // added afterwards had fields that Tab did not know about, and
+            // tabbing off the last row it *did* know about wrapped to the top.
+            //
+            // It looked like a bug about the last row, which is what made it
+            // hard to see: the give-away was that four bands behaved differently
+            // depending on how you arrived at four, because removing a band
+            // invalidates the loop and forces the rebuild that adding one does
+            // not.
+            window.autorecalculatesKeyViewLoop = true
             window.contentMinSize = MainWindowGeometry.minimum
             window.setContentSize(
                 MainWindowGeometry.openingSize(visibleFrame: NSScreen.main?.visibleFrame.size))

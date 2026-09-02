@@ -315,6 +315,21 @@ enum AudioDevices {
         outputBufferChannels(of: deviceID).reduce(0, +)
     }
 
+    /// Whether anything at all is using this device right now.
+    ///
+    /// One property on one object, at about 0.05 ms — a hundred times cheaper
+    /// than asking every audio process the same question, and unlike
+    /// `kAudioProcessPropertyIsRunningOutput` it actually sends notifications.
+    /// Only meaningful about *other* users of the device when CoreEQ's own IO
+    /// proc is stopped, which is exactly when it is asked.
+    static func isRunningSomewhere(_ deviceID: AudioDeviceID) -> Bool {
+        var runningAddress = address(kAudioDevicePropertyDeviceIsRunningSomewhere)
+        var isRunning: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        return AudioObjectGetPropertyData(deviceID, &runningAddress, 0, nil, &size, &isRunning)
+            == noErr && isRunning != 0
+    }
+
     /// Whether any process other than `excluding` is currently playing audio.
     ///
     /// This is what stops a quiet Mac being mistaken for a refused permission.

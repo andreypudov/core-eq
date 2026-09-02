@@ -60,6 +60,22 @@ enum DiagnosticsReport {
         var isClipping: Bool { clippedSamples > 0 }
     }
 
+    /// Whether CoreEQ has stopped its IO proc, and how often.
+    ///
+    /// An idle engine is invisible from outside: the EQ is on, nothing is
+    /// playing, and the next sound will be equalized. That is also exactly what
+    /// a *failure* to come back looks like until someone plays something, so the
+    /// report has to say which state the engine is in and how much time it has
+    /// spent there. Without it, "the EQ stopped working" and "the EQ is waiting"
+    /// are the same report.
+    struct Idling: Equatable {
+        var isIdle = false
+        /// Whether the behaviour is switched on at all.
+        var isEnabled = true
+        var releases = 0
+        var totalSeconds: TimeInterval = 0
+    }
+
     /// What the running engine actually settled on, as opposed to what a device
     /// says it can do. This is the half a command line tool cannot report: it
     /// would have to build its own tap and infer.
@@ -111,6 +127,7 @@ enum DiagnosticsReport {
         var uptime: TimeInterval?
         var restarts = Restarts()
         var level = Level()
+        var idling = Idling()
     }
 
     /// How the saved EQ is keyed, which is the fact that settles "my preset did
@@ -189,6 +206,17 @@ enum DiagnosticsReport {
                 "  muting others:   "
                     + (engine.isMuting
                         ? "yes" : "no — not proven able to capture, so audio is left alone"))
+            if !engine.idling.isEnabled {
+                lines.append("  idling:          off (releasing the device is disabled)")
+            } else if engine.idling.isIdle {
+                lines.append(
+                    "  idling:          YES — IO stopped, waiting for something to play")
+            } else {
+                lines.append(
+                    "  idling:          no, "
+                        + "\(engine.idling.releases) release(s) this session, "
+                        + "\(describe(duration: engine.idling.totalSeconds)) total")
+            }
             if engine.restarts.count > 0 {
                 let reason = engine.restarts.lastReason ?? "unknown"
                 let ago = engine.restarts.since.map { ", \(describe(duration: $0)) ago" } ?? ""

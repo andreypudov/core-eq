@@ -47,6 +47,7 @@ final class EngineStatusBridge: ObservableObject {
     var uptime: TimeInterval? { engine?.uptime }
     var restarts: DiagnosticsReport.Restarts { engine?.restarts ?? DiagnosticsReport.Restarts() }
     var level: DiagnosticsReport.Level { engine?.level ?? DiagnosticsReport.Level() }
+    var idling: DiagnosticsReport.Idling { engine?.idling ?? DiagnosticsReport.Idling() }
 
     func follow(_ engine: AudioEngine) {
         self.engine = engine

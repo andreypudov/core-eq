@@ -102,7 +102,7 @@ final class AudioEngine: ObservableObject {
     /// thread, and the only thing that wants it is a diagnostics report being
     /// drawn — publishing it would mean waking the UI for a fact nobody is
     /// looking at.
-    var hasReceivedAudio: Bool { processor.hasReceivedAudio }
+    var hasReceivedAudio: Bool { processor.observed.hasReceivedAudio }
 
     /// The widest interval the render path has spent filtering at a rate the
     /// device was not using. Nil when there has been none, which is every
@@ -125,7 +125,16 @@ final class AudioEngine: ObservableObject {
     /// fit.
     var level: DiagnosticsReport.Level {
         DiagnosticsReport.Level(
-            peak: processor.peakLevel, clippedSamples: processor.clippedSamples)
+            peak: processor.observed.peakLevel, clippedSamples: processor.observed.clippedSamples)
+    }
+
+    /// Whether the audio device has been let go, and the history of that.
+    var idling: DiagnosticsReport.Idling {
+        DiagnosticsReport.Idling(
+            isIdle: isIdle,
+            isEnabled: settings.pausesWhenSilent,
+            releases: idleCount,
+            totalSeconds: totalIdle + (idleSince.map { -$0.timeIntervalSinceNow } ?? 0))
     }
 
     var rateWindow: RateWindow.Measurement? {
@@ -158,6 +167,11 @@ final class AudioEngine: ObservableObject {
             guard isEnabled != oldValue else { return }
             processor.setBypassed(!isEnabled)
             settings.isEnabled = isEnabled
+            // Acted on at once rather than at the next poll, in both
+            // directions: switching off should let go of the machine
+            // immediately, and switching back on should not wait half a second
+            // to start working.
+            evaluateIdleState()
         }
     }
 
@@ -192,8 +206,56 @@ final class AudioEngine: ObservableObject {
     private var streamConfigListener: AudioObjectPropertyListenerBlock?
     private var wakeObserver: (any NSObjectProtocol)?
     private var activationObserver: (any NSObjectProtocol)?
+    /// A rebuild that has been scheduled but has not run yet.
+    ///
+    /// Nil means none is pending, and that has to stay true: it is read as a
+    /// "mid-transition" flag, not just as something to cancel. It was cancelled
+    /// but never cleared once, and the stale reference made the engine believe a
+    /// restart was permanently in flight — which silently disabled idling for
+    /// every session, because the device-change listener fires once at launch.
+    /// Cleared in all three places it can end: cancelled by `start`, cancelled
+    /// by `stop`, and completed by its own work item.
     private var pendingRestart: DispatchWorkItem?
     private var capturePoll: DispatchWorkItem?
+    private var idlePoll: DispatchWorkItem?
+
+    /// What tells the engine that audio is starting, so a resume is not waiting
+    /// on a timer.
+    ///
+    /// Push, not poll, because the delay before CoreEQ starts processing again
+    /// is heard: at a half-second poll roughly a second of audio played
+    /// unequalized, which was reported as very noticeable. The device itself
+    /// needs about 90 ms to deliver its first buffer after `AudioDeviceStart`,
+    /// so anything above that is the app's own dithering.
+    ///
+    /// Two listeners, because measurement ruled out the obvious one.
+    /// `kAudioProcessPropertyIsRunningOutput` sends no notifications at all —
+    /// attached to every process, it never fired once — and sweeping every
+    /// process by hand costs 6 ms a pass, far too much to do often.
+    /// `kAudioDevicePropertyDeviceIsRunningSomewhere` does notify, costs 0.05 ms
+    /// to read, and is false while CoreEQ is idle, so it says exactly what is
+    /// wanted: somebody else wants this device.
+    private var deviceRunningListener: AudioObjectPropertyListenerBlock?
+    /// A process appearing in the audio process list, which measured about 80 ms
+    /// *before* it starts playing — enough of a head start to cover the device's
+    /// own warm-up.
+    private var processListListener: AudioObjectPropertyListenerBlock?
+    /// Set by that listener and cleared once acted on.
+    private var audioStarting = false
+    /// The device the aggregate is built around, which is what the running
+    /// listener watches — not the aggregate, whose own state is CoreEQ's.
+    private var outputDeviceID = AudioObjectID(kAudioObjectUnknown)
+
+    /// Whether the audio path has been released because nothing was playing.
+    ///
+    /// Deliberately *not* part of `Status`. From the user's side nothing has
+    /// changed — CoreEQ is on, and the next sound will be equalized — so the
+    /// menu bar icon must go on saying so. An idle engine that reported itself
+    /// stopped would blink the icon off every time a room went quiet.
+    private(set) var isIdle = false
+    private var idleCount = 0
+    private var idleSince: Date?
+    private var totalIdle: TimeInterval = 0
     /// Whether a tap has been seen delivering audio in this session.
     ///
     /// Not persisted. A permission can be withdrawn between launches, and the
@@ -223,6 +285,7 @@ final class AudioEngine: ObservableObject {
 
     func start() {
         pendingRestart?.cancel()
+        pendingRestart = nil
         // The verdict belongs to the attempt that produced it. Carrying it into
         // the next one would leave the app reporting a refusal it is in the
         // middle of retrying.
@@ -236,11 +299,14 @@ final class AudioEngine: ObservableObject {
         // failure was permanent in the strong sense, until the app was
         // relaunched. Installed here, a device change always gets a hearing.
         installDefaultDeviceListenerIfNeeded()
+        installPlaybackListenersIfNeeded()
         installWakeObserverIfNeeded()
         installActivationObserverIfNeeded()
         do {
             try startEngine()
             retryCount = 0
+            isIdle = false
+            scheduleIdleCheck()
         } catch {
             teardownEngine()
             let message =
@@ -266,10 +332,14 @@ final class AudioEngine: ObservableObject {
     /// termination.
     func stop() {
         pendingRestart?.cancel()
+        pendingRestart = nil
+        idlePoll?.cancel()
+        idlePoll = nil
         removeSystemObservers()
         teardownEngine()
         diagnostics = nil
         startedAt = nil
+        isIdle = false
         status = .stopped
     }
 
@@ -313,6 +383,7 @@ final class AudioEngine: ObservableObject {
         processor.setOutputLayout(layout)
 
         try startIOProc(on: aggregateID)
+        installDeviceRunningListener(on: device.id)
 
         // Only the two tied to this aggregate. The device and wake observers are
         // installed by `start()`, so that they exist even when this throws.
@@ -519,6 +590,15 @@ final class AudioEngine: ObservableObject {
     /// How often to look for the first sample.
     private static let capturePollInterval: TimeInterval = 0.25
 
+    /// How often the idle decision is revisited when nothing has told us to.
+    ///
+    /// A backstop, not the mechanism: `playbackListeners` is what makes resuming
+    /// prompt, and this only catches anything they miss. Slow on purpose — going
+    /// idle a couple of seconds late costs nothing against a thirty second
+    /// threshold, and a timer that fires rarely is a timer that costs no
+    /// battery.
+    private static let idlePollInterval: TimeInterval = 2.0
+
     /// How long the tap may deliver nothing *while something else is playing*
     /// before the engine says it is not capturing.
     ///
@@ -543,7 +623,7 @@ final class AudioEngine: ObservableObject {
             guard let self, self.ioProcID != nil, !self.captureProven else { return }
 
             let (verdict, silent) = CaptureProof.evaluate(
-                hasReceivedAudio: self.processor.hasReceivedAudio,
+                hasReceivedAudio: self.processor.observed.hasReceivedAudio,
                 isAnythingPlaying: AudioDevices.isAnyProcessPlayingOutput(
                     excluding: self.tapExcludedProcess),
                 silentWhilePlaying: silentWhilePlaying,
@@ -579,6 +659,145 @@ final class AudioEngine: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.capturePollInterval, execute: work)
     }
 
+    // MARK: - Idling
+
+    /// Revisits the idle decision on a timer, forever.
+    ///
+    /// One timer covers both directions. While running it is asking whether the
+    /// device can be let go; while idle it is asking whether anything wants to
+    /// play. Two timers would be two things to keep in step, and the state they
+    /// disagreed about would be whether the Mac has any audio at all.
+    private func scheduleIdleCheck() {
+        idlePoll?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.evaluateIdleState()
+            self.scheduleIdleCheck()
+        }
+        idlePoll = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.idlePollInterval, execute: work)
+    }
+
+    /// Acts on `IdlePolicy`, and does nothing else.
+    ///
+    /// Every condition lives in the policy so that it can be tested without an
+    /// audio device; this is only the hands. Anything resembling a decision that
+    /// appears here belongs there instead.
+    private func evaluateIdleState() {
+        // Never while the tap is still being proved, and never while a restart
+        // is already in flight: both are mid-transition, and a teardown from
+        // underneath either leaves state describing a path that no longer
+        // exists.
+        guard !isMidTransition else { return }
+
+        // Two different questions, because "is anyone playing" has two different
+        // right answers depending on whether CoreEQ is one of them. Idle, the
+        // device is not ours and its own running flag is both cheaper and
+        // faster. Running, it would always be true — we are the one using it —
+        // so the processes have to be asked instead, excluding ourselves.
+        //
+        // And running, the question is only asked when it can change the answer.
+        // Sweeping every audio process costs about 6 ms; below the silence
+        // threshold the verdict is `keepRunning` whatever it returns, so paying
+        // that every couple of seconds for the whole life of the app would be
+        // battery spent to confirm something already known.
+        let isAnythingPlaying: Bool
+        if isIdle {
+            isAnythingPlaying = AudioDevices.isRunningSomewhere(outputDeviceID)
+        } else if processor.observed.silentSeconds >= IdlePolicy.idleAfter {
+            isAnythingPlaying = AudioDevices.isAnyProcessPlayingOutput(
+                excluding: tapExcludedProcess)
+        } else {
+            isAnythingPlaying = false
+        }
+
+        let verdict = IdlePolicy.evaluate(
+            isRunning: !isIdle && ioProcID != nil,
+            silentSeconds: processor.observed.silentSeconds,
+            isAnythingPlaying: isAnythingPlaying,
+            isEnabled: isEnabled,
+            isCaptureProven: captureProven,
+            pausesWhenSilent: settings.pausesWhenSilent,
+            isAudioStarting: audioStarting,
+            isRecovering: status.summary != nil)
+        audioStarting = false
+
+        switch verdict {
+        case .keepRunning, .stayIdle:
+            return
+        case .goIdle:
+            goIdle()
+        case .resume:
+            resumeFromIdle()
+        }
+    }
+
+    /// Whether the engine is between states, and must not be touched.
+    ///
+    /// A rebuild already scheduled, or a tap still being proved. Tearing down
+    /// from under either leaves state describing a path that no longer exists —
+    /// and in the proving case it would destroy the very path that has to run
+    /// for the permission answer to arrive.
+    private var isMidTransition: Bool {
+        pendingRestart != nil || (capturePoll != nil && !captureProven)
+    }
+
+    /// Releases the sleep assertion by stopping the IO proc, and nothing else.
+    ///
+    /// The tap and the aggregate stay alive on purpose. The first version of
+    /// this tore the whole path down and rebuilt it on resume, which broke
+    /// playback outright over Bluetooth: rebuilding means creating a new
+    /// aggregate around the output device at the exact moment a player is
+    /// opening that device, so the device is reconfigured — and on Bluetooth
+    /// renegotiated — underneath the client that just grabbed it. Players failed
+    /// to start and only succeeded after several attempts, because each attempt
+    /// was a race against us.
+    ///
+    /// Stopping is enough. `AudioDeviceStop` alone releases the assertion, and
+    /// a tap left alive does *not* silence other processes while nothing is
+    /// consuming it — both measured, the second because assuming it would was
+    /// what made the destructive version look necessary. So while idle, audio
+    /// plays normally and unprocessed, and resuming touches no topology at all.
+    private func goIdle() {
+        guard !isIdle, let ioProcID, aggregateID != kAudioObjectUnknown else { return }
+        AudioDeviceStop(aggregateID, ioProcID)
+        isIdle = true
+        idleCount += 1
+        idleSince = Date()
+        // `status` is deliberately untouched. Nothing has changed for the user:
+        // CoreEQ is on, and the next sound will be equalized.
+        logger.info("Idle: stopped the IO proc, nothing is playing")
+    }
+
+    /// Starts the IO proc again because something wants to play.
+    ///
+    /// One call, against a device that was never taken apart. Nothing is
+    /// created, nothing is renegotiated, and the player that triggered this
+    /// keeps the device it just opened.
+    private func resumeFromIdle() {
+        guard isIdle else { return }
+        guard let ioProcID, aggregateID != kAudioObjectUnknown else {
+            // The path went away underneath us — a device change, or a failed
+            // start. Rebuilding is the only option left, and it is safe here
+            // because there is nothing to disturb.
+            isIdle = false
+            start()
+            return
+        }
+        if let idleSince { totalIdle += -idleSince.timeIntervalSinceNow }
+        idleSince = nil
+        isIdle = false
+        // The delay lines describe audio from before the pause.
+        processor.prepareForResume()
+        let status = AudioDeviceStart(aggregateID, ioProcID)
+        if status != noErr {
+            logger.error("Resume failed (\(status)); rebuilding")
+            start()
+            return
+        }
+        logger.info("Resuming: audio is playing")
+    }
+
     /// Our own audio process object, so our playback is not counted as evidence
     /// that audio is reaching everything *except* us.
     private var tapExcludedProcess: AudioObjectID {
@@ -589,7 +808,73 @@ final class AudioEngine: ObservableObject {
 
     /// Removes the observers that survive a restart. `start()` reinstalls both,
     /// so stopping and starting again is a complete cycle.
+    /// Watches for anything starting to play, so a resume does not wait for a
+    /// timer.
+    ///
+    /// Two kinds are needed and one alone is not enough: a listener per process
+    /// catches an app that is already known to Core Audio, and a listener on the
+    /// process list catches one that has just appeared — measured, a freshly
+    /// launched player fires no per-process notification, because there was no
+    /// process object to attach to when the listeners went on.
+    private func installPlaybackListenersIfNeeded() {
+        guard processListListener == nil else { return }
+        var addr = propertyAddress(kAudioHardwarePropertyProcessObjectList)
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.audioStarting = true
+                self.evaluateIdleState()
+            }
+        }
+        let status = AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject), &addr, .main, block)
+        if status == noErr {
+            processListListener = block
+        } else {
+            logger.error("Failed to observe the audio process list: \(status)")
+        }
+    }
+
+    /// Watches the output device for anyone else starting to use it.
+    ///
+    /// On the device rather than the aggregate: the aggregate's running state is
+    /// CoreEQ's own, and would say nothing about who else wants to play.
+    private func installDeviceRunningListener(on deviceID: AudioObjectID) {
+        removeDeviceRunningListener()
+        var addr = propertyAddress(kAudioDevicePropertyDeviceIsRunningSomewhere)
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.evaluateIdleState() }
+        }
+        if AudioObjectAddPropertyListenerBlock(deviceID, &addr, .main, block) == noErr {
+            deviceRunningListener = block
+            outputDeviceID = deviceID
+        } else {
+            logger.error("Failed to observe whether \(deviceID) is in use")
+        }
+    }
+
+    private func removeDeviceRunningListener() {
+        if let deviceRunningListener, outputDeviceID != kAudioObjectUnknown {
+            var addr = propertyAddress(kAudioDevicePropertyDeviceIsRunningSomewhere)
+            AudioObjectRemovePropertyListenerBlock(
+                outputDeviceID, &addr, .main, deviceRunningListener)
+        }
+        deviceRunningListener = nil
+        outputDeviceID = AudioObjectID(kAudioObjectUnknown)
+    }
+
+    private func removePlaybackListeners() {
+        if let processListListener {
+            var addr = propertyAddress(kAudioHardwarePropertyProcessObjectList)
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject), &addr, .main, processListListener)
+        }
+        processListListener = nil
+        removeDeviceRunningListener()
+    }
+
     private func removeSystemObservers() {
+        removePlaybackListeners()
         if let defaultDeviceListener {
             var addr = propertyAddress(kAudioHardwarePropertyDefaultOutputDevice)
             AudioObjectRemovePropertyListenerBlock(
@@ -616,7 +901,10 @@ final class AudioEngine: ObservableObject {
         lastRestartReason = reason
         lastRestartAt = Date()
         pendingRestart?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.start() }
+        let work = DispatchWorkItem { [weak self] in
+            self?.pendingRestart = nil
+            self?.start()
+        }
         pendingRestart = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }

@@ -1314,4 +1314,142 @@ struct EQProcessorTests {
         }
     }
 
+    // MARK: - Silence, which decides when the device is released
+
+    /// The measurement the whole idle behaviour rests on. Too eager and the
+    /// audio path is released under someone listening; too reluctant and the
+    /// Mac never sleeps, which is the bug it exists to fix.
+
+    /// Counted from frames delivered, not from a clock. The render thread has no
+    /// business reading the time, and frames are what the device actually did.
+    @Test func silenceIsMeasuredInDeliveredAudio() {
+        let processor = makeProcessor()
+        let oneSecond = Int(sampleRate)
+
+        _ = render(processor, [Float](repeating: 0, count: oneSecond))
+
+        #expect(abs(processor.observed.silentSeconds - 1.0) < 0.001)
+    }
+
+    /// It accumulates across passes, because a device delivers a few hundred
+    /// frames at a time and thirty seconds of quiet is thousands of those.
+    @Test func silenceAccumulatesAcrossRenderPasses() {
+        let processor = makeProcessor()
+        let block = [Float](repeating: 0, count: 512)
+
+        for _ in 0..<100 { _ = render(processor, block) }
+
+        #expect(abs(processor.observed.silentSeconds - 100 * 512 / sampleRate) < 0.001)
+    }
+
+    /// Any sample at all ends the silence. Not a threshold: a passage at -60 dB
+    /// is still someone listening, and releasing the device under them is the
+    /// failure that matters.
+    @Test func aSingleQuietSampleEndsTheSilence() {
+        let processor = makeProcessor()
+        _ = render(processor, [Float](repeating: 0, count: 4_800))
+        #expect(processor.observed.silentSeconds > 0)
+
+        var barelyAudible = [Float](repeating: 0, count: 4_800)
+        barelyAudible[2_000] = 1e-6
+        _ = render(processor, barelyAudible)
+
+        #expect(processor.observed.silentSeconds == 0, "a quiet passage was counted as silence")
+    }
+
+    /// And music certainly does.
+    @Test func audioKeepsTheSilenceAtZero() {
+        let processor = makeProcessor()
+        for _ in 0..<20 { _ = render(processor, sine(440, frames: 512)) }
+
+        #expect(processor.observed.silentSeconds == 0)
+    }
+
+    /// Silence restarts after audio rather than resuming where it left off:
+    /// what matters is the *current* run of quiet, not the total.
+    @Test func silenceIsTheCurrentRunNotATotal() {
+        let processor = makeProcessor()
+        _ = render(processor, [Float](repeating: 0, count: 24_000))
+        _ = render(processor, sine(440, frames: 512))
+        _ = render(processor, [Float](repeating: 0, count: 4_800))
+
+        #expect(abs(processor.observed.silentSeconds - 4_800 / sampleRate) < 0.001)
+    }
+
+    /// Resuming clears it. The engine has just been stopped for a while, and
+    /// carrying the silence across would idle again on the next check —
+    /// releasing the device moments after taking it back.
+    @Test func resumingClearsTheSilence() {
+        let processor = makeProcessor()
+        _ = render(processor, [Float](repeating: 0, count: Int(sampleRate) * 40))
+        #expect(processor.observed.silentSeconds > 30)
+
+        processor.prepareForResume()
+
+        #expect(processor.observed.silentSeconds == 0)
+    }
+
+    /// Resuming also clears filter state, because the delay lines describe audio
+    /// from before the pause. Fed silence, a chain holding state rings; a chain
+    /// that was reset is silent.
+    @Test func resumingClearsFilterState() {
+        let processor = makeProcessor(filters: [
+            EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 8)
+        ])
+        _ = render(processor, sine(1_000, frames: 2_048, amplitude: 0.9))
+
+        processor.prepareForResume()
+        let afterReset = render(processor, [Float](repeating: 0, count: 512))
+
+        #expect(afterReset.allSatisfy { $0 == 0 }, "stale filter state rang into the new audio")
+    }
+
+    // MARK: - Output level, which settles the noise reports
+
+    /// The peak is kept for the life of the engine, not per block. The question
+    /// a report answers is whether this ever happened, and a value that decays
+    /// answers it only for whoever is watching at the time.
+    @Test func thePeakSurvivesLaterQuiet() {
+        let processor = makeProcessor()
+        _ = render(processor, sine(440, frames: 512, amplitude: 0.8))
+        let loud = processor.observed.peakLevel
+        #expect(loud > 0.5)
+
+        for _ in 0..<50 { _ = render(processor, [Float](repeating: 0, count: 512)) }
+
+        #expect(processor.observed.peakLevel == loud, "the peak decayed and stopped being evidence")
+    }
+
+    /// Clipping is what a boosted preset does to material that had no headroom,
+    /// and it is the first hypothesis for the open "sounds noisy" reports.
+    @Test func aBoostedChainReportsWhatDidNotFit() {
+        let processor = makeProcessor(
+            filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)])
+        for _ in 0..<20 { _ = render(processor, sine(1_000, frames: 512, amplitude: 0.95)) }
+
+        #expect(processor.observed.peakLevel > 1.0)
+        #expect(processor.observed.clippedSamples > 0)
+    }
+
+    /// A chain with headroom reports none, so the line means something when it
+    /// is not empty.
+    @Test func anUnboostedChainReportsNoClipping() {
+        let processor = makeProcessor()
+        for _ in 0..<20 { _ = render(processor, sine(1_000, frames: 512, amplitude: 0.5)) }
+
+        #expect(processor.observed.clippedSamples == 0)
+        #expect(processor.observed.peakLevel <= 1.0)
+    }
+
+    /// Bypass touches nothing, so there is nothing CoreEQ could have clipped —
+    /// and measuring it would blame the app for the material.
+    @Test func bypassMeasuresNothing() {
+        let processor = makeProcessor(
+            filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)])
+        processor.setBypassed(true)
+        for _ in 0..<20 { _ = render(processor, sine(1_000, frames: 512, amplitude: 0.95)) }
+
+        #expect(processor.observed.clippedSamples == 0)
+    }
+
 }

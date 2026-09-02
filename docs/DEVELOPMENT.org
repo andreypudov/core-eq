@@ -348,7 +348,10 @@ CoreEQ/
       SpectrumAnalyzer.swift  Windowed FFT driving the response backdrop
       SpectrumAudioBuffer.swift Lock-light ring buffer feeding the analyzer
   EQ/
-    EQProcessor.swift       Realtime biquad chain with parameter smoothing
+    EQProcessor.swift       The render path: staging, and what happens per block
+    BufferRouter.swift      Tap channels into device channels; buffer arithmetic
+    FilterBank.swift        The chain itself: biquads, smoothing, delay lines
+    RenderObservations.swift What the render thread noticed, for reports
     Biquad.swift            One RBJ biquad: coefficients + magnitude response
     AutoGain.swift          The trim that holds a preset at its original loudness
   Presets/
@@ -432,6 +435,20 @@ accurate statement that the Core Audio boundary has no unit tests and cannot
 have them. The exception is =CoreEQTests/Support/=, which holds helpers rather
 than suites.
 
+*How the render path is divided.* =EQProcessor= owns the thread boundary — the
+staged parameters, the lock, and the order of work in a block — and delegates
+the rest. =BufferRouter= knows where audio comes from and goes to; =FilterBank=
+knows what happens to it in between; =RenderObservations= knows what was
+noticed on the way past. They are structs, stored inline, because everything
+here runs on the audio thread where a class would add a retain and an
+indirection per block.
+
+The staging deliberately did *not* move. It is what the type's
+=@unchecked Sendable= claim is about, and splitting it would mean either
+allocating a changes struct inside the IO callback or threading =inout=
+plumbing through it — spreading an invariant that is currently verifiable in
+one place, for no gain.
+
 *Where model logic lives.* =ProfileManager= is the only observable object in
 the model layer, and it is deliberately not where the thinking happens. The
 preset collection is =PresetLibrary=, chain arithmetic is =FilterChain=, and what
@@ -511,6 +528,62 @@ Implemented in =AudioEngine.swift=:
 3. *IO proc.* An IO proc on the aggregate receives the tapped system mix each
    cycle, runs it through =EQProcessor=, and writes it to the real device's
    output buffers.
+
+*** Releasing the device when nothing is playing
+
+A started aggregate makes =coreaudiod= hold a =PreventUserIdleSystemSleep=
+assertion for CoreEQ. Core Audio raises it on the first sound and never drops
+it, so a Mac that played anything once is held awake until CoreEQ quits.
+
+=IdlePolicy= decides when to let go; =AudioEngine= only carries it out. Every
+condition lives in the policy because it can be tested there against invented
+sequences, and the cost of a wrong condition is the failure this app has shipped
+three times — no sound, with every layer reporting success.
+
+Three things about it are load-bearing and should not be simplified away:
+
+- *Only the IO proc is stopped.* The tap and the aggregate stay alive, and this
+  is the rule most likely to be "improved" back into a bug. Tearing the path
+  down and rebuilding it on resume looks safer and is not: rebuilding creates a
+  new aggregate around the output device exactly as a player is opening it, so
+  the device is reconfigured — renegotiated, on Bluetooth — underneath the
+  client that just grabbed it. That shipped as far as manual testing and broke
+  playback outright: players failed to start and only succeeded after several
+  attempts, each attempt racing the rebuild.
+
+  The argument for tearing down was that a live =mutedWhenTapped= tap would
+  silence every other process with nothing running to write their audio back.
+  Measured, it does not: with the IO proc stopped and the tap alive, other
+  audio reaches the device at full level. The assumption was never tested, and
+  it cost a working feature.
+- *Silence and playback must both agree* before releasing. They come from
+  different places — the render path and the system — and a process may hold the
+  device open while sending zeros. Acting on either alone makes =goIdle= and
+  =resume= reachable from one state, and the path is rebuilt every thirty
+  seconds forever.
+- *A failed path is left to its own retry.* Otherwise a device the engine
+  refuses is retried at the poll interval rather than with the backoff and
+  ceiling that already exist.
+
+How the engine learns that audio is starting is itself measured, and the
+obvious answer is wrong. =kAudioProcessPropertyIsRunningOutput= sends *no
+notifications*: attached to every audio process, it never fired once. Sweeping
+those processes by hand answers the question but costs about 6 ms a pass, which
+rules out polling it quickly. =kAudioDevicePropertyDeviceIsRunningSomewhere= on
+the output device does notify, costs 0.05 ms to read, and reads false while
+CoreEQ is idle — so it says precisely "somebody else wants this device". A
+listener on the audio process list runs alongside it, because a process appears
+there about 80 ms before it plays, and the device needs about 90 ms to deliver
+its first buffer after being started. Acting on the announcement rather than on
+the audio is what closes the gap.
+
+Measured on a Bluetooth headset, resume went from 1.97 / 1.10 / 0.29 s of
+unequalized audio at a half-second poll to a consistent 40-48 ms.
+
+=Status= is deliberately unchanged while idle: nothing has changed for the user,
+and an idle engine reporting itself stopped would blink the menu bar icon off
+whenever a room went quiet. The diagnostics report carries the fact instead,
+because a released device and a broken engine look identical from outside.
 
 *** Sample rate changes, and why there is no stale window
 
@@ -617,6 +690,25 @@ The item is built from the split view, and the toolbar is asked for its items
 while the window is still being assembled, so =AppDelegate= holds the
 =NSSplitViewController= rather than reaching for it through =mainWindow=, which is
 not assigned yet at that point.
+
+** A trap: a hand-made window does not update its Tab order
+
+=NSWindow.autorecalculatesKeyViewLoop= defaults to *false* for a window created
+in code, and to true only for one loaded from a nib. The main window is built by
+hand in =AppDelegate=, so with the default AppKit worked out the key-view loop
+once, at build time, and never revisited it. Any control added later — a
+parametric band, which is the whole point of that editor — had fields Tab had
+never heard of, so tabbing off the last row it knew about wrapped to the top.
+
+It presents as a bug about the *last* row, which sends you looking at the list
+and its separators. The give-away is that the same number of bands behaves
+differently depending on how you got there: adding a fourth leaves it broken,
+while adding a fifth and removing it again fixes it, because removing a view
+invalidates the loop and forces the rebuild that adding one does not. A symptom
+that depends on history rather than on state is a stale cache, not a layout
+mistake.
+
+Set it once, where the window is built.
 
 ** A trap: publishing from inside a view update
 
