@@ -348,7 +348,10 @@ CoreEQ/
       SpectrumAnalyzer.swift  Windowed FFT driving the response backdrop
       SpectrumAudioBuffer.swift Lock-light ring buffer feeding the analyzer
   EQ/
-    EQProcessor.swift       Realtime biquad chain with parameter smoothing
+    EQProcessor.swift       The render path: staging, and what happens per block
+    BufferRouter.swift      Tap channels into device channels; buffer arithmetic
+    FilterBank.swift        The chain itself: biquads, smoothing, delay lines
+    RenderObservations.swift What the render thread noticed, for reports
     Biquad.swift            One RBJ biquad: coefficients + magnitude response
     AutoGain.swift          The trim that holds a preset at its original loudness
   Presets/
@@ -431,6 +434,20 @@ between a directory's sources and its tests is legible at a glance —
 accurate statement that the Core Audio boundary has no unit tests and cannot
 have them. The exception is =CoreEQTests/Support/=, which holds helpers rather
 than suites.
+
+*How the render path is divided.* =EQProcessor= owns the thread boundary — the
+staged parameters, the lock, and the order of work in a block — and delegates
+the rest. =BufferRouter= knows where audio comes from and goes to; =FilterBank=
+knows what happens to it in between; =RenderObservations= knows what was
+noticed on the way past. They are structs, stored inline, because everything
+here runs on the audio thread where a class would add a retain and an
+indirection per block.
+
+The staging deliberately did *not* move. It is what the type's
+=@unchecked Sendable= claim is about, and splitting it would mean either
+allocating a changes struct inside the IO callback or threading =inout=
+plumbing through it — spreading an invariant that is currently verifiable in
+one place, for no gain.
 
 *Where model logic lives.* =ProfileManager= is the only observable object in
 the model layer, and it is deliberately not where the thinking happens. The

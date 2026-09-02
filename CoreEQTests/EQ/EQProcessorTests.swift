@@ -1328,7 +1328,7 @@ struct EQProcessorTests {
 
         _ = render(processor, [Float](repeating: 0, count: oneSecond))
 
-        #expect(abs(processor.silentSeconds - 1.0) < 0.001)
+        #expect(abs(processor.observed.silentSeconds - 1.0) < 0.001)
     }
 
     /// It accumulates across passes, because a device delivers a few hundred
@@ -1339,7 +1339,7 @@ struct EQProcessorTests {
 
         for _ in 0..<100 { _ = render(processor, block) }
 
-        #expect(abs(processor.silentSeconds - 100 * 512 / sampleRate) < 0.001)
+        #expect(abs(processor.observed.silentSeconds - 100 * 512 / sampleRate) < 0.001)
     }
 
     /// Any sample at all ends the silence. Not a threshold: a passage at -60 dB
@@ -1348,13 +1348,13 @@ struct EQProcessorTests {
     @Test func aSingleQuietSampleEndsTheSilence() {
         let processor = makeProcessor()
         _ = render(processor, [Float](repeating: 0, count: 4_800))
-        #expect(processor.silentSeconds > 0)
+        #expect(processor.observed.silentSeconds > 0)
 
         var barelyAudible = [Float](repeating: 0, count: 4_800)
         barelyAudible[2_000] = 1e-6
         _ = render(processor, barelyAudible)
 
-        #expect(processor.silentSeconds == 0, "a quiet passage was counted as silence")
+        #expect(processor.observed.silentSeconds == 0, "a quiet passage was counted as silence")
     }
 
     /// And music certainly does.
@@ -1362,7 +1362,7 @@ struct EQProcessorTests {
         let processor = makeProcessor()
         for _ in 0..<20 { _ = render(processor, sine(440, frames: 512)) }
 
-        #expect(processor.silentSeconds == 0)
+        #expect(processor.observed.silentSeconds == 0)
     }
 
     /// Silence restarts after audio rather than resuming where it left off:
@@ -1373,7 +1373,7 @@ struct EQProcessorTests {
         _ = render(processor, sine(440, frames: 512))
         _ = render(processor, [Float](repeating: 0, count: 4_800))
 
-        #expect(abs(processor.silentSeconds - 4_800 / sampleRate) < 0.001)
+        #expect(abs(processor.observed.silentSeconds - 4_800 / sampleRate) < 0.001)
     }
 
     /// Resuming clears it. The engine has just been stopped for a while, and
@@ -1382,11 +1382,11 @@ struct EQProcessorTests {
     @Test func resumingClearsTheSilence() {
         let processor = makeProcessor()
         _ = render(processor, [Float](repeating: 0, count: Int(sampleRate) * 40))
-        #expect(processor.silentSeconds > 30)
+        #expect(processor.observed.silentSeconds > 30)
 
         processor.prepareForResume()
 
-        #expect(processor.silentSeconds == 0)
+        #expect(processor.observed.silentSeconds == 0)
     }
 
     /// Resuming also clears filter state, because the delay lines describe audio
@@ -1412,12 +1412,12 @@ struct EQProcessorTests {
     @Test func thePeakSurvivesLaterQuiet() {
         let processor = makeProcessor()
         _ = render(processor, sine(440, frames: 512, amplitude: 0.8))
-        let loud = processor.peakLevel
+        let loud = processor.observed.peakLevel
         #expect(loud > 0.5)
 
         for _ in 0..<50 { _ = render(processor, [Float](repeating: 0, count: 512)) }
 
-        #expect(processor.peakLevel == loud, "the peak decayed and stopped being evidence")
+        #expect(processor.observed.peakLevel == loud, "the peak decayed and stopped being evidence")
     }
 
     /// Clipping is what a boosted preset does to material that had no headroom,
@@ -1427,8 +1427,8 @@ struct EQProcessorTests {
             filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 12, q: 1)])
         for _ in 0..<20 { _ = render(processor, sine(1_000, frames: 512, amplitude: 0.95)) }
 
-        #expect(processor.peakLevel > 1.0)
-        #expect(processor.clippedSamples > 0)
+        #expect(processor.observed.peakLevel > 1.0)
+        #expect(processor.observed.clippedSamples > 0)
     }
 
     /// A chain with headroom reports none, so the line means something when it
@@ -1437,8 +1437,8 @@ struct EQProcessorTests {
         let processor = makeProcessor()
         for _ in 0..<20 { _ = render(processor, sine(1_000, frames: 512, amplitude: 0.5)) }
 
-        #expect(processor.clippedSamples == 0)
-        #expect(processor.peakLevel <= 1.0)
+        #expect(processor.observed.clippedSamples == 0)
+        #expect(processor.observed.peakLevel <= 1.0)
     }
 
     /// Bypass touches nothing, so there is nothing CoreEQ could have clipped —
@@ -1449,7 +1449,7 @@ struct EQProcessorTests {
         processor.setBypassed(true)
         for _ in 0..<20 { _ = render(processor, sine(1_000, frames: 512, amplitude: 0.95)) }
 
-        #expect(processor.clippedSamples == 0)
+        #expect(processor.observed.clippedSamples == 0)
     }
 
 }

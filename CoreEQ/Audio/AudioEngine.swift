@@ -102,7 +102,7 @@ final class AudioEngine: ObservableObject {
     /// thread, and the only thing that wants it is a diagnostics report being
     /// drawn — publishing it would mean waking the UI for a fact nobody is
     /// looking at.
-    var hasReceivedAudio: Bool { processor.hasReceivedAudio }
+    var hasReceivedAudio: Bool { processor.observed.hasReceivedAudio }
 
     /// The widest interval the render path has spent filtering at a rate the
     /// device was not using. Nil when there has been none, which is every
@@ -125,7 +125,7 @@ final class AudioEngine: ObservableObject {
     /// fit.
     var level: DiagnosticsReport.Level {
         DiagnosticsReport.Level(
-            peak: processor.peakLevel, clippedSamples: processor.clippedSamples)
+            peak: processor.observed.peakLevel, clippedSamples: processor.observed.clippedSamples)
     }
 
     /// Whether the audio device has been let go, and the history of that.
@@ -623,7 +623,7 @@ final class AudioEngine: ObservableObject {
             guard let self, self.ioProcID != nil, !self.captureProven else { return }
 
             let (verdict, silent) = CaptureProof.evaluate(
-                hasReceivedAudio: self.processor.hasReceivedAudio,
+                hasReceivedAudio: self.processor.observed.hasReceivedAudio,
                 isAnythingPlaying: AudioDevices.isAnyProcessPlayingOutput(
                     excluding: self.tapExcludedProcess),
                 silentWhilePlaying: silentWhilePlaying,
@@ -704,7 +704,7 @@ final class AudioEngine: ObservableObject {
         let isAnythingPlaying: Bool
         if isIdle {
             isAnythingPlaying = AudioDevices.isRunningSomewhere(outputDeviceID)
-        } else if processor.silentSeconds >= IdlePolicy.idleAfter {
+        } else if processor.observed.silentSeconds >= IdlePolicy.idleAfter {
             isAnythingPlaying = AudioDevices.isAnyProcessPlayingOutput(
                 excluding: tapExcludedProcess)
         } else {
@@ -713,7 +713,7 @@ final class AudioEngine: ObservableObject {
 
         let verdict = IdlePolicy.evaluate(
             isRunning: !isIdle && ioProcID != nil,
-            silentSeconds: processor.silentSeconds,
+            silentSeconds: processor.observed.silentSeconds,
             isAnythingPlaying: isAnythingPlaying,
             isEnabled: isEnabled,
             isCaptureProven: captureProven,
