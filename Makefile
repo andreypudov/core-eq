@@ -9,7 +9,7 @@ ifneq (,$(findstring CommandLineTools,$(shell xcode-select -p)))
 export DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 endif
 
-.PHONY: build test format lint install release icons clean
+.PHONY: build test audio-test format lint install release icons clean
 
 build:
 	xcodebuild -project $(APP).xcodeproj -target $(APP) -configuration $(CONFIG) build
@@ -29,6 +29,24 @@ lint:
 
 test:
 	xcodebuild test -project $(APP).xcodeproj -scheme $(APP) -destination 'platform=macOS'
+
+# End-to-end check on real hardware: plays a known signal through the built app
+# and measures what actually reaches the device. Silent — it captures through
+# BlackHole rather than speakers — and it puts the audio settings back
+# afterwards, including after a failure.
+#
+# This is the counterpart to `test`, not a replacement. Everything that has
+# gone seriously wrong in this app went wrong at a boundary the unit tests
+# cannot reach: Core Audio reporting success for a device that plays nothing, a
+# tap created without permission, a channel map pointing somewhere else. Those
+# are only visible in what comes out.
+#
+# Requires BlackHole (brew install blackhole-16ch) and takes about a minute,
+# most of it waiting for the idle timer.
+audio-test: build
+	@mkdir -p build
+	@xcrun swiftc -O -parse-as-library -o build/audio-test Tools/AudioTest.swift
+	@./build/audio-test
 
 install: build
 	rm -rf /Applications/$(APP).app

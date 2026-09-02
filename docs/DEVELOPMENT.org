@@ -115,6 +115,47 @@ audio hardware, so it runs anywhere, including CI. Roughly one file per subject:
 - =SettingsStoreTests=, =ThemeTests=, =ScrollAdjusterTests=, =KnobScaleTests=,
   =SpectrumAnalyzerTests=, and the small format and colour files.
 
+*** =make audio-test=: what the unit tests cannot reach
+
+=make test= checks what the app *decides*. =make audio-test= checks what it *does to
+the sound*, by playing a known signal through the built application and
+measuring what actually arrives at the device.
+
+It exists because of where this project's defects have actually been. Every
+serious one was at a boundary the unit tests cannot cross — Core Audio
+reporting success for an aggregate that plays nothing, a tap created without
+permission that captures silence, a channel map pointing somewhere else, a
+rebuild that broke playback on Bluetooth. What they have in common is that every
+layer of the app went on reporting that it worked. The only thing that catches
+that is listening to the output.
+
+It plays a stereo tone with a *different frequency in each channel*, so a map
+that swaps or smears them fails rather than merely sounding odd, and captures
+through BlackHole — silent, exact, and independent of speakers. What it asserts:
+
+- audio reaches the device at all (the three silent-Mac defects)
+- each tone comes back on the channel it was played into, with crosstalk far
+  down (the multichannel defect)
+- channels the tap never fed stay silent (the same defect, from the other side)
+- the level is not roughly doubled, which is what a tap that stopped muting
+  would produce
+- the device is released after silence, and the sound is *identical* either side
+  of an idle cycle — compared against itself, so it is exact without knowing
+  anything about the user's preset
+
+Requires BlackHole (=brew install blackhole-16ch=) and about a minute, most of
+it waiting for the idle timer. It changes the default output device and the
+sample rate, and restores both on the way out including after a failure.
+
+Checks whose precondition does not hold are reported as =SKIP= rather than
+passed. A virtual capture device does not always make coreaudiod raise a sleep
+assertion, so that one check is verified where it can be and named where it
+cannot — a check that quietly did not run is worse than one that failed.
+
+*It is not CI.* It needs real hardware and real Core Audio; that is the point.
+Run it before a release, alongside the manual checks that only ears can make —
+whether the resume seam is audible, and whether Tab reaches every field.
+
 *A warning about the runner.* =make test= builds incrementally, and a file
 rewritten quickly enough can be missed — the suite then runs and passes without
 the tests you just added. The count is the check: if the total does not move,
