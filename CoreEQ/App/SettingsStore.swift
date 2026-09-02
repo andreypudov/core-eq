@@ -20,6 +20,7 @@ final class SettingsStore {
         static let userProfiles = "userProfiles"
         static let deviceStates = "deviceStates"
         static let lastOutputDeviceUID = "lastOutputDeviceUID"
+        static let pausesWhenSilent = "pausesWhenSilent"
     }
 
     private let defaults: UserDefaults
@@ -47,6 +48,19 @@ final class SettingsStore {
     var isEnabled: Bool {
         get { defaults.object(forKey: Key.isEnabled) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Key.isEnabled) }
+    }
+
+    /// Whether CoreEQ releases the audio device while nothing is playing.
+    ///
+    /// On by default, because holding it is what keeps a Mac awake all night.
+    /// Off exists because this app has three times shipped a change that
+    /// silenced someone's machine, and every one of those had no workaround
+    /// from inside the app — quitting was the only fix, which is not
+    /// discoverable for something that launches at login. A switch costs one
+    /// line of settings and turns the next such bug into an inconvenience.
+    var pausesWhenSilent: Bool {
+        get { defaults.object(forKey: Key.pausesWhenSilent) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.pausesWhenSilent) }
     }
 
     /// Band gains dialed in on top of the active profile by CoreEQ 1.x.

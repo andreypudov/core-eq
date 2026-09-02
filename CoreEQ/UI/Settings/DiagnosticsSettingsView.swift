@@ -120,6 +120,7 @@ struct DiagnosticsSettingsView: View {
         snapshot.uptime = EngineStatusBridge.shared.uptime
         snapshot.restarts = EngineStatusBridge.shared.restarts
         snapshot.level = EngineStatusBridge.shared.level
+        snapshot.idling = EngineStatusBridge.shared.idling
         return snapshot
     }
 

@@ -133,23 +133,48 @@ struct FilterListView: View {
                     ScrollView(.vertical) {
                         LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                             Section {
-                                ForEach(
-                                    Array(profileManager.freeFilters.enumerated()), id: \.element.id
-                                ) { index, filter in
-                                    FilterRowView(
-                                        index: index + 1,
-                                        filter: filter,
-                                        isSelected: selectedFilterID == filter.id,
-                                        isEnabled: isEnabled,
-                                        profileManager: profileManager
-                                    )
-                                    .onTapGesture { selectedFilterID = filter.id }
+                                // The rows themselves are *not* lazy, and that is
+                                // about Tab rather than about drawing. A lazy
+                                // container only builds what is on screen, and a
+                                // field that has not been built is not in the
+                                // window's key-view loop — so tabbing off the
+                                // last visible row wrapped to the first row
+                                // instead of moving to the next one. Bands are
+                                // capped at `maxFreeFilters`, so building all of
+                                // them costs nothing worth having.
+                                //
+                                // The outer stack stays lazy because that is what
+                                // carries `pinnedViews`, and the pinned titles
+                                // are why the header is inside the scroll view at
+                                // all.
+                                VStack(spacing: 0) {
+                                    ForEach(
+                                        Array(profileManager.freeFilters.enumerated()),
+                                        id: \.element.id
+                                    ) { index, filter in
+                                        // One view per row, always. Emitting the
+                                        // row and then sometimes a separator made
+                                        // the last iteration a different shape
+                                        // from every other, which is exactly the
+                                        // sort of thing view identity is built
+                                        // from.
+                                        VStack(spacing: 0) {
+                                            FilterRowView(
+                                                index: index + 1,
+                                                filter: filter,
+                                                isSelected: selectedFilterID == filter.id,
+                                                isEnabled: isEnabled,
+                                                profileManager: profileManager
+                                            )
+                                            .onTapGesture { selectedFilterID = filter.id }
 
-                                    if filter.id != profileManager.freeFilters.last?.id {
-                                        Rectangle()
-                                            .fill(Theme.blockBorder)
-                                            .frame(height: Theme.FilterRow.separator)
-                                            .padding(.leading, 8)
+                                            if filter.id != profileManager.freeFilters.last?.id {
+                                                Rectangle()
+                                                    .fill(Theme.blockBorder)
+                                                    .frame(height: Theme.FilterRow.separator)
+                                                    .padding(.leading, 8)
+                                            }
+                                        }
                                     }
                                 }
                             } header: {

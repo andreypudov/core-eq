@@ -45,19 +45,9 @@ final class EQProcessor: @unchecked Sendable {
 
     private static let smoothingSeconds = 0.05
 
-    /// Whether the tap has ever delivered anything but digital silence.
-    ///
-    /// Set on the render thread, read on the main one, and deliberately not
-    /// synchronised: it only ever goes false to true, a reader that sees the
-    /// old value simply asks again, and a lock on every block would cost more
-    /// than the fact is worth.
-    ///
-    /// It exists because a tap can be created without permission. It reports a
-    /// plausible format, the aggregate runs, the IO proc fires — and every
-    /// sample is zero, while `muteBehavior` silences every other process at the
-    /// hardware. Nothing in the Core Audio API tells that apart from a Mac that
-    /// happens to be quiet, so the engine watches for it instead.
-    nonisolated(unsafe) private(set) var hasReceivedAudio = false
+    /// What the render thread noticed, for the diagnostics report and for
+    /// `IdlePolicy`. See `RenderObservations` for why this is unsynchronised.
+    nonisolated(unsafe) private(set) var observed = RenderObservations()
 
     /// Whether the engine is still proving the tap works.
     ///
@@ -71,21 +61,6 @@ final class EQProcessor: @unchecked Sendable {
     /// block either side of the change is of no consequence — one buffer of
     /// silence, or one buffer unprocessed.
     nonisolated(unsafe) var isProvingCapture = false
-
-    /// The loudest sample the EQ has produced since the engine started, and how
-    /// many left the representable range.
-    ///
-    /// A boosted preset can ask for more headroom than the signal has, and the
-    /// result is distortion the user hears as noise rather than as loudness —
-    /// two reports of exactly that are open. Nothing else can settle it: the mix
-    /// level arriving at a tap is unknowable from inside it, so the only way to
-    /// know whether CoreEQ is clipping is to look at what CoreEQ produced.
-    ///
-    /// Unsynchronised for the same reasons as `hasReceivedAudio`: written only
-    /// on the render thread, read only for a report, and a reader that catches
-    /// a stale value is a reader who asks again.
-    nonisolated(unsafe) private(set) var peakLevel: Float = 0
-    nonisolated(unsafe) private(set) var clippedSamples = 0
 
     /// Mono copy of the played-back output, tapped for the spectrum analyzer.
     /// 8192 samples is well beyond the analyzer's 4096-sample window, so the
@@ -178,42 +153,6 @@ final class EQProcessor: @unchecked Sendable {
     /// What the render thread needs to know about one filter: no identifier, no
     /// colour, no ladder slot. Plain data, so staging a chain is a fixed number
     /// of scalar copies into storage that already exists.
-    private struct FilterParameters: Equatable {
-        var kind = EQFilter.Kind.bell
-        var frequency = 1_000.0
-        var gain = 0.0
-        var q = 1.0
-        var isEnabled = true
-
-        init() {}
-
-        init(_ filter: EQFilter) {
-            kind = filter.kind
-            frequency = filter.frequency
-            gain = filter.gain
-            q = filter.q
-            isEnabled = filter.isEnabled
-        }
-
-        /// Whether a change here invalidates the coefficients and the filter's
-        /// delay line. Gain is excluded: it is ramped rather than jumped, so it
-        /// updates coefficients without discarding state.
-        func changesShape(from other: FilterParameters) -> Bool {
-            kind != other.kind
-                || frequency != other.frequency
-                || q != other.q
-                || isEnabled != other.isEnabled
-        }
-    }
-
-    private struct FilterState {
-        var parameters = FilterParameters()
-        var targetGain = 0.0
-        var currentGain = 0.0
-        var needsCoefficientUpdate = true
-        var filter = Biquad.identity
-    }
-
     // Staged parameters, written by the main thread under `lock` and consumed
     // by the render thread.
     //
@@ -225,8 +164,8 @@ final class EQProcessor: @unchecked Sendable {
     // times a second: unbounded in principle, and exactly the kind of thing that
     // shows up as a dropout under memory pressure rather than in testing.
     private let lock = OSAllocatedUnfairLock()
-    private var pendingFilters = [FilterParameters](
-        repeating: FilterParameters(), count: EQProcessor.maxFilters)
+    private var pendingFilters = [FilterBank.Parameters](
+        repeating: FilterBank.Parameters(), count: EQProcessor.maxFilters)
     /// Number of staged filters, or nil when no chain is waiting to be picked up.
     private var pendingFilterCount: Int?
     private var pendingPreamp: Double?
@@ -242,44 +181,22 @@ final class EQProcessor: @unchecked Sendable {
     private var pendingSourceChannels = Array(0..<EQProcessor.maxChannels)
 
     // Render-thread-only state.
-    private var filters = [FilterState](repeating: FilterState(), count: EQProcessor.maxFilters)
-    private var filterCount = 0
     /// Where a staged chain is copied to while the lock is held, so the lock is
     /// released before the longer work of comparing it against what is running.
     /// Holding it across that would put the main thread in a position to block
     /// on the audio thread, which is the inversion the staging exists to avoid.
-    private var stagedFilters = [FilterParameters](
-        repeating: FilterParameters(), count: EQProcessor.maxFilters)
+    private var stagedFilters = [FilterBank.Parameters](
+        repeating: FilterBank.Parameters(), count: EQProcessor.maxFilters)
     private var stagedDestinations = [Int](repeating: -1, count: EQProcessor.maxChannels)
     private var stagedSourceBuffers = [Int](repeating: 0, count: EQProcessor.maxChannels)
     private var stagedSourceChannels = Array(0..<EQProcessor.maxChannels)
-    private var sampleRate = 44_100.0
+    /// Where the tap's channels go and how they are found in the buffer lists.
+    /// See `BufferRouter`.
+    private var router = BufferRouter()
+    /// The chain itself, and everything the samples pass through. See
+    /// `FilterBank`.
+    private var bank = FilterBank()
     private var bypassed = false
-    /// Delay lines for every filter and channel, flat and allocated once:
-    /// filter-major, then channel, then the two states. Two per filter per
-    /// channel is what transposed direct form II needs.
-    private var delays = [Double](
-        repeating: 0, count: EQProcessor.maxFilters * EQProcessor.maxChannels * 2)
-    /// Where each tap channel is written, render-thread owned. -1 is "nowhere".
-    /// Defaults to the identity map, so a processor the engine has not described
-    /// yet behaves as plain interleaved audio rather than as silence.
-    private var destinations = Array(0..<EQProcessor.maxChannels)
-    /// Tap channels currently routed, never more than `destinations` holds.
-    private var routedChannels = 2
-    /// Input buffer the tap arrives in, render-thread owned. Zero is correct for
-    /// an output-only device, which presents no input buffers of its own.
-    private var tapBufferIndex = 0
-    /// Channels the tap delivers, *unclamped* — `routedChannels` is capped at
-    /// `maxChannels`, and recognising the tap needs its real width.
-    private var tapChannelCount = 2
-    /// Input buffer each routed channel is read from, render-thread owned.
-    private var sourceBuffers = [Int](repeating: 0, count: EQProcessor.maxChannels)
-    /// Channel within that buffer, render-thread owned.
-    private var sourceChannels = Array(0..<EQProcessor.maxChannels)
-    // Output trim, smoothed like the band gains so dragging the preamp slider
-    // is a fade rather than a step.
-    private var targetPreampLinear = 1.0
-    private var currentPreampLinear = 1.0
 
     // MARK: - Control (any thread)
 
@@ -287,10 +204,10 @@ final class EQProcessor: @unchecked Sendable {
     /// dropped here rather than in the callback, so the render side never has to
     /// reason about a chain longer than its storage.
     func setFilters(_ newFilters: [EQFilter]) {
-        let count = min(newFilters.count, Self.maxFilters)
+        let count = min(newFilters.count, FilterBank.maxFilters)
         lock.lock()
         for i in 0..<count {
-            pendingFilters[i] = FilterParameters(newFilters[i])
+            pendingFilters[i] = FilterBank.Parameters(newFilters[i])
         }
         pendingFilterCount = count
         lock.unlock()
@@ -309,10 +226,19 @@ final class EQProcessor: @unchecked Sendable {
     }
 
     /// Forgets what the tap has delivered, for a fresh engine.
+    /// Clears filter state across a pause in the audio.
+    ///
+    /// The delay lines hold the last samples processed. Resuming after a gap
+    /// runs new audio against state that describes sound from minutes ago, which
+    /// is the same discontinuity a channel or rate change causes — and those
+    /// already reset. A few samples of transient is a click.
+    func prepareForResume() {
+        bank.resetAll()
+        observed.silentSeconds = 0
+    }
+
     func resetAudioObservation() {
-        hasReceivedAudio = false
-        peakLevel = 0
-        clippedSamples = 0
+        observed.reset()
     }
 
     /// Stages the output layout. Set by `AudioEngine` once per engine start,
@@ -371,9 +297,16 @@ final class EQProcessor: @unchecked Sendable {
 
         // Watched whether or not anything is written: while the tap is being
         // proved this is the only thing the render path is here to do.
-        if !hasReceivedAudio, carriesSignal(inABL) {
-            hasReceivedAudio = true
+        // Time is counted from the frames delivered rather than from a clock,
+        // so it stays true when the IO thread is late and stops advancing the
+        // moment the device stops calling us — which is what it means for there
+        // to be no audio at all.
+        var elapsed = 0.0
+        if bank.sampleRate > 0, outABL.count > 0, outABL[0].mNumberChannels > 0 {
+            let bytesPerFrame = MemoryLayout<Float>.size * Int(outABL[0].mNumberChannels)
+            elapsed = Double(Int(outABL[0].mDataByteSize) / bytesPerFrame) / bank.sampleRate
         }
+        observed.observe(input: inABL, seconds: elapsed)
 
         // Nothing is written while proving. The tap is unmuted then, so every
         // other process is still audible and adding our copy would double it.
@@ -384,11 +317,11 @@ final class EQProcessor: @unchecked Sendable {
 
         // Where the primary tap actually turned up, which may not be where it
         // was described. Resolved once per block rather than per channel.
-        let substitute = substituteTapBuffer(in: inABL)
-        let placed = place(inABL, into: outABL, substitute: substitute)
+        let substitute = router.substituteTapBuffer(in: inABL)
+        let placed = router.place(inABL, into: outABL, substitute: substitute)
 
         if !bypassed, placed > 0 {
-            advanceSmoothing(frames: placed)
+            bank.advance(frames: placed)
             equalize(outABL, frames: placed)
         }
 
@@ -399,19 +332,6 @@ final class EQProcessor: @unchecked Sendable {
     ///
     /// Stops at the first one, so on a Mac that is playing this costs a single
     /// comparison — and it is only called until the answer is yes.
-    private func carriesSignal(_ abl: UnsafeMutableAudioBufferListPointer) -> Bool {
-        for i in 0..<abl.count {
-            guard let data = abl[i].mData?.assumingMemoryBound(to: Float.self) else {
-                continue
-            }
-            let count = Int(abl[i].mDataByteSize) / MemoryLayout<Float>.size
-            for sample in 0..<count where data[sample] != 0 {
-                return true
-            }
-        }
-        return false
-    }
-
     /// Copies each routed channel from the input channel the layout names to the
     /// output channel it names, and returns how many frames were written.
     ///
@@ -419,63 +339,22 @@ final class EQProcessor: @unchecked Sendable {
     /// the same buffer and the channels are read in order; with one tap per
     /// output stream they are not, and nothing here needs to know which case it
     /// is in.
-    private func place(
-        _ inABL: UnsafeMutableAudioBufferListPointer,
-        into outABL: UnsafeMutableAudioBufferListPointer,
-        substitute: Int?
-    ) -> Int {
-        var written = 0
-        for channel in 0..<routedChannels {
-            guard let source = origin(of: channel, in: inABL, substitute: substitute),
-                let target = destination(of: destinations[channel], in: outABL)
-            else { continue }
-            let count = min(source.frames, target.frames)
-            var read = source.pointer
-            var sink = target.pointer
-            for _ in 0..<count {
-                sink.pointee = read.pointee
-                read += source.stride
-                sink += target.stride
-            }
-            written = max(written, count)
-        }
-        return written
-    }
-
     /// Locates one routed channel in the input list: which buffer it is in,
     /// where it starts, and how far apart its samples are. The mirror of
     /// `destination`, and nil on the same terms — a channel the input does not
     /// have is left silent rather than read from nowhere.
-    private func origin(
-        of channel: Int, in inABL: UnsafeMutableAudioBufferListPointer, substitute: Int?
-    ) -> (pointer: UnsafePointer<Float>, stride: Int, frames: Int)? {
-        var buffer = sourceBuffers[channel]
-        // The described buffer was not the tap, so the one the search found
-        // stands in for it — the old behaviour, kept for the taps it applies to.
-        if let substitute, buffer == tapBufferIndex { buffer = substitute }
-        guard buffer >= 0, buffer < inABL.count,
-            let data = inABL[buffer].mData?.assumingMemoryBound(to: Float.self)
-        else { return nil }
-        let channels = Int(inABL[buffer].mNumberChannels)
-        let source = sourceChannels[channel]
-        guard channels > 0, source >= 0, source < channels else { return nil }
-        let frames = Int(inABL[buffer].mDataByteSize) / (MemoryLayout<Float>.size * channels)
-        return (UnsafePointer(data + source), channels, frames)
-    }
-
     /// Runs the chain and the output trim over the channels the tap was placed
     /// into. The rest of the device's channels are silence and stay that way.
     private func equalize(
         _ outABL: UnsafeMutableAudioBufferListPointer, frames: Int
     ) {
-        for channel in 0..<routedChannels {
-            guard let target = destination(of: destinations[channel], in: outABL)
-            else { continue }
+        for channel in 0..<router.routedChannels {
+            guard let target = router.output(of: channel, in: outABL) else { continue }
             let count = min(frames, target.frames)
-            processChannel(
+            bank.process(
                 target.pointer, stride: target.stride, frames: count, channel: channel)
-            applyPreamp(target.pointer, stride: target.stride, frames: count)
-            measureLevel(target.pointer, stride: target.stride, frames: count)
+            bank.applyPreamp(target.pointer, stride: target.stride, frames: count)
+            observed.observe(output: target.pointer, stride: target.stride, frames: count)
         }
     }
 
@@ -486,49 +365,12 @@ final class EQProcessor: @unchecked Sendable {
     /// nothing worth the pass. The peak is kept for the life of the engine
     /// rather than per block — the question is whether this ever happened, and a
     /// value that decays answers it only for whoever is watching at the time.
-    private func measureLevel(
-        _ samples: UnsafePointer<Float>, stride: Int, frames: Int
-    ) {
-        var peak = peakLevel
-        var clipped = 0
-        var index = 0
-        for _ in 0..<frames {
-            let magnitude = abs(samples[index])
-            if magnitude > peak { peak = magnitude }
-            if magnitude > 1.0 { clipped &+= 1 }
-            index += stride
-        }
-        peakLevel = peak
-        clippedSamples &+= clipped
-    }
-
     /// Locates one global output channel: which buffer holds it, where in that
     /// buffer it starts, and how far apart its samples are.
     ///
     /// Returns nil when the layout names a channel the device does not have,
     /// which is the honest answer — better a silent channel than a write past
     /// the end of a buffer.
-    private func destination(
-        of globalChannel: Int, in outABL: UnsafeMutableAudioBufferListPointer
-    ) -> (pointer: UnsafeMutablePointer<Float>, stride: Int, frames: Int)? {
-        guard globalChannel >= 0 else { return nil }
-        var base = 0
-        for i in 0..<outABL.count {
-            let buffer = outABL[i]
-            let channels = Int(buffer.mNumberChannels)
-            guard channels > 0 else { continue }
-            if globalChannel < base + channels {
-                guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else {
-                    return nil
-                }
-                let frames = Int(buffer.mDataByteSize) / (MemoryLayout<Float>.size * channels)
-                return (data + (globalChannel - base), channels, frames)
-            }
-            base += channels
-        }
-        return nil
-    }
-
     /// The buffer to read instead of the one the layout named, or nil when the
     /// named one is right.
     ///
@@ -546,27 +388,6 @@ final class EQProcessor: @unchecked Sendable {
     ///
     /// The search survives as the fallback. A description that does not fit the
     /// device is a reason to look, not a reason to drop every block.
-    private func substituteTapBuffer(in inABL: UnsafeMutableAudioBufferListPointer) -> Int? {
-        if tapBufferIndex >= 0, tapBufferIndex < inABL.count,
-            inABL[tapBufferIndex].mData != nil,
-            inABL[tapBufferIndex].mNumberChannels == UInt32(tapChannelCount)
-        {
-            return nil
-        }
-        for i in 0..<inABL.count
-        where inABL[i].mNumberChannels == UInt32(tapChannelCount) && inABL[i].mData != nil {
-            return i
-        }
-        for i in 0..<inABL.count
-        where inABL[i].mNumberChannels == UInt32(routedChannels) && inABL[i].mData != nil {
-            return i
-        }
-        for i in 0..<inABL.count where inABL[i].mData != nil {
-            return i
-        }
-        return nil
-    }
-
     /// Hands a mono copy of the final output — equalized when enabled, the
     /// untouched passthrough when bypassed — to the spectrum buffer, so the
     /// analyzer always shows what is actually reaching the speakers.
@@ -574,13 +395,13 @@ final class EQProcessor: @unchecked Sendable {
     /// Reads the channels the audio was placed into rather than the head of the
     /// first buffer, which on a multichannel device is not where the audio is.
     private func feedSpectrum(_ outABL: UnsafeMutableAudioBufferListPointer) {
-        guard routedChannels > 0,
-            let left = destination(of: destinations[0], in: outABL), left.frames > 0
+        guard router.routedChannels > 0,
+            let left = router.output(of: 0, in: outABL), left.frames > 0
         else { return }
         // Average the pair when the map put it side by side in one buffer, which
         // is every interleaved device. Otherwise the first channel alone is an
         // honest enough picture for a backdrop.
-        let right = routedChannels > 1 ? destination(of: destinations[1], in: outABL) : nil
+        let right = router.routedChannels > 1 ? router.output(of: 1, in: outABL) : nil
         let adjacent = right.map { $0.pointer == left.pointer + 1 && $0.stride == left.stride }
         spectrumBuffer.write(
             interleaved: left.pointer,
@@ -593,23 +414,8 @@ final class EQProcessor: @unchecked Sendable {
     // MARK: - Render-thread helpers
 
     /// First of the two delay-line slots for one filter on one channel.
-    private func delayIndex(filter: Int, channel: Int) -> Int {
-        (filter * Self.maxChannels + channel) * 2
-    }
-
     /// Clears one filter's delay lines across every channel. Called when a
     /// filter's shape changes, because the state describes the old response.
-    private func resetDelays(filter: Int) {
-        let base = filter * Self.maxChannels * 2
-        for offset in 0..<(Self.maxChannels * 2) {
-            delays[base + offset] = 0
-        }
-    }
-
-    private func resetAllDelays() {
-        for i in 0..<delays.count { delays[i] = 0 }
-    }
-
     /// Notes this cycle's cadence for `RateWindow` to read later.
     ///
     /// The frame count comes from the output list rather than from anything the
@@ -628,7 +434,7 @@ final class EQProcessor: @unchecked Sendable {
             hostTime: timestamp.mHostTime,
             sampleTime: timestamp.mFlags.contains(.sampleTimeValid) ? timestamp.mSampleTime : 0,
             frames: frames,
-            configuredRate: sampleRate)
+            configuredRate: bank.sampleRate)
     }
 
     private func consumePendingParameters() {
@@ -663,160 +469,48 @@ final class EQProcessor: @unchecked Sendable {
         pendingTapChannelCount = nil
         lock.unlock()
 
-        if let newTapChannels { tapChannelCount = newTapChannels }
+        if let newTapChannels { router.setTapChannelCount(newTapChannels) }
 
-        if let newTapBuffer, newTapBuffer != tapBufferIndex {
-            tapBufferIndex = newTapBuffer
+        if let newTapBuffer, newTapBuffer != router.tapBufferIndex {
+            router.setTapBuffer(newTapBuffer)
             // A different input buffer is different audio, so the delay lines
             // are describing something that is no longer arriving.
-            resetAllDelays()
+            bank.resetAll()
         }
 
         if let newRouted {
-            var changed = newRouted != routedChannels
-            for channel in 0..<newRouted
-            where stagedDestinations[channel] != destinations[channel]
-                || stagedSourceBuffers[channel] != sourceBuffers[channel]
-                || stagedSourceChannels[channel] != sourceChannels[channel]
-            {
-                changed = true
-            }
+            let changed = router.differs(
+                channels: newRouted, destinations: stagedDestinations,
+                sourceBuffers: stagedSourceBuffers, sourceChannels: stagedSourceChannels)
             if changed {
-                routedChannels = newRouted
-                for channel in 0..<newRouted {
-                    destinations[channel] = stagedDestinations[channel]
-                    sourceBuffers[channel] = stagedSourceBuffers[channel]
-                    sourceChannels[channel] = stagedSourceChannels[channel]
-                }
+                router.setRouting(
+                    channels: newRouted, destinations: stagedDestinations,
+                    sourceBuffers: stagedSourceBuffers, sourceChannels: stagedSourceChannels)
                 // Different channels means the delay lines are describing audio
                 // that is no longer there.
-                resetAllDelays()
+                bank.resetAll()
             }
         }
 
-        if let newRate, newRate != sampleRate {
+        if let newRate, bank.setSampleRate(newRate) {
             // The far edge of the stale window, and the only place it can be
             // timed: everything before this point ran on the old coefficients.
             rateTrace.mark(.coefficientsRecomputed, rate: newRate)
-            sampleRate = newRate
-            for i in 0..<filterCount {
-                filters[i].needsCoefficientUpdate = true
-                resetDelays(filter: i)
-            }
         }
 
         if let newFilterCount {
-            filterCount = newFilterCount
-            for i in 0..<filterCount {
-                let staged = stagedFilters[i]
-                if staged.changesShape(from: filters[i].parameters) {
-                    filters[i].needsCoefficientUpdate = true
-                    resetDelays(filter: i)
-                }
-                filters[i].parameters = staged
-                // Switching a gain-bearing filter off ramps it to zero, which is
-                // the same smooth path a slider drag takes and lands on identity.
-                // High and low pass have no gain to ramp, so they switch at once.
-                filters[i].targetGain = staged.isEnabled ? staged.gain : 0
-            }
+            bank.setFilters(stagedFilters, count: newFilterCount)
         }
 
         if let newPreamp {
-            targetPreampLinear = pow(10.0, newPreamp / 20.0)
+            bank.setPreamp(dB: newPreamp)
         }
 
         if let newBypass, newBypass != bypassed {
             bypassed = newBypass
-            if !bypassed {
-                for i in 0..<filterCount { resetDelays(filter: i) }
-            }
-        }
-    }
-
-    /// Output trim, applied after every filter — this is the point of the chain
-    /// where headroom given away by boosting is taken back.
-    private func applyPreamp(
-        _ samples: UnsafeMutablePointer<Float>, stride: Int, frames: Int
-    ) {
-        guard currentPreampLinear != 1.0 else { return }
-        let gain = Float(currentPreampLinear)
-        var index = 0
-        for _ in 0..<frames {
-            samples[index] *= gain
-            index += stride
-        }
-    }
-
-    private func advanceSmoothing(frames: Int) {
-        let step = min(1.0, Double(frames) / (sampleRate * Self.smoothingSeconds))
-
-        if currentPreampLinear != targetPreampLinear {
-            let next = currentPreampLinear + (targetPreampLinear - currentPreampLinear) * step
-            currentPreampLinear =
-                abs(next - targetPreampLinear) < 0.0005 ? targetPreampLinear : next
-        }
-        for i in 0..<filterCount {
-            if filters[i].currentGain != filters[i].targetGain {
-                var gain =
-                    filters[i].currentGain + (filters[i].targetGain - filters[i].currentGain) * step
-                if abs(gain - filters[i].targetGain) < 0.02 {
-                    gain = filters[i].targetGain
-                }
-                filters[i].currentGain = gain
-                filters[i].needsCoefficientUpdate = true
-            }
-            if filters[i].needsCoefficientUpdate {
-                let parameters = filters[i].parameters
-                // Coefficients come from the same `Biquad` the response curve is
-                // drawn from, so the plot always matches the audio.
-                if !parameters.isEnabled, !parameters.kind.usesGain {
-                    filters[i].filter = .identity
-                } else {
-                    filters[i].filter = Biquad(
-                        kind: parameters.kind,
-                        frequency: parameters.frequency,
-                        gain: filters[i].currentGain,
-                        q: parameters.q,
-                        sampleRate: sampleRate
-                    )
-                }
-                filters[i].needsCoefficientUpdate = false
-            }
-        }
-    }
-
-    private func processChannel(
-        _ samples: UnsafeMutablePointer<Float>, stride: Int, frames: Int, channel: Int
-    ) {
-        for i in 0..<filterCount {
-            let filter = filters[i].filter
-            // Identity filters are the common case — every band the user has not
-            // touched — so skipping them keeps an untouched chain nearly free.
-            if filter == .identity { continue }
-            let b0 = filter.b0
-            let b1 = filter.b1
-            let b2 = filter.b2
-            let a1 = filter.a1
-            let a2 = filter.a2
-            let slot = delayIndex(filter: i, channel: channel)
-            var z1 = delays[slot]
-            var z2 = delays[slot + 1]
-
-            var index = 0
-            for _ in 0..<frames {
-                let x = Double(samples[index])
-                let y = b0 * x + z1
-                z1 = b1 * x - a1 * y + z2
-                z2 = b2 * x - a2 * y
-                samples[index] = Float(y)
-                index += stride
-            }
-
-            // Flush denormals so idle audio does not burn CPU.
-            if abs(z1) < 1e-15 { z1 = 0 }
-            if abs(z2) < 1e-15 { z2 = 0 }
-            delays[slot] = z1
-            delays[slot + 1] = z2
+            // Coming back from bypass, the delay lines describe audio from
+            // before it was switched off.
+            if !bypassed { bank.resetAll() }
         }
     }
 }

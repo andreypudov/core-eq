@@ -124,4 +124,15 @@ import Testing
         #expect(reopened.userProfiles.isEmpty)
         #expect(reopened.deviceStates.isEmpty)
     }
+    /// On unless the user says otherwise. The default matters: it decides
+    /// whether a Mac that has played anything once ever sleeps again.
+    @Test func releasingTheDeviceIsOnByDefault() {
+        #expect(settings.pausesWhenSilent)
+    }
+
+    @Test func theIdleSettingSurvivesARelaunch() {
+        settings.pausesWhenSilent = false
+        #expect(SettingsStore(defaults: defaults).pausesWhenSilent == false)
+    }
+
 }

@@ -233,3 +233,125 @@ unsigned turned an event older than the trace into 768614336339369 ms, and
 =os_log= truncated the 500-row table away exactly where the interesting rows
 were. The summary now goes to the log and the table to a file, and only when
 there is a window to explain.
+
+** Preventing the Mac from sleeping
+
+Reported publicly: Activity Monitor shows CoreEQ preventing sleep, with no audio
+playing at all.
+
+*Both explanations this item carried were wrong*, and measuring was the only way
+to find that out. The first said a continuously running IOProc holds the
+machine awake. The second, written after a partial measurement, said the
+assertion is held simply because the aggregate has been started. Neither
+survives the full sequence:
+
+| moment                                   | assertion | IO cycles |
+|------------------------------------------+-----------+-----------|
+| engine running, nothing has ever played   | none      | 0         |
+| audio playing                             | held      | ~87/s     |
+| 30 s after the audio stopped              | held      | ~87/s     |
+| a minute after the audio stopped          | held      | ~87/s     |
+
+Core Audio does not spin the IO context up until something plays — *and then
+never spins it back down*. So the defect is not that CoreEQ holds the device
+from launch. It is that **once anything has played, the device is never let go**,
+which in practice is every session after the first sound.
+
+The assertion itself belongs to =coreaudiod=, raised for CoreEQ's aggregate and
+attributed back to CoreEQ's pid. That is why Activity Monitor blames an app
+whose own source contains no assertion, and why looking for one found nothing.
+
+*Fixed.* CoreEQ now releases the audio device after thirty seconds of digital
+silence and rebuilds it the moment something plays. Two measurements made that
+affordable: =AudioDeviceStop= alone releases the assertion, and a complete cold
+rebuild — tap, aggregate, IO proc — costs 27 ms. Observed resume in the running
+app was 42 ms.
+
+Only the IO proc is stopped. The tap and the aggregate stay alive, so resuming
+touches no topology at all — one =AudioDeviceStart= against a device that was
+never taken apart.
+
+It was built the other way first, tearing the whole path down and rebuilding it
+on resume, on the theory that a live =mutedWhenTapped= tap would silence every
+other process with nothing running to write their audio back. That theory was
+never tested, and it was wrong: measured, audio reaches the device at full level
+with the IO proc stopped and the tap alive. Worse, the rebuild it justified
+*broke playback*. Creating a new aggregate around the output device at the
+moment a player opens that device reconfigures the device — and renegotiates the
+link, on Bluetooth — underneath the client that just grabbed it. Players failed
+to start and only worked after several attempts, each one racing the rebuild.
+Found in manual testing on Bluetooth, where it is worst.
+
+The lesson is not about aggregates. An unexamined assumption about a failure
+mode produced a design that caused a different, real failure, and the check that
+would have settled it took one probe.
+
+*How the engine notices playback was the second thing testing corrected.* The
+first version polled every half second, and that left roughly a second of
+unequalized audio at the start of playback — clearly audible, and the whole
+point of an equalizer is that the first second is not wrong. The fix was not a
+faster poll: sweeping every audio process costs about 6 ms a pass, and
+=kAudioProcessPropertyIsRunningOutput= turns out to send no notifications at
+all, which is why an earlier listener-based attempt did nothing.
+
+=kAudioDevicePropertyDeviceIsRunningSomewhere= on the output device does notify,
+costs 0.05 ms to read, and is false while CoreEQ is idle. Beside it, a listener
+on the audio process list catches a player about 80 ms before it plays — useful,
+because the device needs about 90 ms to deliver its first buffer after being
+started, so reacting to *audible* audio is already too late.
+
+On a Bluetooth headset that took resume from 1.97 / 1.10 / 0.29 seconds down to
+a consistent 40-48 ms, measured from the player launching rather than from the
+first sample — which means the engine is running before there is anything to
+equalize.
+
+Two rules keep it from misbehaving, and both came out of testing rather than
+design. Silence and playback must *both* agree before the device is released:
+they are measured differently — one by the render path, one by the system — and
+a process is free to hold the device open while sending zeros, which would
+otherwise idle and resume in turn, rebuilding the audio path every thirty
+seconds for as long as that process ran. And a path that failed to build is left
+to the retry that already owns recovery: without that, an output device the
+engine refuses would be retried twice a second forever. The second was found on
+hardware, after the code looked right.
+
+A third came out of manual testing and is the one worth remembering, because it
+would have shipped the whole feature dead. The guard against acting mid-rebuild
+read =pendingRestart == nil=, and =pendingRestart= was cancelled everywhere but
+never *cleared* — so after the first restart the engine believed one was
+permanently in flight and never idled again. The default output device listener
+fires once at launch, so that first restart happens in every session: the
+feature would have worked in testing on a quiet machine and for nobody in the
+field. A work item used as a flag has to be nil'd wherever it can end, which is
+three places, not one.
+
+It was diagnosed from a pasted diagnostics report in a single step — =idling:
+no, 0 release(s) this session= beside a minute of uptime — which is the whole
+argument for the report carrying this in the first place.
+
+Idling is invisible from the outside — the EQ is on, and the next sound is
+equalized — so =Status= is deliberately untouched and the menu bar icon does not
+blink off every time a room goes quiet. What is visible is the diagnostics
+report, which now says whether the device is currently released, how many times
+it has been, and how long that has totalled. It has to: a released device and a
+broken engine look identical until someone plays something.
+
+There is also a switch, in Settings, to turn the whole behaviour off. Every
+silent-Mac defect in this app's history had no workaround from inside the app —
+quitting was the only fix, which is not discoverable for something that launches
+at login. One line of settings turns the next one into an inconvenience.
+
+** Tab skipped newly added parametric bands
+
+Reported while testing something else: adding a band, clicking into its first
+field and pressing Tab jumped to the top of the table instead of moving along
+the row.
+
+=NSWindow.autorecalculatesKeyViewLoop= defaults to false for a window built in
+code rather than loaded from a nib, so AppKit computed the Tab order once, when
+the window was made, and never again. Every band added afterwards had fields
+that were not in it.
+
+*Fixed*, in one line where the window is built. The details are in
+[[file:DEVELOPMENT.org][DEVELOPMENT.org]] under the traps, because the symptom — Tab skips the last row —
+points at the list, and the list is not where the fault is.
