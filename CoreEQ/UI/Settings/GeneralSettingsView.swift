@@ -60,6 +60,19 @@ struct GeneralSettingsView: View {
             }
 
             Section {
+                Toggle("Release the audio device when nothing is playing", isOn: idleBinding)
+                    .help("Lets the Mac sleep on schedule while CoreEQ is running")
+            } footer: {
+                Text(
+                    "Holding the audio device keeps a Mac awake. CoreEQ lets go after half a "
+                        + "minute of silence and takes it back the moment something plays. Turn "
+                        + "this off if your audio misbehaves."
+                )
+                .font(Theme.Font.label)
+                .foregroundStyle(.secondary)
+            }
+
+            Section {
                 // Laid out here rather than with `LabeledContent`, which places
                 // its value column on its own alignment and insets — that is
                 // what left the button at a different margin from every other
@@ -182,6 +195,17 @@ struct GeneralSettingsView: View {
     }
 
     // MARK: - Login item
+
+    /// Written straight to `SettingsStore`, and read by the engine on its next
+    /// idle check rather than pushed. Half a second late is invisible for a
+    /// setting, and it keeps the settings scene from needing the engine — which
+    /// it cannot be handed, being a separate scene.
+    private var idleBinding: Binding<Bool> {
+        Binding(
+            get: { SettingsStore().pausesWhenSilent },
+            set: { SettingsStore().pausesWhenSilent = $0 }
+        )
+    }
 
     private var loginItemBinding: Binding<Bool> {
         Binding(

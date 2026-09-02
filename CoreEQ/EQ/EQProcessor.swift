@@ -87,6 +87,15 @@ final class EQProcessor: @unchecked Sendable {
     nonisolated(unsafe) private(set) var peakLevel: Float = 0
     nonisolated(unsafe) private(set) var clippedSamples = 0
 
+    /// How long the tap has delivered nothing but digital zero.
+    ///
+    /// Reset by the first non-zero sample, so it measures the *current* run of
+    /// silence rather than a total. `IdlePolicy` uses it to decide when the
+    /// audio path can be released — which is why it counts exact zeros and not
+    /// "quiet": a passage at -60 dB is still someone listening, and tearing the
+    /// path down under them is the failure that matters here.
+    nonisolated(unsafe) private(set) var silentSeconds: Double = 0
+
     /// Mono copy of the played-back output, tapped for the spectrum analyzer.
     /// 8192 samples is well beyond the analyzer's 4096-sample window, so the
     /// consumer can snapshot without the producer overtaking the read region.
@@ -309,10 +318,22 @@ final class EQProcessor: @unchecked Sendable {
     }
 
     /// Forgets what the tap has delivered, for a fresh engine.
+    /// Clears filter state across a pause in the audio.
+    ///
+    /// The delay lines hold the last samples processed. Resuming after a gap
+    /// runs new audio against state that describes sound from minutes ago, which
+    /// is the same discontinuity a channel or rate change causes — and those
+    /// already reset. A few samples of transient is a click.
+    func prepareForResume() {
+        resetAllDelays()
+        silentSeconds = 0
+    }
+
     func resetAudioObservation() {
         hasReceivedAudio = false
         peakLevel = 0
         clippedSamples = 0
+        silentSeconds = 0
     }
 
     /// Stages the output layout. Set by `AudioEngine` once per engine start,
@@ -371,8 +392,19 @@ final class EQProcessor: @unchecked Sendable {
 
         // Watched whether or not anything is written: while the tap is being
         // proved this is the only thing the render path is here to do.
-        if !hasReceivedAudio, carriesSignal(inABL) {
+        let signal = carriesSignal(inABL)
+        if !hasReceivedAudio, signal {
             hasReceivedAudio = true
+        }
+        // Counted from the frames delivered rather than from a clock, so it
+        // stays true when the IO thread is late and stops advancing the moment
+        // the device stops calling us — which is what it means for there to be
+        // no audio at all.
+        if signal {
+            silentSeconds = 0
+        } else if sampleRate > 0, outABL.count > 0, outABL[0].mNumberChannels > 0 {
+            let bytesPerFrame = MemoryLayout<Float>.size * Int(outABL[0].mNumberChannels)
+            silentSeconds += Double(Int(outABL[0].mDataByteSize) / bytesPerFrame) / sampleRate
         }
 
         // Nothing is written while proving. The tap is unmuted then, so every

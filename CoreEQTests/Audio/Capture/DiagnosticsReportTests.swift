@@ -334,4 +334,35 @@ struct DiagnosticsReportTests {
         }
     }
 
+    // MARK: - Idling
+
+    /// An idle engine and a broken one look identical from outside: the EQ is
+    /// on, nothing is playing, and no sound is being processed. The report is
+    /// the only thing that can tell them apart, so it has to say which.
+    @Test func anIdleEngineIsNamedAsSuch() {
+        var idle = engine()
+        idle.idling = DiagnosticsReport.Idling(isIdle: true, releases: 4, totalSeconds: 900)
+
+        #expect(text(engine: idle).contains("idling:          YES"))
+    }
+
+    @Test func aRunningEngineReportsItsIdleHistory() {
+        var running = engine()
+        running.idling = DiagnosticsReport.Idling(isIdle: false, releases: 4, totalSeconds: 900)
+
+        let report = text(engine: running)
+
+        #expect(report.contains("idling:          no, 4 release(s)"))
+        #expect(report.contains("15 min total"))
+    }
+
+    /// The escape hatch has to be visible in the report. Someone who turned it
+    /// off and forgot would otherwise file a sleep bug that cannot be explained.
+    @Test func theDisabledSettingIsReported() {
+        var pinned = engine()
+        pinned.idling = DiagnosticsReport.Idling(isIdle: false, isEnabled: false)
+
+        #expect(text(engine: pinned).contains("idling:          off"))
+    }
+
 }

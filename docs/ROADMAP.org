@@ -31,8 +31,8 @@ fourth suspicion — that a Bluetooth route change left a window of audio filter
 at the wrong sample rate — was measured and turned out not to happen; it is in
 the release notes with the numbers.
 
-What is left here: audio arriving twice and every screen capture tool failing, a
-Mac kept awake indefinitely, and two smaller reports. They affect people doing
+What is left here: audio arriving twice and every screen capture tool failing,
+and two smaller reports. They affect people doing
 nothing unusual, none can be worked around from inside the app, and nothing else
 ships until they are fixed.
 
@@ -100,52 +100,6 @@ Three things to do:
 - When a second system-audio tool genuinely is present, detect it and say so
   plainly in the UI rather than leaving the user to work out why their audio
   sounds doubled.
-
-** Preventing the Mac from sleeping
-
-Activity Monitor shows CoreEQ preventing sleep, and it does so with no audio
-playing at all.
-
-The cause is not an assertion in CoreEQ's own code — there isn't one. It is the
-IO proc: =AudioDeviceStart= runs the aggregate continuously from launch, by
-design, since global bypass “keeps the engine running but passes audio through”
-(=AudioEngine.swift:49=). A continuously running IOProc is active audio IO as
-far as the system is concerned, so the assertion follows automatically.
-
-*That explanation is wrong, and the real one is narrower.* Measured while
-investigating the route-change window: with the engine running and nothing
-playing, =RateTrace= recorded *no IO cycles at all* over twenty-two seconds, on
-the Jabra and again on the built-in speakers. The render callback is not being
-called. So it is not a continuously running IOProc.
-
-=pmset -g assertions=, taken at the same moment, names what it actually is:
-
-#+begin_example
-pid 401(coreaudiod): PreventUserIdleSystemSleep named:
-  "com.apple.audio.com.andreypudov.coreeq.aggregate.<uid>.context.preventuseridlesleep"
-  Created for PID: 36385.
-  Resources: audio-in audio-out BuiltInSpeakerDevice
-#+end_example
-
-The assertion belongs to *coreaudiod*, raised for CoreEQ's aggregate device and
-attributed back to CoreEQ's pid — which is why Activity Monitor blames an app
-whose own source contains no assertion, and why searching that source for one
-found nothing. It is held because the aggregate has been *started*, not because
-audio is flowing: it was there with zero callbacks in twenty-two seconds.
-
-That changes the fix. Making the IO path idle-aware achieves nothing, because it
-is already idle. The assertion goes away only by stopping the aggregate
-(=AudioDeviceStop=) when nothing is playing and starting it again on demand,
-which is a real design change: something has to notice playback beginning, the
-restart has to be fast enough not to clip the first moment of it, and the tap's
-mute behaviour has to survive the cycle. Worth doing, and worth its own design
-rather than an afternoon.
-
-The fix is to stop running when there is nothing to do: tear the IO proc down
-when the app is bypassed, and when the mix has been silent for long enough that
-restarting on the next sample is cheaper than holding the machine awake. The
-constraint is that starting back up has to be fast and seamless enough that the
-first second of playback is not lost.
 
 ** Documentation that answers the repeated questions
 
