@@ -340,3 +340,18 @@ There is also a switch, in Settings, to turn the whole behaviour off. Every
 silent-Mac defect in this app's history had no workaround from inside the app —
 quitting was the only fix, which is not discoverable for something that launches
 at login. One line of settings turns the next one into an inconvenience.
+
+** Tab skipped newly added parametric bands
+
+Reported while testing something else: adding a band, clicking into its first
+field and pressing Tab jumped to the top of the table instead of moving along
+the row.
+
+=NSWindow.autorecalculatesKeyViewLoop= defaults to false for a window built in
+code rather than loaded from a nib, so AppKit computed the Tab order once, when
+the window was made, and never again. Every band added afterwards had fields
+that were not in it.
+
+*Fixed*, in one line where the window is built. The details are in
+[[file:DEVELOPMENT.org][DEVELOPMENT.org]] under the traps, because the symptom — Tab skips the last row —
+points at the list, and the list is not where the fault is.

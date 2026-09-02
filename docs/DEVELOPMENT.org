@@ -691,6 +691,25 @@ while the window is still being assembled, so =AppDelegate= holds the
 =NSSplitViewController= rather than reaching for it through =mainWindow=, which is
 not assigned yet at that point.
 
+** A trap: a hand-made window does not update its Tab order
+
+=NSWindow.autorecalculatesKeyViewLoop= defaults to *false* for a window created
+in code, and to true only for one loaded from a nib. The main window is built by
+hand in =AppDelegate=, so with the default AppKit worked out the key-view loop
+once, at build time, and never revisited it. Any control added later — a
+parametric band, which is the whole point of that editor — had fields Tab had
+never heard of, so tabbing off the last row it knew about wrapped to the top.
+
+It presents as a bug about the *last* row, which sends you looking at the list
+and its separators. The give-away is that the same number of bands behaves
+differently depending on how you got there: adding a fourth leaves it broken,
+while adding a fifth and removing it again fixes it, because removing a view
+invalidates the loop and forces the rebuild that adding one does not. A symptom
+that depends on history rather than on state is a stale cache, not a layout
+mistake.
+
+Set it once, where the window is built.
+
 ** A trap: publishing from inside a view update
 
 A segmented =Picker= synchronises its selection while SwiftUI is updating the
