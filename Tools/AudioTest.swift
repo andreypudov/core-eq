@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreAudio
 import Darwin
 import Foundation
@@ -44,6 +45,10 @@ enum AudioTest {
         }
     }
 
+    /// Returned when the machine could not be put in a state where the checks
+    /// mean anything — no BlackHole, no permission, nothing captured.
+    static let couldNotRun: Int32 = 2
+
     nonisolated(unsafe) static var failures = 0
     nonisolated(unsafe) static var checks = 0
 
@@ -65,6 +70,33 @@ enum AudioTest {
     }
 
     static func note(_ text: String) { print("        \(text)") }
+
+    /// Reading a device's input is gated by the microphone permission, and the
+    /// gate is silent: a denied process gets an input stream that delivers
+    /// zeros rather than an error. Every measurement below would then read
+    /// -200 dB, and the comparisons between them would happily agree with each
+    /// other — a page of passes that mean nothing.
+    ///
+    /// The permission belongs to whatever is running this, so it is granted per
+    /// terminal. Running the same command from a different one is enough to
+    /// change the answer, which is exactly how this was found.
+    static func microphoneIsAllowed() -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            return true
+        case .notDetermined:
+            let semaphore = DispatchSemaphore(value: 0)
+            nonisolated(unsafe) var granted = false
+            AVCaptureDevice.requestAccess(for: .audio) {
+                granted = $0
+                semaphore.signal()
+            }
+            _ = semaphore.wait(timeout: .now() + 30)
+            return granted
+        default:
+            return false
+        }
+    }
 }
 
 // MARK: - Core Audio helpers
@@ -338,6 +370,25 @@ extension AudioTest {
             .isEmpty
     }
 
+    /// The bundle a running CoreEQ was launched from, so the one the user had
+    /// can be put back afterwards — which may be the installed copy in
+    /// /Applications rather than the build this test uses.
+    static func runningBundle() -> String? {
+        let pid = shell("/usr/bin/pgrep", ["-x", "CoreEQ"])
+            .split(separator: "\n").first.map(String.init)
+        guard let pid else { return nil }
+        let executable = shell("/bin/ps", ["-p", pid, "-o", "comm="])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let range = executable.range(of: "/Contents/MacOS/") else { return nil }
+        return String(executable[executable.startIndex..<range.lowerBound])
+    }
+
+    /// Ends every copy of CoreEQ, not just one.
+    ///
+    /// More than one can be running — an installed copy and a build, or one
+    /// left behind by an earlier run — and each has its own tap and aggregate
+    /// muting the same device. Measuring through that would report whatever the
+    /// two of them happened to do to each other.
     static func quitApp() {
         shell("/usr/bin/pkill", ["-x", "CoreEQ"])
         for _ in 0..<40 where isRunning() { Thread.sleep(forTimeInterval: 0.25) }
@@ -354,6 +405,25 @@ extension AudioTest {
         // run it also has to prove the tap before it starts processing.
         Thread.sleep(forTimeInterval: 6)
         return isRunning()
+    }
+
+    /// Whether the engine takes the device back when something plays.
+    ///
+    /// Sampled *during* playback, because that is the only moment the answer is
+    /// meaningful — the device is released again once the audio stops.
+    static func tookDeviceBack(_ device: AudioDeviceID, tone: URL) -> Bool {
+        let player = Process()
+        player.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
+        player.arguments = [tone.path]
+        try? player.run()
+        defer { player.waitUntilExit() }
+
+        let deadline = Date().addingTimeInterval(toneSeconds - 0.3)
+        while Date() < deadline {
+            if isRunningSomewhere(device) { return true }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return false
     }
 
     /// Waits for the engine to let go of the device, which it does after
@@ -376,13 +446,25 @@ extension AudioTest {
 
         guard FileManager.default.fileExists(atPath: appPath) else {
             print("  build/Release/CoreEQ.app not found — run `make build` first.")
-            return 2
+            return couldNotRun
         }
+        guard microphoneIsAllowed() else {
+            print("  This needs permission to record audio, because it measures the sound by")
+            print("  reading it back from BlackHole's input. macOS does not report a refusal")
+            print("  here — it hands over an input stream that delivers silence — so without")
+            print("  it every measurement below would read -200 dB and agree with itself.")
+            print("")
+            print("  The permission belongs to the program running this, not to CoreEQ. Allow")
+            print("  your terminal under System Settings > Privacy & Security > Microphone,")
+            print("  or run `make audio-test` from a terminal that already has it.")
+            return couldNotRun
+        }
+
         guard let blackHole = devices().first(where: { name(of: $0).hasPrefix("BlackHole") }) else {
             print("  BlackHole is not installed. It is what makes this silent and exact:")
             print("  the tone is played into it and read straight back out.")
             print("  brew install blackhole-16ch")
-            return 2
+            return couldNotRun
         }
 
         let deviceName = name(of: blackHole)
@@ -393,13 +475,30 @@ extension AudioTest {
         // happens, they go back.
         let originalOutput = defaultOutput()
         let originalRate = nominalRate(of: blackHole)
-        let wasRunning = isRunning()
+        // Noted before anything is killed, so whatever the user had running can
+        // be started again — and started from the same bundle, which may be the
+        // installed copy rather than this build.
+        let previousBundle = runningBundle()
+
+        // The copy this test launches is this test's to clean up. Leaving it
+        // behind would mean the next run measures through an app nobody chose
+        // to start, on a device the user has since changed.
         defer {
+            quitApp()
             setNominalRate(originalRate, on: blackHole)
             setDefaultOutput(originalOutput)
-            if wasRunning && !isRunning() { shell("/usr/bin/open", [appPath]) }
-            print("\n  restored: output \(name(of: originalOutput)), \(Int(originalRate)) Hz")
+            if let previousBundle {
+                shell("/usr/bin/open", [previousBundle])
+                print("\n  restored: output \(name(of: originalOutput)), "
+                    + "\(Int(originalRate)) Hz, and CoreEQ as it was")
+            } else {
+                print("\n  restored: output \(name(of: originalOutput)), "
+                    + "\(Int(originalRate)) Hz; CoreEQ left stopped, as it was found")
+            }
         }
+
+        // Start from nothing, whatever was running before.
+        quitApp()
 
         setNominalRate(rate, on: blackHole)
         setDefaultOutput(blackHole)
@@ -407,30 +506,50 @@ extension AudioTest {
         let tone = writeToneFile()
 
         // --- Ground truth, with CoreEQ out of the way ---------------------
-        quitApp()
         guard let baseline = measure(on: blackHole, tone: tone) else {
             print("  could not capture from \(deviceName)")
-            return 2
+            return couldNotRun
         }
         print("Baseline, CoreEQ not running")
         note(
             String(
                 format: "left tone %.1f dB on ch0, right tone %.1f dB on ch1",
                 baseline.decibels(baseline.atLeft[0]), baseline.decibels(baseline.atRight[1])))
+        let baselineHeard =
+            baseline.decibels(baseline.atLeft[0]) > -40
+            && baseline.decibels(baseline.atRight[1]) > -40
         check(
-            "the harness itself hears the test signal",
-            baseline.decibels(baseline.atLeft[0]) > -40 && baseline.decibels(baseline.atRight[1]) > -40,
-            "if this fails, nothing below means anything")
+            "the harness itself hears the test signal", baselineHeard,
+            "everything below is measured against this")
+        // Stopping here rather than carrying on, because the checks below
+        // compare measurements against one another: with nothing captured they
+        // agree perfectly and report a page of passes. A test that cannot
+        // measure has to say so, not produce a green result that means the
+        // silence was consistent.
+        guard baselineHeard else {
+            print("")
+            print("  Nothing was captured, so no check below could mean anything and none")
+            print("  were run. Something else may be using the audio device, or the tone")
+            print("  did not play — try again with nothing else playing.")
+            return couldNotRun
+        }
         print("")
 
         // --- With CoreEQ in the path --------------------------------------
         guard launchApp() else {
             print("  CoreEQ did not launch")
-            return 2
+            return couldNotRun
         }
+        // A throwaway pass first. On a fresh launch the engine has to prove the
+        // tap can capture before it starts muting, and proving it ends in a
+        // restart — so the first tone after launch is partly passthrough and
+        // partly processed, and measuring it reports a curve that is really a
+        // seam. One discarded run puts the engine in the state it spends the
+        // rest of its life in.
+        _ = measure(on: blackHole, tone: tone)
         guard let processed = measure(on: blackHole, tone: tone) else {
             print("  could not capture with CoreEQ running")
-            return 2
+            return couldNotRun
         }
 
         print("With CoreEQ running")
@@ -543,10 +662,10 @@ extension AudioTest {
             abs(leftDrift) < 0.5 && abs(rightDrift) < 0.5,
             String(format: "%+.2f dB / %+.2f dB", leftDrift, rightDrift))
 
-        check(
-            "playing again takes the device back",
-            isRunningSomewhere(blackHole),
-            "")
+        // Asked while the tone is still playing rather than after it: the engine
+        // holds the device for as long as audio is arriving, and by the time a
+        // measurement has returned the player has already exited.
+        check("playing again takes the device back", tookDeviceBack(blackHole, tone: tone))
 
 
         print("")
@@ -558,6 +677,13 @@ extension AudioTest {
 struct AudioTestCommand {
     static func main() {
         let code = AudioTest.run()
+        // Three outcomes, not two. A run that could not start has nothing to
+        // report either way, and saying "passed" because nothing failed is how
+        // a broken setup gets mistaken for a working one.
+        guard code != AudioTest.couldNotRun else {
+            print("\nAUDIO TEST DID NOT RUN")
+            exit(code)
+        }
         print("\n\(AudioTest.checks - AudioTest.failures)/\(AudioTest.checks) checks passed")
         print(AudioTest.failures > 0 ? "\nAUDIO TEST FAILED" : "\nAUDIO TEST PASSED")
         exit(code)

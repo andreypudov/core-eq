@@ -144,13 +144,40 @@ through BlackHole — silent, exact, and independent of speakers. What it assert
   anything about the user's preset
 
 Requires BlackHole (=brew install blackhole-16ch=) and about a minute, most of
-it waiting for the idle timer. It changes the default output device and the
+it waiting for the idle timer.
+
+*It also needs permission to record audio*, because it measures the sound by
+reading it back from BlackHole's input. That permission belongs to whatever is
+running the command, not to CoreEQ, so it is granted per terminal — the same
+=make audio-test= passes in one terminal and fails in another until each is
+allowed under Privacy & Security. macOS does not report the refusal: a denied
+process is handed an input stream that delivers silence. The test checks the
+permission up front and says so, rather than measuring -200 dB and drawing
+conclusions from it. It changes the default output device and the
 sample rate, and restores both on the way out including after a failure.
+
+*The first check is a gate, not a check.* If the harness cannot hear its own
+tone with CoreEQ out of the way, the run stops there. Everything after it
+compares one measurement against another, and two silences agree perfectly — so
+carrying on produced a page of passes that only meant the nothing was
+consistent. That was found by running it where the microphone permission was
+missing, and it was the more useful half of the bug.
 
 Checks whose precondition does not hold are reported as =SKIP= rather than
 passed. A virtual capture device does not always make coreaudiod raise a sleep
 assertion, so that one check is verified where it can be and named where it
 cannot — a check that quietly did not run is worse than one that failed.
+
+*It owns CoreEQ's lifetime while it runs.* Every copy of the app is stopped
+first — more than one can be running, an installed copy and a build, and each
+has its own tap muting the same device — and the copy the test launches is
+stopped again at the end. Whatever was running beforehand is started again from
+the same bundle it came from, so an installed copy is not quietly replaced by a
+development build.
+
+*A run that could not start says so.* Missing BlackHole, missing permission or a
+silent baseline exit as =AUDIO TEST DID NOT RUN=, never as passed: nothing
+failed only because nothing ran, and that is not the same as working.
 
 *It is not CI.* It needs real hardware and real Core Audio; that is the point.
 Run it before a release, alongside the manual checks that only ears can make —
