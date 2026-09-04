@@ -319,10 +319,11 @@ final class EQProcessor: @unchecked Sendable {
         // was described. Resolved once per block rather than per channel.
         let substitute = router.substituteTapBuffer(in: inABL)
         let placed = router.place(inABL, into: outABL, substitute: substitute)
+        observed.note(sourcePeak: placed.sourcePeak)
 
-        if !bypassed, placed > 0 {
-            bank.advance(frames: placed)
-            equalize(outABL, frames: placed)
+        if !bypassed, placed.frames > 0 {
+            bank.advance(frames: placed.frames)
+            equalize(outABL, frames: placed.frames)
         }
 
         feedSpectrum(outABL)

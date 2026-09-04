@@ -47,7 +47,34 @@ without guaranteeing clipping away. The mix level arriving at a tap is
 unknowable from inside it. If the noise is also present at Flat, it is not
 clipping and needs a real investigation.
 
-*The report now answers this without a round trip.* The render path keeps the
+*Measured, and attributed — but not shown on screen.* An on-screen warning was
+built and then taken out again. Two things decided it.
+
+The first was accuracy. It counted any output sample above full scale, and so it
+fired at Flat with Auto, which is the default state. At Flat every band is 0 dB,
+which =Biquad.isActive= maps to identity, so the chain is skipped and CoreEQ
+passes audio through bit for bit; the system mix is Float32 and is not clamped
+before a tap sees it, so material arrives over full scale on its own — lossy
+codecs overshoot, resampling reconstructs peaks above the samples that made
+them, and modern masters sit at the ceiling to begin with. The warning was
+blaming the app for the recording, and pointing at a preamp that Auto had
+disabled.
+
+That part is fixed and kept: a sample only counts when the chain lifted it past
+both full scale *and* the level it arrived at, measured where =BufferRouter=
+copies the source, so it costs nothing and reads exactly the samples that become
+the output. The report carries both peaks, and says so when the material itself
+arrived hot.
+
+The second was whether to show it at all. Preventing this is the convention for
+consumer equalizers — AutoEQ ships a preamp with every profile for exactly this
+reason — and CoreEQ already prevents it with =AutoGain=, on by default. A clip
+light is the *professional* convention, and it belongs on an output meter, which
+this app does not have. It would be seen rarely, by users who had never seen it
+before, in an app whose case for existing is that it is simple. So the
+measurement stays and the badge does not.
+
+*The report also answers this without a round trip.* The render path keeps the
 largest magnitude it has produced since the engine started and counts the
 samples that did not fit, and the diagnostics report carries both — =peak
 output: 0.71, no clipping=, or the peak with a count and what to do about it.
