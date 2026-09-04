@@ -48,6 +48,17 @@ struct RenderObservations {
     var peakLevel: Float = 0
     var clippedSamples = 0
 
+    /// Loudest sample the chain was *handed*, this block and this session.
+    ///
+    /// Without it the output peak cannot be attributed. The system mix is
+    /// Float32 and is not clamped before a tap sees it, so audio can arrive
+    /// above full scale on its own — and at Flat, where every band is identity
+    /// and the trim is unity, CoreEQ passes it through bit for bit. Counting
+    /// that as clipping blamed the app for the material, and told the user to
+    /// lower a preamp that Auto had disabled.
+    var blockSourcePeak: Float = 0
+    var sourcePeakLevel: Float = 0
+
     /// Forgets everything. Called when the engine starts, because every one of
     /// these is a claim about the audio path that is now being rebuilt.
     mutating func reset() {
@@ -55,6 +66,14 @@ struct RenderObservations {
         silentSeconds = 0
         peakLevel = 0
         clippedSamples = 0
+        blockSourcePeak = 0
+        sourcePeakLevel = 0
+    }
+
+    /// The level this block was handed, from `BufferRouter.place`.
+    mutating func note(sourcePeak: Float) {
+        blockSourcePeak = sourcePeak
+        if sourcePeak > sourcePeakLevel { sourcePeakLevel = sourcePeak }
     }
 
     /// Notes a block of input: whether it carried anything, and how much time
@@ -75,13 +94,18 @@ struct RenderObservations {
     /// question is whether this ever happened, and a value that decays answers
     /// it only for whoever is watching at the time.
     mutating func observe(output samples: UnsafePointer<Float>, stride: Int, frames: Int) {
+        // What counts as ours. Above full scale, and above what arrived: a
+        // sample the chain did not lift past the ceiling is the material's to
+        // answer for, not the app's, and saying otherwise sends the user after
+        // a control that will not help.
+        let ceiling = max(1.0, blockSourcePeak)
         var peak = peakLevel
         var clipped = 0
         var index = 0
         for _ in 0..<frames {
             let magnitude = abs(samples[index])
             if magnitude > peak { peak = magnitude }
-            if magnitude > 1.0 { clipped &+= 1 }
+            if magnitude > ceiling { clipped &+= 1 }
             index += stride
         }
         peakLevel = peak

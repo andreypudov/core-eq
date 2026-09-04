@@ -56,6 +56,10 @@ enum DiagnosticsReport {
         /// signal did not fit.
         var peak: Float = 0
         var clippedSamples: Int = 0
+        /// Loudest sample the chain was handed. Above 1.0 means the material
+        /// itself arrived over full scale, which is not CoreEQ's doing — and
+        /// telling those two apart is the whole reason both are here.
+        var sourcePeak: Float = 0
 
         var isClipping: Bool { clippedSamples > 0 }
     }
@@ -230,6 +234,12 @@ enum DiagnosticsReport {
                     format: "  peak output:     %.2f%@", engine.level.peak,
                     engine.level.isClipping
                         ? " — \(engine.level.clippedSamples) sample(s) clipped" : ", no clipping"))
+            lines.append(String(format: "  peak in:         %.2f", engine.level.sourcePeak))
+            if engine.level.sourcePeak > 1.0 {
+                lines.append(
+                    "                   NOTE: the audio arrived above full scale. Anything at "
+                        + "or below that level is the material's, not CoreEQ's.")
+            }
             if engine.level.isClipping {
                 lines.append(
                     "                   NOTE: the chain produces more than fits, which is heard")

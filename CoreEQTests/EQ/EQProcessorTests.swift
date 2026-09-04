@@ -1452,4 +1452,51 @@ struct EQProcessorTests {
         #expect(processor.observed.clippedSamples == 0)
     }
 
+    // MARK: - Whose clipping is it
+
+    /// The case that exposed this: Flat, Auto, and the warning appeared.
+    ///
+    /// At Flat every band is 0 dB, `Biquad.isActive` maps those to identity and
+    /// the chain skips them, so CoreEQ passes the audio through bit for bit. The
+    /// system mix is Float32 and is not clamped before a tap sees it, so audio
+    /// can arrive above full scale on its own — and counting that blamed the app
+    /// for the material, while advising a preamp that Auto had disabled.
+    @Test func materialThatArrivesTooLoudIsNotTheEqualizersFault() {
+        let processor = makeProcessor()
+        var over = sine(1_000, frames: 2_048, amplitude: 1.0)
+        over = over.map { $0 * 1.4 }
+
+        for _ in 0..<10 { _ = render(processor, over) }
+
+        #expect(processor.observed.sourcePeakLevel > 1.0, "the test signal is not over full scale")
+        #expect(processor.observed.peakLevel > 1.0, "a transparent chain passes it through")
+        #expect(
+            processor.observed.clippedSamples == 0,
+            "the chain added nothing, so it has nothing to answer for")
+    }
+
+    /// And the chain is still held to account for what it does add, even when
+    /// the material was already hot.
+    @Test func aBoostOnTopOfLoudMaterialIsTheEqualizersFault() {
+        let processor = makeProcessor(
+            filters: [EQFilter(kind: .bell, frequency: 1_000, gain: 6, q: 1)])
+        let over = sine(1_000, frames: 2_048, amplitude: 1.0).map { $0 * 1.1 }
+
+        for _ in 0..<10 { _ = render(processor, over) }
+
+        #expect(processor.observed.clippedSamples > 0)
+    }
+
+    /// The report still shows the true output peak, whoever caused it: the
+    /// number a reader needs is what actually left, not what was blamed on the
+    /// app.
+    @Test func thePeakIsTheOutputRegardlessOfBlame() {
+        let processor = makeProcessor()
+        let over = sine(1_000, frames: 2_048, amplitude: 1.0).map { $0 * 1.4 }
+        _ = render(processor, over)
+
+        #expect(abs(processor.observed.peakLevel - 1.4) < 0.05)
+        #expect(abs(processor.observed.sourcePeakLevel - 1.4) < 0.05)
+    }
+
 }

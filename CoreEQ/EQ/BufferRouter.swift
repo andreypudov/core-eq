@@ -89,12 +89,24 @@ struct BufferRouter {
     /// the same buffer and the channels are read in order; with one tap per
     /// output stream they are not, and nothing here needs to know which case it
     /// is in.
+    /// What one pass of `place` moved.
+    struct Placement {
+        var frames = 0
+        /// Loudest source sample copied, which is what the chain was handed.
+        ///
+        /// Taken here because this is the only place that touches exactly the
+        /// samples which become CoreEQ's output — not the whole input list,
+        /// which on a duplex device also carries the device's own input, and a
+        /// live microphone in it would read as a loud source.
+        var sourcePeak: Float = 0
+    }
+
     func place(
         _ inABL: UnsafeMutableAudioBufferListPointer,
         into outABL: UnsafeMutableAudioBufferListPointer,
         substitute: Int?
-    ) -> Int {
-        var written = 0
+    ) -> Placement {
+        var placement = Placement()
         for channel in 0..<routedChannels {
             guard let source = origin(of: channel, in: inABL, substitute: substitute),
                 let target = destination(of: destinations[channel], in: outABL)
@@ -103,13 +115,16 @@ struct BufferRouter {
             var read = source.pointer
             var sink = target.pointer
             for _ in 0..<count {
-                sink.pointee = read.pointee
+                let sample = read.pointee
+                sink.pointee = sample
+                let magnitude = abs(sample)
+                if magnitude > placement.sourcePeak { placement.sourcePeak = magnitude }
                 read += source.stride
                 sink += target.stride
             }
-            written = max(written, count)
+            placement.frames = max(placement.frames, count)
         }
-        return written
+        return placement
     }
 
     /// Where routed channel `index` ended up in the output list, or nil when the

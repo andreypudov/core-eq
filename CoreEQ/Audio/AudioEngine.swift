@@ -125,7 +125,9 @@ final class AudioEngine: ObservableObject {
     /// fit.
     var level: DiagnosticsReport.Level {
         DiagnosticsReport.Level(
-            peak: processor.observed.peakLevel, clippedSamples: processor.observed.clippedSamples)
+            peak: processor.observed.peakLevel,
+            clippedSamples: processor.observed.clippedSamples,
+            sourcePeak: processor.observed.sourcePeakLevel)
     }
 
     /// Whether the audio device has been let go, and the history of that.
