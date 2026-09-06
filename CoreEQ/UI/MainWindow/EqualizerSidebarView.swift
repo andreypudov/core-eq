@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Sidebar column of the main window: the app mark, the preset list, and the
 /// add / remove / more actions along the bottom.
@@ -32,6 +33,14 @@ struct EqualizerSidebarView: View {
 
     /// Preset awaiting delete confirmation.
     @State private var deletionCandidate: String?
+
+    /// Controls visibility of the AutoEQ web optimizer guide sheet.
+    @State private var showingAutoEQGuide = false
+
+    /// Error message from a failed file or clipboard import.
+    @State private var importErrorMessage: String?
+    @State private var exportErrorMessage: String?
+    @State private var pendingImport: ProfileManager.ImportPreview?
 
     var body: some View {
         // A plain `VStack` rather than a `List` with safe-area insets: the header
@@ -80,6 +89,14 @@ struct EqualizerSidebarView: View {
                 // list taller than the window is the bottom.
                 .onAppear { scroll.scrollTo(profileManager.activeProfileName, anchor: .center) }
             }
+            .onDrop(of: [.fileURL, .text, .plainText], isTargeted: nil) { providers in
+                handleDrop(providers: providers)
+            }
+
+            Divider()
+                .padding(.horizontal, 10)
+
+            sidebarActionBar
         }
         .alert(
             "Delete the preset “\(deletionCandidate ?? "")”?", isPresented: deletionAlertPresented
@@ -92,10 +109,66 @@ struct EqualizerSidebarView: View {
         } message: {
             Text("This preset will be removed permanently.")
         }
+        .alert(
+            "Import Failed",
+            isPresented: Binding(
+                get: { importErrorMessage != nil },
+                set: { if !$0 { importErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { importErrorMessage = nil }
+        } message: {
+            Text(importErrorMessage ?? "")
+        }
+        .alert(
+            "Import Preset?",
+            isPresented: Binding(
+                get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } })
+        ) {
+            Button("Import") {
+                if let preview = pendingImport { _ = profileManager.commitImport(preview) }
+                pendingImport = nil
+            }
+            Button("Cancel", role: .cancel) { pendingImport = nil }
+        } message: {
+            if let preview = pendingImport {
+                let preamp = String(format: "%.1f", preview.preamp)
+                Text("\(preview.name)\n\(preview.filterCount) filters\nPreamp: \(preamp) dB")
+            }
+        }
+        .alert(
+            "Export Failed",
+            isPresented: Binding(
+                get: { exportErrorMessage != nil }, set: { if !$0 { exportErrorMessage = nil } })
+        ) {
+            Button("OK", role: .cancel) { exportErrorMessage = nil }
+        } message: {
+            Text(exportErrorMessage ?? "")
+        }
+        .sheet(isPresented: $showingAutoEQGuide) {
+            AutoEQGuideSheet(profileManager: profileManager)
+        }
         // A preset created outside the sidebar arrives as a rename request; seed
         // the field with the generated name so typing replaces it.
         .onChange(of: profileManager.profileAwaitingRename) { _, name in
             if let name { renameText = name }
+        }
+        .background {
+            Button("") {
+                guard let text = NSPasteboard.general.string(forType: .string) else {
+                    importErrorMessage = "No valid EqualizerAPO preset found on clipboard."
+                    return
+                }
+                do {
+                    pendingImport = try profileManager.previewImport(
+                        from: text, name: "Pasted Preset")
+                } catch {
+                    importErrorMessage = error.localizedDescription
+                }
+            }
+            .keyboardShortcut("v", modifiers: .command)
+            .opacity(0)
+            .allowsHitTesting(false)
         }
     }
 
@@ -323,16 +396,252 @@ struct EqualizerSidebarView: View {
 
         Divider()
 
+        Menu("Export Preset") {
+            Button("EqualizerAPO (.txt)…") {
+                showExportDialog(for: name, format: .equalizerAPO)
+            }
+            Button("CoreEQ Native (.coreeq)…") {
+                showExportDialog(for: name, format: .coreEQJSON)
+            }
+        }
+
+        Button("Import Preset…") {
+            showImportDialog()
+        }
+
+        Button("Paste Preset from Clipboard") {
+            previewClipboard()
+        }
+
+        Button("Open autoeq.app Web Optimizer…") {
+            showingAutoEQGuide = true
+        }
+
+        Divider()
+
         Button("Delete", role: .destructive) { deletionCandidate = name }
             .disabled(!isEditable)
     }
 
     // MARK: - Preset actions
 
+    private enum PresetExportFormat {
+        case equalizerAPO
+        case coreEQJSON
+    }
+
     private func commitRename() {
         guard let name = profileManager.profileAwaitingRename else { return }
         profileManager.profileAwaitingRename = nil
         profileManager.renameProfile(named: name, to: renameText)
+    }
+
+    private func showImportDialog() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Preset"
+        panel.message = "Choose an EqualizerAPO (.txt) or CoreEQ (.coreeq, .json) preset file"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsOtherFileTypes = true
+
+        var types: [UTType] = [.text, .plainText, .utf8PlainText, .json]
+        if let txtType = UTType(filenameExtension: "txt") { types.append(txtType) }
+        if let coreeqType = UTType(filenameExtension: "coreeq") { types.append(coreeqType) }
+        panel.allowedContentTypes = Array(Set(types))
+
+        NSApp.activate(ignoringOtherApps: true)
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            panel.beginSheetModal(for: window) { response in
+                guard response == .OK, let url = panel.url else { return }
+                do {
+                    try preview(url: url)
+                } catch {
+                    importErrorMessage = error.localizedDescription
+                }
+            }
+        } else {
+            panel.begin { response in
+                guard response == .OK, let url = panel.url else { return }
+                do {
+                    try preview(url: url)
+                } catch {
+                    importErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func showExportDialog(for name: String, format: PresetExportFormat = .equalizerAPO) {
+        let content: String
+        let filename: String
+        let allowedTypes: [UTType]
+        switch format {
+        case .equalizerAPO:
+            do {
+                content = try profileManager.exportProfileToEqualizerAPO(named: name)
+            } catch {
+                exportErrorMessage = error.localizedDescription
+                return
+            }
+            filename = "\(name).txt"
+            var types: [UTType] = [.text, .plainText, .utf8PlainText]
+            if let txtType = UTType(filenameExtension: "txt") { types.append(txtType) }
+            allowedTypes = Array(Set(types))
+        case .coreEQJSON:
+            do {
+                content = try profileManager.exportProfileToJSON(named: name)
+            } catch {
+                exportErrorMessage = error.localizedDescription
+                return
+            }
+            filename = "\(name).coreeq"
+            var types: [UTType] = [.json, .text, .plainText]
+            if let coreeqType = UTType(filenameExtension: "coreeq") { types.append(coreeqType) }
+            allowedTypes = Array(Set(types))
+        }
+
+        let panel = NSSavePanel()
+        panel.title = "Export Preset"
+        panel.nameFieldStringValue = filename
+        panel.allowedContentTypes = allowedTypes
+        panel.allowsOtherFileTypes = true
+
+        NSApp.activate(ignoringOtherApps: true)
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try content.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                exportErrorMessage = "Failed to export preset: \(error.localizedDescription)"
+            }
+        }
+
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            panel.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            panel.begin(completionHandler: handleResponse)
+        }
+    }
+
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url else { return }
+                    Task { @MainActor in
+                        do {
+                            try preview(url: url)
+                        } catch {
+                            importErrorMessage = error.localizedDescription
+                        }
+                    }
+                }
+                return true
+            } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
+                _ = provider.loadObject(ofClass: String.self) { text, _ in
+                    guard let text else { return }
+                    Task { @MainActor in
+                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let url = URL(string: trimmed), url.isFileURL {
+                            do {
+                                try preview(url: url)
+                                return
+                            } catch {}
+                        } else if FileManager.default.fileExists(atPath: trimmed) {
+                            let url = URL(fileURLWithPath: trimmed)
+                            do {
+                                try preview(url: url)
+                                return
+                            } catch {}
+                        }
+                        do {
+                            pendingImport = try profileManager.previewImport(from: text)
+                        } catch {
+                            importErrorMessage = error.localizedDescription
+                        }
+                    }
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    private func preview(url: URL) throws {
+        let text = try String(contentsOf: url, encoding: .utf8)
+        pendingImport = try profileManager.previewImport(
+            from: text,
+            name: ProfileManager.cleanPresetName(
+                from: url.deletingPathExtension().lastPathComponent))
+    }
+
+    private func previewClipboard() {
+        guard let text = NSPasteboard.general.string(forType: .string) else {
+            importErrorMessage = "No valid EqualizerAPO preset found on clipboard."
+            return
+        }
+        do {
+            pendingImport = try profileManager.previewImport(from: text, name: "Pasted Preset")
+        } catch {
+            importErrorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Action Bar
+
+    private var sidebarActionBar: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Button("New Preset") {
+                    profileManager.addProfile(filters: profileManager.currentFilters)
+                }
+
+                Divider()
+
+                Button("Import Preset File…") {
+                    showImportDialog()
+                }
+
+                Button("Paste Preset from Clipboard") {
+                    previewClipboard()
+                }
+                .keyboardShortcut("v", modifiers: .command)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .medium))
+                    Text("Preset")
+                        .font(Theme.Font.label)
+                }
+                .frame(height: 22)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Add or import a preset")
+
+            Spacer()
+
+            Button {
+                showingAutoEQGuide = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "waveform.badge.magnifyingglass")
+                        .font(.system(size: 11))
+                    Text("AutoEQ")
+                        .font(Theme.Font.label)
+                }
+                .foregroundColor(.accentColor)
+                .frame(height: 22)
+                .padding(.horizontal, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Open AutoEQ Web Optimizer guide")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
     }
 
     // MARK: - Bindings
