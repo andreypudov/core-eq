@@ -1,5 +1,7 @@
 name: CodeQL
 
+# The two languages run on different schedules, because they cost three orders
+# of magnitude apart. See the per-job comments.
 on:
   push:
     branches: ["master"]
@@ -8,55 +10,88 @@ on:
   schedule:
     # Weekly, so advisories that land after a commit are still caught.
     - cron: "23 5 * * 1"
+  workflow_dispatch:
 
 jobs:
-  analyze:
-    name: Analyze (${{ matrix.language }})
-    runs-on: ${{ matrix.runner }}
+  # The workflows themselves. Nothing to build, 40 seconds on ubuntu, and the
+  # one analysis here with something to find: script injection from untrusted
+  # event data, unpinned actions, over-broad token permissions. Cheap enough to
+  # run on everything.
+  actions:
+    name: Analyze (actions)
+    runs-on: ubuntu-latest
     permissions:
       security-events: write
       contents: read
       actions: read
+    steps:
+      - uses: actions/checkout@v5
 
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Swift cannot be built by CodeQL's autobuilder here: the project uses
-          # file-system-synchronized groups (objectVersion 70) and an ad-hoc
-          # signed macOS app target, so the build has to be the one the rest of
-          # CI runs. Same runner image as ci.yml and release.yml for the same
-          # reason — the SDK the binary is linked against is a real choice.
-          - language: swift
-            build-mode: manual
-            runner: macos-26
-          # The workflows themselves. Nothing to build.
-          - language: actions
-            build-mode: none
-            runner: ubuntu-latest
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: actions
+          build-mode: none
 
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:actions"
+
+  # Swift is weekly (and on demand), not per-commit.
+  #
+  # Swift has no build-free extraction — `build-mode: none` is unsupported, and
+  # `autobuild` only runs the same xcodebuild — so the database costs a full
+  # compile. Under CodeQL's tracing that compile takes 17 minutes, against 42
+  # seconds for the identical `make build` in ci.yml: the extractor is the cost,
+  # not the project. Running it on both push and pull_request analyzed every
+  # change twice and accounted for 90% of all CodeQL minutes spent on the repo.
+  #
+  # What it buys is small. CoreEQ has no network, crypto, WebView, SQL,
+  # NSPredicate, XML or subprocess surface for the Swift queries to match, and
+  # no third-party dependencies. Weekly keeps the Security tab current and picks
+  # up new query packs without putting 19 minutes in front of a pull request.
+  swift:
+    name: Analyze (swift)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Same runner image as ci.yml and release.yml: the SDK the binary is linked
+    # against is a real choice, documented in DEVELOPMENT.org.
+    runs-on: macos-26
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v5
 
       - name: Show toolchain
-        if: matrix.language == 'swift'
         run: xcodebuild -version && xcrun --show-sdk-version
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          languages: swift
+          build-mode: manual
 
       # CodeQL traces this build, so it has to compile every source file from
       # scratch — a cached or incremental build would extract an empty
       # database. A fresh runner gives that for free; do not add a build cache
       # here without also disabling it for this job.
+      #
+      # One slice, not two. Extraction is source-level, so the second
+      # architecture doubles the traced compile and adds nothing to the
+      # database. Releases stay universal; only this job narrows the build.
+      # `ONLY_ACTIVE_ARCH=YES` does not work here — with `-target` and no
+      # destination there is no active architecture to pick, and the build comes
+      # out universal anyway.
+      #
+      # The autobuilder cannot replace this: the project uses file-system-
+      # synchronized groups (objectVersion 70) and an ad-hoc signed macOS app
+      # target, so the build has to be the one the rest of CI runs.
       - name: Build
-        if: matrix.build-mode == 'manual'
-        run: make build
+        run: make build XCODE_FLAGS=ARCHS=arm64
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
         with:
-          category: "/language:${{ matrix.language }}"
+          category: "/language:swift"
