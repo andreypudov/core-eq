@@ -344,7 +344,7 @@ Beyond the Xcode template's defaults, these are set deliberately.
 - *=SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES=* — =any Decoder= rather than
   bare =Decoder=. Required by a future language mode anyway; six call sites.
 
-- *Four more upcoming-feature flags*, same reasoning as =EXISTENTIAL_ANY=: opt
+- *Five more upcoming-feature flags*, same reasoning as =EXISTENTIAL_ANY=: opt
   into the next language mode's rules now, while the diff is small, rather than
   all at once under time pressure. There is no Swift 7 language mode to select —
   =swiftc= accepts only =4=, =4.2=, =5= and =6=, so =SWIFT_VERSION = 6.0= is
@@ -353,22 +353,39 @@ Beyond the Xcode template's defaults, these are set deliberately.
   - =SWIFT_UPCOMING_FEATURE_INFER_ISOLATED_CONFORMANCES=
   - =SWIFT_UPCOMING_FEATURE_INTERNAL_IMPORTS_BY_DEFAULT=
   - =SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY=
+  - =SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT=
   - =ImmutableWeakCaptures=, via =OTHER_SWIFT_FLAGS=, because Xcode 27 exposes no
     named build setting for this one.
 
-  Three were free. =MEMBER_IMPORT_VISIBILITY= found a real bug: =SettingsRoute=
+  Four were free. =MEMBER_IMPORT_VISIBILITY= found a real bug: =SettingsRoute=
   declared =ObservableObject= and =@Published= while importing only =Foundation=,
   so it was reaching Combine transitively through another module's import — it
   compiled by luck, and would have broken if that module ever dropped Combine.
   The fix is the explicit =import Combine= now at the top of the file.
 
+  =NONISOLATED_NONSENDING_BY_DEFAULT= changes which executor a =nonisolated
+  async= function runs on: today such a function always hops to the global
+  concurrent executor, and under this flag it inherits the caller's isolation
+  instead. That is usually a careful migration, because a function written to get
+  work *off* the main actor silently starts running *on* it, and the fix is to
+  mark those =@concurrent=.
+
+  Here it changes nothing, because there is nothing for it to apply to: the app,
+  the tests and =Tools/= contain *no =async= declarations and no =await= at all*.
+  The only =async= tokens in the tree are =DispatchQueue.main.async= — GCD, not
+  Swift concurrency — and all six =Task= sites are =Task { @MainActor in … }=.
+  The =nonisolated= that does appear is unrelated: =nonisolated(unsafe)= on
+  stored properties, and three *synchronous* =nonisolated static= functions in
+  =AudioEngine=. Core Audio calls =ioBlock= synchronously on the realtime thread,
+  which this feature does not touch. The compiler agrees — built under
+  =-enable-upcoming-feature NonisolatedNonsendingByDefault:migrate=, it emits
+  zero fix-its.
+
+  It is on for the same reason as the rest, then: a tripwire, so the first
+  =nonisolated async func= anyone adds gets the future semantics from the start.
+
   Deliberately *not* enabled:
 
-  - =NonisolatedNonsendingByDefault= — changes which executor a =nonisolated
-    async= function runs on. It builds clean and the suite passes, but the suite
-    is 461 synchronous logic tests and cannot exercise actor hopping around
-    =EQProcessor.render=. Worth adopting on its own commit so a realtime
-    regression bisects to it.
   - =SWIFT_STRICT_MEMORY_SAFETY= — 438 warnings, concentrated exactly where the
     risk is: =AudioEngine= (61), =AudioDevices= (51), =BufferRouter= (26),
     =EQProcessor= (24). With warnings-as-errors that is all-or-nothing, so it is
