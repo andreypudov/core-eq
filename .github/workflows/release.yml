@@ -13,9 +13,11 @@ jobs:
     # from the macOS running it. Building on an older image shipped a binary
     # that looked like a pre-26 app on every current Mac, while local builds
     # looked native — so the runner image is a user-visible choice, not a
-    # detail. The deployment target (14.2) is set in the project and is
+    # detail. `xcode-27` is the only hosted image carrying the macOS 27 SDK:
+    # there is no GA `macos-27` label, and `macos-latest` still resolves to the
+    # macOS 26 image. The deployment target (14.2) is set in the project and is
     # unaffected by this.
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v5
 
@@ -34,8 +36,8 @@ jobs:
                 | awk '/LC_BUILD_VERSION/ {found=1} found && /sdk /{print $2; exit}')
           echo "linked against SDK $sdk"
           case "$sdk" in
-            2[6-9].*|[3-9][0-9].*) ;;
-            *) echo "::error::expected the macOS 26 SDK or newer, got $sdk"; exit 1 ;;
+            2[7-9].*|[3-9][0-9].*) ;;
+            *) echo "::error::expected the macOS 27 SDK or newer, got $sdk"; exit 1 ;;
           esac
 
       - name: Publish GitHub release

@@ -6,8 +6,12 @@ project structure and architecture. End-user documentation is in
 
 * Toolchain
 
-- Xcode *16 or later* (the project uses the folder-synchronized project
-  format, =objectVersion 77=).
+- Xcode *16 or later* to build and test (the project uses the folder-
+  synchronized project format, =objectVersion 70=).
+- Xcode *27* to cut a release. CI and =release.yml= both run it, and the release
+  job rejects a binary linked against anything older than the 27 SDK — see
+  “Packaging and releases → the runner image is a user-visible choice”. Nothing
+  in the sources needs it; the SDK generation is what ships.
 - macOS *14.2 or later* to run (the process-tap API does not exist earlier).
 - No external dependencies — system frameworks only (SwiftUI, AppKit,
   CoreAudio, AudioToolbox, Combine, os).
@@ -247,10 +251,37 @@ the macOS design an app renders in from the SDK it was *linked against*, not
 from the macOS running it. Building 1.6 on the =macos-15= image (Xcode 16, SDK
 15.5) shipped a binary that drew as a pre-26 app on every current Mac, while
 local builds against the 26 SDK looked native — same commit, same version, two
-different-looking apps. Both workflows therefore pin =macos-26=, and the release
-job asserts the linked SDK out of =LC_BUILD_VERSION= before publishing. The
-deployment target (=MACOSX_DEPLOYMENT_TARGET= 14.2) is set in the project and is
-unaffected by any of this: a 26-SDK build still runs on macOS 14.2.
+different-looking apps. All three macOS jobs therefore pin the *same* image, and
+the release job asserts the linked SDK out of =LC_BUILD_VERSION= before
+publishing. The deployment target (=MACOSX_DEPLOYMENT_TARGET= 14.2) is set in
+the project and is unaffected by any of this: a 27-SDK build still runs on macOS
+14.2.
+
+That image is =xcode-27=, not =macos-27=. There is no GA macOS 27 label —
+=macos-latest= still resolves to the macOS 26 image, whose default is Xcode 26.x
+— so =xcode-27= (macOS 27 base, Xcode 27 default) is the only hosted way to link
+against the 27 SDK. Three consequences worth knowing before a release:
+
+- It is a *preview* image. Its Xcode is not version-pinned, and capacity can be
+  tighter than the GA images. Move all three jobs together when it changes;
+  =ci.yml= and =codeql.yml= exist partly to find out before =release.yml= does.
+  As of image =20260912.0186.1= it carries Xcode *27.0 build 27A266a* — the same
+  build as a current local Xcode 27 — so the toolchain is not a beta despite the
+  label. That is not guaranteed to hold: the SDK assertion checks the
+  generation, not the build, so read the =Show toolchain= step before trusting a
+  tag.
+- The label is =xcode-27= because the image began life as “macOS 26 with Xcode
+  27” and was rebased onto macOS 27 in September 2026. Expect it to be renamed
+  =macos-27= at GA. On precedent that is a while off: =macos-26= shipped as a
+  public beta on 2025-09-11 and went GA on 2026-02-26, and =macos-15= took a
+  comparable six months, so a GA =macos-27= is likely *early-to-mid 2027*, with
+  =macos-latest= following months later. Switch the three jobs together then.
+- The linked-SDK assertion requires *27 or newer*, deliberately narrower than
+  the SDK actually in use. If the image ever hands back a 26 toolchain, the
+  release fails instead of silently shipping a binary of the wrong generation —
+  which is the whole failure this guard was written for.
+
+To cut a release:
 
 1. Bump =MARKETING_VERSION= (and =CURRENT_PROJECT_VERSION=) in the target
    build settings.

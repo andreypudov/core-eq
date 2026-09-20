@@ -56,7 +56,7 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     # Same runner image as ci.yml and release.yml: the SDK the binary is linked
     # against is a real choice, documented in DEVELOPMENT.org.
-    runs-on: macos-26
+    runs-on: xcode-27
     permissions:
       security-events: write
       contents: read
