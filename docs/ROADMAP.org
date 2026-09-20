@@ -229,7 +229,14 @@ Two things to decide, both smaller than the questions above:
 
 - Whether the list binds to a bundle identifier or to a process. A bundle
   identifier survives quitting and relaunching, which is what the request means;
-  a pid does not.
+  a pid does not. The macOS 26 SDK answers this directly: =CATapDescription=
+  gained a =bundleIDs= array, and a =processRestoreEnabled= flag that saves
+  tapped processes by bundle ID when they exit and restores them when they start
+  again — precisely the rebinding problem, handled by the system. Both are
+  =API_AVAILABLE(macos(26.0))= against a 14.2 floor, so the choice is to write
+  the pid path for 14.2–25 and gate =bundleIDs= as an improvement on 26+, or to
+  start the feature at 26. Worth settling before any of it is built: it is the
+  difference between one implementation and two.
 - Whether an excluded app is visible as excluded outside the settings pane, so
   that “CoreEQ is doing nothing to this app” is shown rather than remembered.
 
