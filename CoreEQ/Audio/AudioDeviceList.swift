@@ -87,8 +87,8 @@ final class AudioDeviceList: ObservableObject {
 
     private func observe(_ selector: AudioObjectPropertySelector) {
         var address = AudioDevices.systemAddress(selector)
-        let block: AudioObjectPropertyListenerBlock = { _, _ in
-            Task { @MainActor [weak self] in self?.refresh() }
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            Task { @MainActor in self?.refresh() }
         }
         let status = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject), &address, .main, block
