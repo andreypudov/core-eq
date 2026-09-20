@@ -254,7 +254,7 @@ enabling the sandbox and revisiting the audio entitlements; direct
 
 * Build settings that matter
 
-Beyond the Xcode template's defaults, four are set deliberately.
+Beyond the Xcode template's defaults, six are set deliberately.
 
 - *=SWIFT_VERSION = 6.0=* — the Swift 6 language mode, which makes data-race
   safety a compile-time property rather than a hope. It matters more here than in
@@ -276,6 +276,39 @@ Beyond the Xcode template's defaults, four are set deliberately.
   bare =Decoder=. Required by a future language mode anyway; six call sites.
 
 - *=VALIDATE_PRODUCT = YES=* (Release only).
+
+- *=DEPLOYMENT_POSTPROCESSING = YES=, =STRIP_INSTALLED_PRODUCT = YES=,
+  =STRIP_STYLE = all=* (Release, app target only) — strip the shipped
+  executable. Until 1.8 nothing ever ran =strip=: =STRIP_INSTALLED_PRODUCT=
+  alone is inert, because the Strip Linked Product phase is gated on
+  =DEPLOYMENT_POSTPROCESSING=, which =xcodebuild build= leaves off — only the
+  =archive= and =install= actions turn it on, and =make release= does neither.
+
+  The symbol table had quietly become most of the binary: 3.74 MB of 5.85 MB at
+  1.8, 24,031 Swift mangled names, growing faster than the code it names. Across
+  1.4 → 1.8 the code went 0.56 → 2.11 MB while the symbols went 0.60 → 3.74 MB.
+  Stripping takes the app from 7.7 MB to 4.1 MB on disk; the zip only falls from
+  3.2 MB to 2.7 MB, because symbol strings compress well. Nothing is lost:
+  =DEBUG_INFORMATION_FORMAT = dwarf-with-dsym= still writes
+  =build/Release/CoreEQ.app.dSYM= with UUIDs matching the stripped binary, so
+  crash reports symbolicate against it, and the =__swift5_*= reflection sections
+  live in =__TEXT= where =strip= does not reach.
+
+  These are set on the app target rather than the project so the test bundle
+  keeps its symbols.
+
+- *=CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO=* (Release, app target only) —
+  releases through 1.8 shipped with =com.apple.security.get-task-allow=, the
+  entitlement that lets any debugger attach to the running app. Xcode injects it
+  by default under an ad-hoc signature. CoreEQ has no entitlements file of its
+  own, so Release now ships with an empty entitlement set; verify with
+  =codesign -d --entitlements - build/Release/CoreEQ.app=.
+
+*Both architectures stay.* The product is a universal binary (=ARCHS= left at
+its default), which doubles everything above — roughly 650 KB of =__text= per
+slice. Dropping =x86_64= is the next easy megabyte and is deliberately not
+taken: Intel Macs are still in use, and =MACOSX_DEPLOYMENT_TARGET= 14.2 includes
+them.
 
 *One thing measured and rejected.* =SWIFT_STRICT_MEMORY_SAFETY= produces 244
 findings, almost all in the audio path, where =UnsafePointer= work is the job
