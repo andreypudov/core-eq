@@ -100,6 +100,44 @@ toolchain if =xcode-select= points at the Command Line Tools):
 | =make release= | Build and zip to =dist/CoreEQ-<version>.zip= (=ditto=) |
 | =make clean=   | Remove =build/= and =dist/=                            |
 
+=make build= takes extra xcodebuild settings through =XCODE_FLAGS=, e.g.
+=make build XCODE_FLAGS=ARCHS=arm64=. It is empty by default, so =make release=
+is universal unless overridden.
+
+*** What CI runs, and when
+
+Three workflows, deliberately on different schedules.
+
+- *=ci.yml=* — =make lint=, =make test=, =make build= on every push and pull
+  request. About 2.5 minutes.
+- *=release.yml=* — =make release= on a =v*= tag, with the linked-SDK assertion
+  described under [[*Cutting a release][Cutting a release]].
+- *=codeql.yml=* — split by language, because the two cost three orders of
+  magnitude apart. The =actions= analysis runs on every push and pull request:
+  40 seconds on ubuntu, and it is the one with something to find here — script
+  injection from untrusted event data, unpinned actions, over-broad token
+  permissions. The =swift= analysis runs *weekly and on =workflow_dispatch=
+  only*.
+
+Swift is off the per-commit path because it cannot be made cheap. It has no
+build-free extraction — =build-mode: none= is unsupported and =autobuild= only
+runs the same xcodebuild — so every analysis costs a full compile, and under
+CodeQL's tracing that compile took 17 minutes against 42 seconds for the
+identical =make build= in =ci.yml=. The extractor is the cost, not the project.
+Running it on =push= and =pull_request= analyzed every change twice and
+accounted for 90% of all CodeQL minutes the repository had ever spent.
+
+The yield did not justify that. CodeQL's Swift suite targets network, crypto,
+WebView and JavaScript, SQL, =NSPredicate=, XML, regex, and command or path
+injection; CoreEQ has none of that surface and no third-party dependencies. The
+weekly run still keeps the Security tab current and picks up new query packs.
+
+The job also builds *one* slice (=XCODE_FLAGS=ARCHS=arm64=): extraction is
+source-level, so the second architecture doubles the traced compile and adds
+nothing to the database. =ONLY_ACTIVE_ARCH=YES= does not work for this —
+with =-target= and no destination there is no active architecture to pick, and
+the build comes out universal regardless.
+
 *** Tests
 
 =CoreEQTests= is a host-less logic bundle: it never launches the app or touches
