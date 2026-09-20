@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// The Settings window's panes.

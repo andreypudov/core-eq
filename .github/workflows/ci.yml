@@ -12,8 +12,10 @@ permissions:
 jobs:
   test:
     # Kept in step with the release job: tests have to run against the same
-    # SDK the shipped binary is linked against.
-    runs-on: macos-26
+    # SDK the shipped binary is linked against. `xcode-27` rather than
+    # `macos-27` — GitHub has no GA macOS 27 image, and `macos-latest` still
+    # resolves to the macOS 26 one. See DEVELOPMENT.org.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v5
 

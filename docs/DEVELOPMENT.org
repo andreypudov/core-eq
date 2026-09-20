@@ -6,8 +6,12 @@ project structure and architecture. End-user documentation is in
 
 * Toolchain
 
-- Xcode *16 or later* (the project uses the folder-synchronized project
-  format, =objectVersion 77=).
+- Xcode *16 or later* to build and test (the project uses the folder-
+  synchronized project format, =objectVersion 70=).
+- Xcode *27* to cut a release. CI and =release.yml= both run it, and the release
+  job rejects a binary linked against anything older than the 27 SDK — see
+  “Packaging and releases → the runner image is a user-visible choice”. Nothing
+  in the sources needs it; the SDK generation is what ships.
 - macOS *14.2 or later* to run (the process-tap API does not exist earlier).
 - No external dependencies — system frameworks only (SwiftUI, AppKit,
   CoreAudio, AudioToolbox, Combine, os).
@@ -247,10 +251,37 @@ the macOS design an app renders in from the SDK it was *linked against*, not
 from the macOS running it. Building 1.6 on the =macos-15= image (Xcode 16, SDK
 15.5) shipped a binary that drew as a pre-26 app on every current Mac, while
 local builds against the 26 SDK looked native — same commit, same version, two
-different-looking apps. Both workflows therefore pin =macos-26=, and the release
-job asserts the linked SDK out of =LC_BUILD_VERSION= before publishing. The
-deployment target (=MACOSX_DEPLOYMENT_TARGET= 14.2) is set in the project and is
-unaffected by any of this: a 26-SDK build still runs on macOS 14.2.
+different-looking apps. All three macOS jobs therefore pin the *same* image, and
+the release job asserts the linked SDK out of =LC_BUILD_VERSION= before
+publishing. The deployment target (=MACOSX_DEPLOYMENT_TARGET= 14.2) is set in
+the project and is unaffected by any of this: a 27-SDK build still runs on macOS
+14.2.
+
+That image is =xcode-27=, not =macos-27=. There is no GA macOS 27 label —
+=macos-latest= still resolves to the macOS 26 image, whose default is Xcode 26.x
+— so =xcode-27= (macOS 27 base, Xcode 27 default) is the only hosted way to link
+against the 27 SDK. Three consequences worth knowing before a release:
+
+- It is a *preview* image. Its Xcode is not version-pinned, and capacity can be
+  tighter than the GA images. Move all three jobs together when it changes;
+  =ci.yml= and =codeql.yml= exist partly to find out before =release.yml= does.
+  As of image =20260912.0186.1= it carries Xcode *27.0 build 27A266a* — the same
+  build as a current local Xcode 27 — so the toolchain is not a beta despite the
+  label. That is not guaranteed to hold: the SDK assertion checks the
+  generation, not the build, so read the =Show toolchain= step before trusting a
+  tag.
+- The label is =xcode-27= because the image began life as “macOS 26 with Xcode
+  27” and was rebased onto macOS 27 in September 2026. Expect it to be renamed
+  =macos-27= at GA. On precedent that is a while off: =macos-26= shipped as a
+  public beta on 2025-09-11 and went GA on 2026-02-26, and =macos-15= took a
+  comparable six months, so a GA =macos-27= is likely *early-to-mid 2027*, with
+  =macos-latest= following months later. Switch the three jobs together then.
+- The linked-SDK assertion requires *27 or newer*, deliberately narrower than
+  the SDK actually in use. If the image ever hands back a 26 toolchain, the
+  release fails instead of silently shipping a binary of the wrong generation —
+  which is the whole failure this guard was written for.
+
+To cut a release:
 
 1. Bump =MARKETING_VERSION= (and =CURRENT_PROJECT_VERSION=) in the target
    build settings.
@@ -292,7 +323,7 @@ enabling the sandbox and revisiting the audio entitlements; direct
 
 * Build settings that matter
 
-Beyond the Xcode template's defaults, six are set deliberately.
+Beyond the Xcode template's defaults, these are set deliberately.
 
 - *=SWIFT_VERSION = 6.0=* — the Swift 6 language mode, which makes data-race
   safety a compile-time property rather than a hope. It matters more here than in
@@ -312,6 +343,59 @@ Beyond the Xcode template's defaults, six are set deliberately.
 
 - *=SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES=* — =any Decoder= rather than
   bare =Decoder=. Required by a future language mode anyway; six call sites.
+
+- *Five more upcoming-feature flags*, same reasoning as =EXISTENTIAL_ANY=: opt
+  into the next language mode's rules now, while the diff is small, rather than
+  all at once under time pressure. There is no Swift 7 language mode to select —
+  =swiftc= accepts only =4=, =4.2=, =5= and =6=, so =SWIFT_VERSION = 6.0= is
+  already the ceiling and these features are reachable only one flag at a time.
+
+  - =SWIFT_UPCOMING_FEATURE_INFER_ISOLATED_CONFORMANCES=
+  - =SWIFT_UPCOMING_FEATURE_INTERNAL_IMPORTS_BY_DEFAULT=
+  - =SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY=
+  - =SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT=
+  - =ImmutableWeakCaptures=, via =OTHER_SWIFT_FLAGS=, because Xcode 27 exposes no
+    named build setting for this one.
+
+  Four were free. =MEMBER_IMPORT_VISIBILITY= found a real bug: =SettingsRoute=
+  declared =ObservableObject= and =@Published= while importing only =Foundation=,
+  so it was reaching Combine transitively through another module's import — it
+  compiled by luck, and would have broken if that module ever dropped Combine.
+  The fix is the explicit =import Combine= now at the top of the file.
+
+  =NONISOLATED_NONSENDING_BY_DEFAULT= changes which executor a =nonisolated
+  async= function runs on: today such a function always hops to the global
+  concurrent executor, and under this flag it inherits the caller's isolation
+  instead. That is usually a careful migration, because a function written to get
+  work *off* the main actor silently starts running *on* it, and the fix is to
+  mark those =@concurrent=.
+
+  Here it changes nothing, because there is nothing for it to apply to: the app,
+  the tests and =Tools/= contain *no =async= declarations and no =await= at all*.
+  The only =async= tokens in the tree are =DispatchQueue.main.async= — GCD, not
+  Swift concurrency — and all six =Task= sites are =Task { @MainActor in … }=.
+  The =nonisolated= that does appear is unrelated: =nonisolated(unsafe)= on
+  stored properties, and three *synchronous* =nonisolated static= functions in
+  =AudioEngine=. Core Audio calls =ioBlock= synchronously on the realtime thread,
+  which this feature does not touch. The compiler agrees — built under
+  =-enable-upcoming-feature NonisolatedNonsendingByDefault:migrate=, it emits
+  zero fix-its.
+
+  It is on for the same reason as the rest, then: a tripwire, so the first
+  =nonisolated async func= anyone adds gets the future semantics from the start.
+
+  Deliberately *not* enabled:
+
+  - =SWIFT_STRICT_MEMORY_SAFETY= — 438 warnings, concentrated exactly where the
+    risk is: =AudioEngine= (61), =AudioDevices= (51), =BufferRouter= (26),
+    =EQProcessor= (24). With warnings-as-errors that is all-or-nothing, so it is
+    an annotation project, not a flag. Useful as a one-off audit of the render
+    path.
+
+  One feature is out of reach entirely: =Span= and =InlineArray= — the safe
+  buffer types this code would most benefit from — need a macOS 26 deployment
+  target (=SwiftSpanMinimumDeploymentTarget= in the SDK), against 14.2 here.
+  That is the standing cost of the support floor.
 
 - *=VALIDATE_PRODUCT = YES=* (Release only).
 
