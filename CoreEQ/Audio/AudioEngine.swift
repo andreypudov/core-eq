@@ -926,8 +926,8 @@ final class AudioEngine: ObservableObject {
         var addr = propertyAddress(
             kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeOutput)
         let deviceID = aggregateID
-        let block: AudioObjectPropertyListenerBlock = { _, _ in
-            Task { @MainActor [weak self] in
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            Task { @MainActor in
                 guard let self, self.aggregateID == deviceID else { return }
                 self.scheduleRestart(after: 0.3, reason: "output stream configuration changed")
             }
@@ -943,8 +943,8 @@ final class AudioEngine: ObservableObject {
     private func installDefaultDeviceListenerIfNeeded() {
         guard defaultDeviceListener == nil else { return }
         var addr = propertyAddress(kAudioHardwarePropertyDefaultOutputDevice)
-        let block: AudioObjectPropertyListenerBlock = { _, _ in
-            Task { @MainActor [weak self] in
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            Task { @MainActor in
                 guard let self else { return }
                 // A different device is a fresh situation: whatever the previous
                 // one exhausted in retries says nothing about this one.
@@ -964,11 +964,11 @@ final class AudioEngine: ObservableObject {
     private func installSampleRateListener() {
         var addr = propertyAddress(kAudioDevicePropertyNominalSampleRate)
         let deviceID = aggregateID
-        let block: AudioObjectPropertyListenerBlock = { [processor] _, _ in
+        let block: AudioObjectPropertyListenerBlock = { [weak self, processor] _, _ in
             // Marked here rather than after the hop, so the trace shows what the
             // hop itself costs.
             processor.rateTrace.mark(.listenerFired)
-            Task { @MainActor [weak self] in
+            Task { @MainActor in
                 guard let self, self.aggregateID == deviceID else { return }
                 if let rate = try? self.nominalSampleRate(of: deviceID) {
                     self.processor.setSampleRate(rate)
@@ -1029,8 +1029,8 @@ final class AudioEngine: ObservableObject {
         guard activationObserver == nil else { return }
         activationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
-        ) { _ in
-            Task { @MainActor [weak self] in self?.retryAfterRefusal() }
+        ) { [weak self] _ in
+            Task { @MainActor in self?.retryAfterRefusal() }
         }
     }
 
@@ -1044,8 +1044,8 @@ final class AudioEngine: ObservableObject {
         guard wakeObserver == nil else { return }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-        ) { _ in
-            Task { @MainActor [weak self] in
+        ) { [weak self] _ in
+            Task { @MainActor in
                 self?.scheduleRestart(after: 1.0, reason: "system woke from sleep")
             }
         }
