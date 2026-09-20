@@ -31,10 +31,13 @@ fourth suspicion — that a Bluetooth route change left a window of audio filter
 at the wrong sample rate — was measured and turned out not to happen; it is in
 the release notes with the numbers.
 
+1.8 shipped on <2026-09-20 Sun> with the five above settled and the rest of this
+section still open.
+
 What is left here: audio arriving twice and every screen capture tool failing,
-and two smaller reports. They affect people doing
-nothing unusual, none can be worked around from inside the app, and nothing else
-ships until they are fixed.
+and two smaller reports. They affect people doing nothing unusual, and none can
+be worked around from inside the app, so by the ordering rule they head the next
+release, ahead of the preset format below.
 
 ** Bluetooth noise at higher volume
 

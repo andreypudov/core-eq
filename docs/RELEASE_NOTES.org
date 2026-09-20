@@ -15,7 +15,7 @@ part worth having written down.
 
 * 1.8 — Make it work everywhere it claims to
 
-Not yet released.
+Released <2026-09-20 Sun>.
 
 ** Aggregate and Multi-Output Devices silence the Mac
 

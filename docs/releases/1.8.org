@@ -1,0 +1,64 @@
+#+TITLE: CoreEQ 1.8 — Make it work everywhere it claims to
+#+AUTHOR: Andrey Pudov
+#+DATE: <2026-09-20 Sun>
+#+OPTIONS: toc:nil num:nil
+
+CoreEQ 1.7 worked on a Mac with stereo speakers and nothing unusual attached.
+1.8 is about the machines where it did not. Three separate defects could leave a
+Mac completely silent while every layer of the app reported that it was working,
+and the only way out was to quit an app that launches at login. All three are
+fixed, multichannel devices are equalized properly rather than mangled, and the
+Mac is allowed to sleep again.
+
+Everything below was measured on hardware rather than reasoned about, and the
+diagnostics report carries the evidence so the next report arrives with its own.
+
+* New
+
+- *Multichannel output.* Devices presenting more than two channels — HDMI,
+  DisplayPort, USB interfaces — are equalized per channel and placed correctly
+  instead of silenced or mangled. Confirmed on a sixteen channel device: six
+  channel content arrives as six discrete channels, Flat is bit-exact, and each
+  channel's measured response matches the drawn curve to within 0.01 dB.
+- *The Mac sleeps again.* The audio device is released after thirty seconds of
+  digital silence and rebuilt the moment something plays — 40–48 ms on a
+  Bluetooth headset, measured from the player launching, so the first second of
+  audio is already equalized. Settings has a switch to turn the behaviour off.
+- *Permission explained where it is asked.* "System Audio Recording" sounds
+  broader than what an equalizer does, so the explanation now appears inside the
+  macOS dialog itself rather than in Settings after the fact.
+- *A diagnostics report worth pasting.* It now carries the sample-rate window
+  (or "none seen"), whether the device is currently released and how often it
+  has been, and the peak output with clipping attributed to the chain rather
+  than to the recording.
+
+* Fixed
+
+- *Aggregate and Multi-Output Devices silenced the Mac.* Core Audio will not
+  nest one aggregate inside another and does not say so — it returns success and
+  hands back a device with no output streams. CoreEQ now refuses such a default
+  output before the tap is created, and says which device and why.
+- *Refusing the audio permission silenced the Mac.* Creating a tap succeeds even
+  when permission was refused; every sample is zero while every other process is
+  muted at the hardware. Muting is now earned — nothing is muted until real
+  audio has been seen — so a refusal costs only that audio is not equalized, and
+  the app says so and opens the right Settings pane.
+- *CoreEQ prevented sleep with nothing playing.* Once anything had played, the
+  device was never let go. See above.
+- *Clipping was blamed on the material.* The warning counted any sample over
+  full scale, which fires at Flat on modern masters. It now counts only samples
+  the chain itself lifted past full scale.
+- *Tab skipped newly added parametric bands.* The key view loop was computed
+  once when the window was built and never again.
+
+* Notes
+
+Several of these came from reports on Reddit and GitHub, and two were found
+while chasing a third — including the aggregate device defect, which had
+probably been silencing people who had no way to work out what to blame. If
+something is wrong on your hardware, the diagnostics report is the fastest path:
+it now answers most of these questions without a round trip.
+
+The full account of each defect — what was measured, what the first fix got
+wrong, and what is still owed — is in [[file:../RELEASE_NOTES.org][RELEASE_NOTES.org]] and
+[[file:../ROADMAP.org][ROADMAP.org]].
