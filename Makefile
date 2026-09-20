@@ -3,6 +3,12 @@ CONFIG     := Release
 APP_BUNDLE := build/$(CONFIG)/$(APP).app
 DIST_DIR   := dist
 
+# Extra build settings for xcodebuild, e.g. `make build XCODE_FLAGS=ARCHS=arm64`
+# — which is what the CodeQL job does, since extraction is source-level and the
+# second architecture only doubles the traced compile. Empty by default, so
+# `release` is universal unless someone overrides this deliberately.
+XCODE_FLAGS ?=
+
 # Use the full Xcode toolchain even when xcode-select points at the
 # Command Line Tools.
 ifneq (,$(findstring CommandLineTools,$(shell xcode-select -p)))
@@ -12,7 +18,7 @@ endif
 .PHONY: build test audio-test format lint install release icons clean
 
 build:
-	xcodebuild -project $(APP).xcodeproj -target $(APP) -configuration $(CONFIG) build
+	xcodebuild -project $(APP).xcodeproj -target $(APP) -configuration $(CONFIG) $(XCODE_FLAGS) build
 
 # Unit tests for the pure logic: filter math, profiles, and the analyzer ring
 # buffer. The bundle has no test host, so nothing launches the app or touches

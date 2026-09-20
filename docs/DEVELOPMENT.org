@@ -100,6 +100,44 @@ toolchain if =xcode-select= points at the Command Line Tools):
 | =make release= | Build and zip to =dist/CoreEQ-<version>.zip= (=ditto=) |
 | =make clean=   | Remove =build/= and =dist/=                            |
 
+=make build= takes extra xcodebuild settings through =XCODE_FLAGS=, e.g.
+=make build XCODE_FLAGS=ARCHS=arm64=. It is empty by default, so =make release=
+is universal unless overridden.
+
+*** What CI runs, and when
+
+Three workflows, deliberately on different schedules.
+
+- *=ci.yml=* — =make lint=, =make test=, =make build= on every push and pull
+  request. About 2.5 minutes.
+- *=release.yml=* — =make release= on a =v*= tag, with the linked-SDK assertion
+  described under [[*Cutting a release][Cutting a release]].
+- *=codeql.yml=* — split by language, because the two cost three orders of
+  magnitude apart. The =actions= analysis runs on every push and pull request:
+  40 seconds on ubuntu, and it is the one with something to find here — script
+  injection from untrusted event data, unpinned actions, over-broad token
+  permissions. The =swift= analysis runs *weekly and on =workflow_dispatch=
+  only*.
+
+Swift is off the per-commit path because it cannot be made cheap. It has no
+build-free extraction — =build-mode: none= is unsupported and =autobuild= only
+runs the same xcodebuild — so every analysis costs a full compile, and under
+CodeQL's tracing that compile took 17 minutes against 42 seconds for the
+identical =make build= in =ci.yml=. The extractor is the cost, not the project.
+Running it on =push= and =pull_request= analyzed every change twice and
+accounted for 90% of all CodeQL minutes the repository had ever spent.
+
+The yield did not justify that. CodeQL's Swift suite targets network, crypto,
+WebView and JavaScript, SQL, =NSPredicate=, XML, regex, and command or path
+injection; CoreEQ has none of that surface and no third-party dependencies. The
+weekly run still keeps the Security tab current and picks up new query packs.
+
+The job also builds *one* slice (=XCODE_FLAGS=ARCHS=arm64=): extraction is
+source-level, so the second architecture doubles the traced compile and adds
+nothing to the database. =ONLY_ACTIVE_ARCH=YES= does not work for this —
+with =-target= and no destination there is no active architecture to pick, and
+the build comes out universal regardless.
+
 *** Tests
 
 =CoreEQTests= is a host-less logic bundle: it never launches the app or touches
@@ -254,7 +292,7 @@ enabling the sandbox and revisiting the audio entitlements; direct
 
 * Build settings that matter
 
-Beyond the Xcode template's defaults, four are set deliberately.
+Beyond the Xcode template's defaults, six are set deliberately.
 
 - *=SWIFT_VERSION = 6.0=* — the Swift 6 language mode, which makes data-race
   safety a compile-time property rather than a hope. It matters more here than in
@@ -276,6 +314,39 @@ Beyond the Xcode template's defaults, four are set deliberately.
   bare =Decoder=. Required by a future language mode anyway; six call sites.
 
 - *=VALIDATE_PRODUCT = YES=* (Release only).
+
+- *=DEPLOYMENT_POSTPROCESSING = YES=, =STRIP_INSTALLED_PRODUCT = YES=,
+  =STRIP_STYLE = all=* (Release, app target only) — strip the shipped
+  executable. Until 1.8 nothing ever ran =strip=: =STRIP_INSTALLED_PRODUCT=
+  alone is inert, because the Strip Linked Product phase is gated on
+  =DEPLOYMENT_POSTPROCESSING=, which =xcodebuild build= leaves off — only the
+  =archive= and =install= actions turn it on, and =make release= does neither.
+
+  The symbol table had quietly become most of the binary: 3.74 MB of 5.85 MB at
+  1.8, 24,031 Swift mangled names, growing faster than the code it names. Across
+  1.4 → 1.8 the code went 0.56 → 2.11 MB while the symbols went 0.60 → 3.74 MB.
+  Stripping takes the app from 7.7 MB to 4.1 MB on disk; the zip only falls from
+  3.2 MB to 2.7 MB, because symbol strings compress well. Nothing is lost:
+  =DEBUG_INFORMATION_FORMAT = dwarf-with-dsym= still writes
+  =build/Release/CoreEQ.app.dSYM= with UUIDs matching the stripped binary, so
+  crash reports symbolicate against it, and the =__swift5_*= reflection sections
+  live in =__TEXT= where =strip= does not reach.
+
+  These are set on the app target rather than the project so the test bundle
+  keeps its symbols.
+
+- *=CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO=* (Release, app target only) —
+  releases through 1.8 shipped with =com.apple.security.get-task-allow=, the
+  entitlement that lets any debugger attach to the running app. Xcode injects it
+  by default under an ad-hoc signature. CoreEQ has no entitlements file of its
+  own, so Release now ships with an empty entitlement set; verify with
+  =codesign -d --entitlements - build/Release/CoreEQ.app=.
+
+*Both architectures stay.* The product is a universal binary (=ARCHS= left at
+its default), which doubles everything above — roughly 650 KB of =__text= per
+slice. Dropping =x86_64= is the next easy megabyte and is deliberately not
+taken: Intel Macs are still in use, and =MACOSX_DEPLOYMENT_TARGET= 14.2 includes
+them.
 
 *One thing measured and rejected.* =SWIFT_STRICT_MEMORY_SAFETY= produces 244
 findings, almost all in the audio path, where =UnsafePointer= work is the job
@@ -799,6 +870,46 @@ Two other =Picker=s exist. The editor tabs bind to =@AppStorage=, which is built
 for exactly this. The parametric type column uses =.menu= style, whose selection
 is written from a menu action rather than during layout. Neither has shown the
 warning, but a new segmented picker bound to the manager would.
+
+** A trap: an inner =[weak self]= that the outer closure defeats
+
+Core Audio listener blocks and =NotificationCenter= observers are stored back on
+the object that installs them, so they must not retain it. Six of them were
+written like this:
+
+#+begin_src swift
+let block: AudioObjectPropertyListenerBlock = { _, _ in
+    Task { @MainActor [weak self] in
+        guard let self else { return }
+        ...
+    }
+}
+streamConfigListener = block   // self -> block -> self
+#+end_src
+
+The outer closure has no capture list, and naming =self= in the *inner* one
+makes the outer capture it implicitly and *strongly*. The =[weak self]= is then
+decorative: the cycle is already closed by the time the inner closure is
+reached. The weak capture belongs on the closure that is actually stored:
+
+#+begin_src swift
+let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+    Task { @MainActor in
+        guard let self else { return }
+        ...
+    }
+}
+#+end_src
+
+=self= is then held only from the moment the block fires until the task
+finishes, which is the intent. Where the outer closure already captures
+something else, the weak capture joins it: =[weak self, processor]=.
+
+Swift 6.4 (Xcode 27) diagnoses this as =#ImplicitStrongCapture=, which, with
+=SWIFT_TREAT_WARNINGS_AS_ERRORS=, is a build failure rather than a warning —
+see [[https://github.com/andreypudov/core-eq/issues/21][issue #21]]. It is not a
+new mistake: v1.7 had eight instances of the same shape and v1.8 six. Older
+toolchains simply did not mention it.
 
 ** Threading model
 
