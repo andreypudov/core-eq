@@ -180,7 +180,7 @@ An AutoEQ profile downloaded for a real pair of headphones loads and measures
 correct against its published response, and what CoreEQ writes out reloads
 identically.
 
-* 1.10 — Open the scope: per-application EQ and volume
+* 1.10 — Open the scope: per-application EQ, volume, and exclusion
 
 Asked for repeatedly, on Reddit and as GitHub issues, and someone also asked
 whether the process-tap API supports per-app taps at all. One request puts the
@@ -202,6 +202,43 @@ What has to be decided:
 
 Per-app *volume* is the easier half and rides along: it is a gain stage on a
 chain that already exists.
+
+*Exclusion is the easier half still, and it is asked for on its own.* Issue #20
+wants an exclusion list, from a musician who needs Studio One, Logic Pro and the
+rest of a mastering chain left alone while everything else stays corrected.
+
+This is the cheapest slice of the section, because it needs none of the state
+model above: there is no per-app chain to relate to the global one, nothing to
+rebind when a pid changes, and no mixer view to design. There is a set of
+processes, and =CATapDescription= already takes one. The list is already a list:
+=AudioEngine= builds an =excluded: [AudioObjectID]= array, puts its own process
+in it for the feedback reason under *Echo and doubled audio*, and hands it to
+=CATapDescription(__excludingProcesses:)=. Adding user-chosen processes appends
+to an array that already exists rather than changing the audio path, so this can
+ship ahead of the rest of 1.10.
+
+It is also worth more than the flat curve the request asks for. A flat profile
+does pass audio through untouched — every band at 0 dB is identity, so the chain
+is skipped — but the audio still enters the tap and comes back. Excluding the
+process keeps CoreEQ out of the path entirely, which is what *Bit-perfect
+passthrough* under *Not planned* calls the honest maximum this design can offer.
+Per-app exclusion is that maximum, applied per app, and it is the one form of
+the bit-perfect question that has a real answer here.
+
+Two things to decide, both smaller than the questions above:
+
+- Whether the list binds to a bundle identifier or to a process. A bundle
+  identifier survives quitting and relaunching, which is what the request means;
+  a pid does not.
+- Whether an excluded app is visible as excluded outside the settings pane, so
+  that “CoreEQ is doing nothing to this app” is shown rather than remembered.
+
+Worth testing while this is built: whether excluding a screen capture tool
+relieves the doubling under *Echo and doubled audio*. The mechanism described
+there is one tool playing back what the other captures; if CoreEQ is not
+capturing the capture tool, that loop cannot close on CoreEQ's side. A
+hypothesis, not a fix — the conflict may live entirely in the other tool's tap —
+but cheap to check once an exclusion list exists.
 
 * Later — worth doing, not yet scheduled
 
