@@ -323,7 +323,7 @@ enabling the sandbox and revisiting the audio entitlements; direct
 
 * Build settings that matter
 
-Beyond the Xcode template's defaults, six are set deliberately.
+Beyond the Xcode template's defaults, these are set deliberately.
 
 - *=SWIFT_VERSION = 6.0=* — the Swift 6 language mode, which makes data-race
   safety a compile-time property rather than a hope. It matters more here than in
@@ -343,6 +343,42 @@ Beyond the Xcode template's defaults, six are set deliberately.
 
 - *=SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES=* — =any Decoder= rather than
   bare =Decoder=. Required by a future language mode anyway; six call sites.
+
+- *Four more upcoming-feature flags*, same reasoning as =EXISTENTIAL_ANY=: opt
+  into the next language mode's rules now, while the diff is small, rather than
+  all at once under time pressure. There is no Swift 7 language mode to select —
+  =swiftc= accepts only =4=, =4.2=, =5= and =6=, so =SWIFT_VERSION = 6.0= is
+  already the ceiling and these features are reachable only one flag at a time.
+
+  - =SWIFT_UPCOMING_FEATURE_INFER_ISOLATED_CONFORMANCES=
+  - =SWIFT_UPCOMING_FEATURE_INTERNAL_IMPORTS_BY_DEFAULT=
+  - =SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY=
+  - =ImmutableWeakCaptures=, via =OTHER_SWIFT_FLAGS=, because Xcode 27 exposes no
+    named build setting for this one.
+
+  Three were free. =MEMBER_IMPORT_VISIBILITY= found a real bug: =SettingsRoute=
+  declared =ObservableObject= and =@Published= while importing only =Foundation=,
+  so it was reaching Combine transitively through another module's import — it
+  compiled by luck, and would have broken if that module ever dropped Combine.
+  The fix is the explicit =import Combine= now at the top of the file.
+
+  Deliberately *not* enabled:
+
+  - =NonisolatedNonsendingByDefault= — changes which executor a =nonisolated
+    async= function runs on. It builds clean and the suite passes, but the suite
+    is 461 synchronous logic tests and cannot exercise actor hopping around
+    =EQProcessor.render=. Worth adopting on its own commit so a realtime
+    regression bisects to it.
+  - =SWIFT_STRICT_MEMORY_SAFETY= — 438 warnings, concentrated exactly where the
+    risk is: =AudioEngine= (61), =AudioDevices= (51), =BufferRouter= (26),
+    =EQProcessor= (24). With warnings-as-errors that is all-or-nothing, so it is
+    an annotation project, not a flag. Useful as a one-off audit of the render
+    path.
+
+  One feature is out of reach entirely: =Span= and =InlineArray= — the safe
+  buffer types this code would most benefit from — need a macOS 26 deployment
+  target (=SwiftSpanMinimumDeploymentTarget= in the SDK), against 14.2 here.
+  That is the standing cost of the support floor.
 
 - *=VALIDATE_PRODUCT = YES=* (Release only).
 
