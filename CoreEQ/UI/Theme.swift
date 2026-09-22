@@ -55,8 +55,9 @@ enum Theme {
     /// once it has an answer recorded and has stopped offering to ask, which is
     /// the only part left for the app.
     static let audioPermissionInstruction =
-        "Allow CoreEQ under Screen & System Audio Recording. It starts equalizing as "
-        + "soon as you come back."
+        "Allow CoreEQ under Screen & System Audio Recording. If CoreEQ is already listed, "
+        + "turn it off and on again — an update gives it a new signature and macOS keeps "
+        + "the old entry. It starts equalizing as soon as you come back."
 
     /// Every size and weight the app is allowed to use.
     ///
