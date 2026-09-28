@@ -4,11 +4,49 @@ import Testing
 
 @testable import CoreEQ
 
+/// A `UserDefaults` that lives only in memory.
+///
+/// A per-test `UserDefaults(suiteName:)` is the obvious isolation, but it leaks:
+/// cfprefsd persists each written suite to `~/Library/Preferences`
+/// asynchronously, and can flush it back to disk *after*
+/// `removePersistentDomain(forName:)` and even after the backing file has been
+/// deleted. Cleanup therefore cannot be made reliable — one empty plist per
+/// written suite is recreated every run. Keeping the store entirely in memory
+/// means there is never a plist to clean up.
+private final class InMemoryDefaults: UserDefaults {
+    private var storage: [String: Any] = [:]
+
+    override func object(forKey defaultName: String) -> Any? { storage[defaultName] }
+
+    override func string(forKey defaultName: String) -> String? {
+        storage[defaultName] as? String
+    }
+
+    override func array(forKey defaultName: String) -> [Any]? {
+        storage[defaultName] as? [Any]
+    }
+
+    override func data(forKey defaultName: String) -> Data? {
+        storage[defaultName] as? Data
+    }
+
+    override func set(_ value: Any?, forKey defaultName: String) {
+        if let value {
+            storage[defaultName] = value
+        } else {
+            storage.removeValue(forKey: defaultName)
+        }
+    }
+
+    override func removeObject(forKey defaultName: String) {
+        storage.removeValue(forKey: defaultName)
+    }
+}
+
 @MainActor
 struct ProfileManagerImportExportTests {
-    private func makeManager() -> (ProfileManager, UserDefaults) {
-        let name = "test.settings.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
+    private func makeManager() -> (manager: ProfileManager, defaults: UserDefaults) {
+        let defaults = InMemoryDefaults()
         let store = SettingsStore(defaults: defaults)
         let manager = ProfileManager(settings: store)
         return (manager, defaults)
@@ -16,7 +54,6 @@ struct ProfileManagerImportExportTests {
 
     @Test func importProfileFromTextCreatesAndActivatesUserPreset() throws {
         let (manager, defaults) = makeManager()
-        defer { defaults.removePersistentDomain(forName: defaults.description) }
 
         let text = """
             Preamp: -4.0 dB
@@ -40,8 +77,7 @@ struct ProfileManagerImportExportTests {
     }
 
     @Test func exportProfileToEqualizerAPOFormat() throws {
-        let (manager, defaults) = makeManager()
-        defer { defaults.removePersistentDomain(forName: defaults.description) }
+        let (manager, _) = makeManager()
 
         let text = """
             Preamp: -2.0 dB
@@ -55,8 +91,7 @@ struct ProfileManagerImportExportTests {
     }
 
     @Test func previewDoesNotPersistOrActivateUntilCommit() throws {
-        let (manager, defaults) = makeManager()
-        defer { defaults.removePersistentDomain(forName: defaults.description) }
+        let (manager, _) = makeManager()
         let original = manager.activeProfileName
         let preview = try manager.previewImport(
             from: "Preamp: -3.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00",
@@ -87,18 +122,49 @@ struct ProfileManagerImportExportTests {
     }
 
     @Test func importProfileFromURLCleansFilename() throws {
-        let (manager, defaults) = makeManager()
-        defer { defaults.removePersistentDomain(forName: defaults.description) }
+        let (manager, _) = makeManager()
 
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "ARTTI T10 ParametricEq.txt")
+        // A per-run directory keeps the file name unique for parallel runs while
+        // leaving the stem itself untouched, so what `cleanPresetName` sees is
+        // still "ARTTI T10 ParametricEq".
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let tempURL = directory.appendingPathComponent("ARTTI T10 ParametricEq.txt")
         let content = "Preamp: -2.99 dB\nFilter 1: ON LSC Fc 105.0 Hz Gain -1.9 dB Q 0.70\n"
         try content.write(to: tempURL, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let importedName = try manager.importProfile(from: tempURL)
         #expect(importedName == "ARTTI T10")
         #expect(manager.activeProfileName == "ARTTI T10")
         #expect(manager.currentPreamp == -2.99)
+    }
+
+    @Test func previewFilterCountExcludesLadderBands() throws {
+        let (manager, _) = makeManager()
+
+        let preview = try manager.previewImport(
+            from: "Preamp: -3.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00",
+            name: "Count Test")
+        #expect(preview.filterCount == 1)
+        #expect(preview.droppedFilterCount == 0)
+        #expect(preview.unparsedLines.isEmpty)
+    }
+
+    @Test func previewCarriesDroppedFiltersAndUnparsedLines() throws {
+        let (manager, _) = makeManager()
+
+        var lines = ["Preamp: -2.0 dB", "GraphicEQ: 10 -20 30"]
+        for i in 1...20 {
+            lines.append("Filter \(i): ON PK Fc \(100 * i) Hz Gain \(Double(i % 10)) dB Q 1.0")
+        }
+        let preview = try manager.previewImport(
+            from: lines.joined(separator: "\n"), name: "Trim Test")
+
+        #expect(preview.filterCount == BuiltInProfiles.maxFreeFilters)
+        #expect(preview.droppedFilterCount == 4)
+        #expect(preview.unparsedLines == ["GraphicEQ: 10 -20 30"])
     }
 }

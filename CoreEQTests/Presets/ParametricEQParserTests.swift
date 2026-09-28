@@ -101,6 +101,69 @@ struct ParametricEQParserTests {
         let result = try ParametricEQParser.parse(text: text)
         let freeFilters = result.filters.filter { !$0.isBand }
         #expect(freeFilters.count == BuiltInProfiles.maxFreeFilters)
+        #expect(result.droppedFilterCount == 25 - BuiltInProfiles.maxFreeFilters)
+    }
+
+    @Test func trimmingKeepsPassFiltersAndCountsDrops() throws {
+        var lines: [String] = []
+        lines.append("Filter 1: ON HP Fc 20 Hz Q 0.71")
+        lines.append("Filter 2: ON LP Fc 20000 Hz Q 0.71")
+        for i in 3...25 {
+            lines.append("Filter \(i): ON PK Fc \(100 * i) Hz Gain \(Double(i % 10)) dB Q 1.0")
+        }
+        let text = lines.joined(separator: "\n")
+
+        let result = try ParametricEQParser.parse(text: text)
+        let freeFilters = result.filters.filter { !$0.isBand }
+
+        #expect(freeFilters.count == BuiltInProfiles.maxFreeFilters)
+        #expect(result.droppedFilterCount == 25 - BuiltInProfiles.maxFreeFilters)
+        // Gain 0 means the old prominence sort dropped these first.
+        #expect(freeFilters.contains { $0.kind == .highPass })
+        #expect(freeFilters.contains { $0.kind == .lowPass })
+    }
+
+    @Test func capsPassFiltersAndReportsEveryDroppedFilter() throws {
+        let lines = (0..<(BuiltInProfiles.maxFreeFilters + 4)).map { index in
+            "Filter \(index + 1): ON HP Fc \(20 + index) Hz Q 0.71"
+        }
+        let result = try ParametricEQParser.parse(text: lines.joined(separator: "\n"))
+
+        #expect(result.filters.filter { !$0.isBand }.count == BuiltInProfiles.maxFreeFilters)
+        #expect(result.droppedFilterCount == 4)
+    }
+
+    @Test func coreEQJSONCapsFreeFiltersAndReportsDrops() throws {
+        let filters = (0..<(BuiltInProfiles.maxFreeFilters + 3)).map { index in
+            EQFilter(kind: .bell, frequency: 100 + Double(index), gain: Double(index), q: 1)
+        }
+        let profile = EQProfile(name: "Oversized", filters: filters)
+        let json = String(data: try JSONEncoder().encode(profile), encoding: .utf8)!
+
+        let result = try ParametricEQParser.parse(text: json)
+
+        #expect(result.filters.filter { !$0.isBand }.count == BuiltInProfiles.maxFreeFilters)
+        #expect(result.droppedFilterCount == 3)
+    }
+
+    @Test func collectsUnknownDirectiveLinesWithoutFailing() throws {
+        let text = """
+            Preamp: -2.0 dB
+            GraphicEQ: 10 -20 30
+            Convolution: filter.wav
+            Channel: L R
+            If: someCondition
+            Filter 1: ON PK Fc 1000 Hz Gain 3.0 dB Q 1.0
+            """
+
+        let result = try ParametricEQParser.parse(text: text)
+        #expect(result.filters.filter { !$0.isBand }.count == 1)
+        #expect(result.droppedFilterCount == 0)
+        #expect(result.unparsedLines.count == 4)
+        #expect(result.unparsedLines.contains("GraphicEQ: 10 -20 30"))
+        #expect(result.unparsedLines.contains("Convolution: filter.wav"))
+        #expect(result.unparsedLines.contains("Channel: L R"))
+        #expect(result.unparsedLines.contains("If: someCondition"))
     }
 
     @Test func rejectsEmptyOrInvalidText() {

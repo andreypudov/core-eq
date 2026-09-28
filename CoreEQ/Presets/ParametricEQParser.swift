@@ -39,6 +39,15 @@ enum ParametricEQParser {
         var preamp: Double
         var autoGain: Bool
         var filters: [EQFilter]
+
+        /// How many free filters exceed `BuiltInProfiles.maxFreeFilters` and were
+        /// trimmed away. Zero when everything parsed fits.
+        var droppedFilterCount: Int = 0
+
+        /// Non-comment lines that are neither a Preamp nor a parsed Filter
+        /// declaration — for example `GraphicEQ:`, `Convolution:`, or `Channel:`.
+        /// Kept for the caller to report; they are informational, never fatal.
+        var unparsedLines: [String] = []
     }
 
     /// Parses text content in EqualizerAPO or `.coreeq` JSON format.
@@ -52,16 +61,21 @@ enum ParametricEQParser {
             let data = trimmed.data(using: .utf8),
             let profile = try? JSONDecoder().decode(EQProfile.self, from: data)
         {
+            let (freeFilters, droppedFilterCount) = trimFreeFilters(
+                profile.filters.filter { !$0.isBand })
+            let bands = profile.filters.filter { $0.isBand }
             return ParsedPreset(
                 name: profile.name.isEmpty ? defaultName : profile.name,
                 preamp: profile.preamp.clamped(to: BuiltInProfiles.preampRange),
                 autoGain: profile.autoGain,
-                filters: FilterChain.normalized(profile.filters)
+                filters: FilterChain.normalized(bands + freeFilters),
+                droppedFilterCount: droppedFilterCount
             )
         }
 
         var preamp: Double = 0
         var rawFilters: [EQFilter] = []
+        var unparsedLines: [String] = []
         var foundAnyDirective = false
 
         let lines = trimmed.components(separatedBy: .newlines)
@@ -86,6 +100,11 @@ enum ParametricEQParser {
                 foundAnyDirective = true
             } else if isFilterDeclaration(lineTrimmed) {
                 throw ParseError.unsupportedFilterDeclaration
+            } else {
+                // Something we do not model — `GraphicEQ:`, `Convolution:`,
+                // `Channel:`, `If:` and the like. Line-level, informational, and
+                // not a reason to reject the whole preset; the caller reports it.
+                unparsedLines.append(lineTrimmed)
             }
         }
 
@@ -96,27 +115,45 @@ enum ParametricEQParser {
         // Clamp preamp and normalize filters
         let clampedPreamp = preamp.clamped(to: BuiltInProfiles.preampRange)
 
-        // If imported filters exceed maxFreeFilters, retain the most prominent filters.
-        var freeFilters = rawFilters.filter { !$0.isBand }
-        if freeFilters.count > BuiltInProfiles.maxFreeFilters {
-            // Sort by absolute gain (for gain-bearing filters) to preserve primary corrective shapes
-            let sortedIndices = freeFilters.indices.sorted {
-                abs(freeFilters[$0].gain) > abs(freeFilters[$1].gain)
-            }
-            let keptIndices = Set(sortedIndices.prefix(BuiltInProfiles.maxFreeFilters))
-            freeFilters = freeFilters.indices.filter { keptIndices.contains($0) }.map {
-                freeFilters[$0]
-            }
-        }
+        let (freeFilters, droppedFilterCount) = trimFreeFilters(rawFilters.filter { !$0.isBand })
 
         let combined = FilterChain.normalized(freeFilters)
 
         return ParsedPreset(
             name: defaultName,
             preamp: clampedPreamp,
-            autoGain: false,  // Imported presets with explicit preamps disable autoGain by default
-            filters: combined
+            // Text presets carry their trim on the Preamp line (or 0 dB when the
+            // line is absent), so the computed trim starts off in both cases.
+            autoGain: false,
+            filters: combined,
+            droppedFilterCount: droppedFilterCount,
+            unparsedLines: unparsedLines
         )
+    }
+
+    /// Keeps pass filters first up to the hard cap, then fills the remaining
+    /// budget with the strongest gain-bearing filters while retaining source order.
+    private static func trimFreeFilters(
+        _ filters: [EQFilter]
+    ) -> (
+        filters: [EQFilter],
+        dropped: Int
+    ) {
+        guard filters.count > BuiltInProfiles.maxFreeFilters else { return (filters, 0) }
+
+        let passIndices = filters.indices.filter {
+            filters[$0].kind == .highPass || filters[$0].kind == .lowPass
+        }
+        let keptPassIndices = Array(passIndices.prefix(BuiltInProfiles.maxFreeFilters))
+        let remaining = BuiltInProfiles.maxFreeFilters - keptPassIndices.count
+        let passSet = Set(passIndices)
+        let gainBearingIndices = filters.indices.filter { !passSet.contains($0) }
+        let strongest = gainBearingIndices.sorted {
+            abs(filters[$0].gain) > abs(filters[$1].gain)
+        }.prefix(remaining)
+        let keptIndices = Set(keptPassIndices).union(strongest)
+        let keptFilters = filters.indices.filter { keptIndices.contains($0) }.map { filters[$0] }
+        return (keptFilters, filters.count - keptIndices.count)
     }
 
     private static func isFilterDeclaration(_ line: String) -> Bool {

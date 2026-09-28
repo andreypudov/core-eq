@@ -132,8 +132,7 @@ struct EqualizerSidebarView: View {
             Button("Cancel", role: .cancel) { pendingImport = nil }
         } message: {
             if let preview = pendingImport {
-                let preamp = String(format: "%.1f", preview.preamp)
-                Text("\(preview.name)\n\(preview.filterCount) filters\nPreamp: \(preamp) dB")
+                Text(importConfirmationMessage(for: preview))
             }
         }
         .alert(
@@ -153,23 +152,21 @@ struct EqualizerSidebarView: View {
         .onChange(of: profileManager.profileAwaitingRename) { _, name in
             if let name { renameText = name }
         }
+        // ⌘V offers the clipboard import, but only when no text editor holds
+        // the focus — a hidden `keyboardShortcut` here used to swallow ⌘V for
+        // the whole window. See `ClipboardPasteCommand`.
         .background {
-            Button("") {
-                guard let text = NSPasteboard.general.string(forType: .string) else {
-                    importErrorMessage = "No valid EqualizerAPO preset found on clipboard."
-                    return
-                }
-                do {
-                    pendingImport = try profileManager.previewImport(
-                        from: text, name: "Pasted Preset")
-                } catch {
-                    importErrorMessage = error.localizedDescription
-                }
+            ClipboardPasteCommand(isEnabled: !isPresentingModal) {
+                previewClipboard()
             }
-            .keyboardShortcut("v", modifiers: .command)
-            .opacity(0)
-            .allowsHitTesting(false)
         }
+    }
+
+    /// True while a dialog or sheet is up, so ⌘V cannot open a second one behind
+    /// it.
+    private var isPresentingModal: Bool {
+        pendingImport != nil || deletionCandidate != nil || importErrorMessage != nil
+            || exportErrorMessage != nil || showingAutoEQGuide
     }
 
     /// App mark and name — an identity block that is also the way into About.
@@ -365,21 +362,16 @@ struct EqualizerSidebarView: View {
         return .clear
     }
 
-    /// Every preset action, on the row's context menu.
+    /// The actions that belong to one preset, on its row's context menu.
     ///
-    /// With no action bar under the list this menu is the only route to
-    /// creating and deleting presets, so "New Preset" leads it rather than
-    /// living on a `+` button.
+    /// Creating, importing, and pasting live in the action bar beneath the list,
+    /// which is where they act on the library rather than on a row; a right
+    /// click on a preset is about that preset, so this menu holds only what
+    /// reads or writes it.
     @ViewBuilder
     private func presetActions(for name: String) -> some View {
         let isEditable = profileManager.canEditProfile(named: name)
         let isActive = name == profileManager.activeProfileName
-
-        Button("New Preset") {
-            profileManager.addProfile(filters: profileManager.currentFilters)
-        }
-
-        Divider()
 
         Button("Rename…") { profileManager.beginRename(of: name) }
             .disabled(!isEditable)
@@ -403,18 +395,6 @@ struct EqualizerSidebarView: View {
             Button("CoreEQ Native (.coreeq)…") {
                 showExportDialog(for: name, format: .coreEQJSON)
             }
-        }
-
-        Button("Import Preset…") {
-            showImportDialog()
-        }
-
-        Button("Paste Preset from Clipboard") {
-            previewClipboard()
-        }
-
-        Button("Open autoeq.app Web Optimizer…") {
-            showingAutoEQGuide = true
         }
 
         Divider()
@@ -603,10 +583,13 @@ struct EqualizerSidebarView: View {
                     showImportDialog()
                 }
 
+                // No key equivalent here: ⌘V is owned by `ClipboardPasteCommand`
+                // so that it can defer to text editing. The hint lives in the
+                // tooltip instead.
                 Button("Paste Preset from Clipboard") {
                     previewClipboard()
                 }
-                .keyboardShortcut("v", modifiers: .command)
+                .help("Paste a preset from the clipboard (⌘V)")
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "plus")
@@ -642,6 +625,54 @@ struct EqualizerSidebarView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+    }
+
+    // MARK: - Import confirmation
+
+    /// The body of the "Import Preset?" dialog: what was brought in, then any
+    /// content the parser could not keep.
+    ///
+    /// Composed as one newline-separated string because a macOS alert shows a
+    /// single informative text, not a stack of views. Warnings state what
+    /// happened and nothing more — the import still succeeds, so the tone stays
+    /// informational and the Import button stays the obvious next step.
+    private func importConfirmationMessage(for preview: ProfileManager.ImportPreview) -> String {
+        var lines = [
+            preview.name,
+            "\(preview.filterCount) \(preview.filterCount == 1 ? "filter" : "filters")",
+            String(format: "Preamp: %.1f dB", preview.preamp),
+        ]
+
+        if preview.droppedFilterCount > 0 {
+            let subject = preview.droppedFilterCount == 1 ? "filter was" : "filters were"
+            lines.append("")
+            lines.append(
+                "\(preview.droppedFilterCount) \(subject) dropped to fit CoreEQ’s "
+                    + "\(BuiltInProfiles.maxFreeFilters)-filter limit.")
+        }
+
+        if !preview.unparsedLines.isEmpty {
+            let total = preview.unparsedLines.count
+            lines.append("")
+            lines.append(total == 1 ? "1 line was skipped:" : "\(total) lines were skipped:")
+            for line in preview.unparsedLines.prefix(3) {
+                lines.append(clippedLine(line))
+            }
+            if total > 3 {
+                lines.append("… and \(total - 3) more")
+            }
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    /// Clips a skipped line to keep the alert a dialog rather than a wall of
+    /// text. The head is what identifies the line; the tail is the parameters
+    /// the parser could not model anyway.
+    private func clippedLine(_ line: String, limit: Int = 56) -> String {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count > limit else { return trimmed }
+        return String(trimmed.prefix(limit - 1)) + "…"
     }
 
     // MARK: - Bindings

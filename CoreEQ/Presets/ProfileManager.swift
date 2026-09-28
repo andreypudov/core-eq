@@ -338,6 +338,11 @@ final class ProfileManager: ObservableObject {
         let name: String
         let filterCount: Int
         let preamp: Double
+        /// Free filters trimmed to fit `BuiltInProfiles.maxFreeFilters`.
+        let droppedFilterCount: Int
+        /// Lines the parser could not model (`GraphicEQ:`, `Convolution:`, …).
+        /// Informational only — the import still succeeds.
+        let unparsedLines: [String]
         fileprivate let parsed: ParametricEQParser.ParsedPreset
     }
 
@@ -345,7 +350,14 @@ final class ProfileManager: ObservableObject {
         let parsed = try ParametricEQParser.parse(
             text: text, defaultName: name ?? "Imported Preset")
         return ImportPreview(
-            name: parsed.name, filterCount: parsed.filters.count, preamp: parsed.preamp,
+            name: parsed.name,
+            // `parsed.filters` always begins with the eleven ladder bands, so the
+            // raw count would read "12 filters" for a single-filter import. Count
+            // what the user actually brought in.
+            filterCount: parsed.filters.filter { !$0.isBand }.count,
+            preamp: parsed.preamp,
+            droppedFilterCount: parsed.droppedFilterCount,
+            unparsedLines: parsed.unparsedLines,
             parsed: parsed)
     }
 
