@@ -104,9 +104,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // clicking the switch in the menu left the icon unchanged until the menu
         // closed, which is precisely when nobody is looking at it.
         audioEngine.$isEnabled
-            .combineLatest(audioEngine.$status)
-            .sink { [weak self] isEnabled, status in
-                self?.applyStatusIcon(for: .init(status: status, isEnabled: isEnabled))
+            .combineLatest(audioEngine.$status, audioEngine.$isPausedForRecording)
+            .sink { [weak self] isEnabled, status, isPausedForRecording in
+                self?.applyStatusIcon(
+                    for: .init(
+                        status: status, isEnabled: isEnabled,
+                        isPausedForRecording: isPausedForRecording))
             }
             .store(in: &cancellables)
     }
@@ -123,6 +126,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(headerItem())
         if let failure = engineFailureItem() {
             menu.addItem(failure)
+        } else if let pause = recordingPauseItem() {
+            menu.addItem(pause)
         }
         menu.addItem(.separator())
 
@@ -209,9 +214,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private enum StatusIcon {
         case shaping
         case off
+        /// Stepped aside for a recording. Drawn as off, because the sound is
+        /// not being shaped, but named apart so the tooltip says why.
+        case paused
         case unavailable
 
-        /// Two images for three states.
+        /// Two images for four states.
         ///
         /// "Is my audio being shaped" is the only question an icon this size can
         /// answer, and switched-off and cannot-run give it the same answer; why
@@ -222,7 +230,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         var resourceName: String {
             switch self {
             case .shaping: return "MenuBarIconTemplate"
-            case .off, .unavailable: return "MenuBarIconSlashTemplate"
+            case .off, .paused, .unavailable: return "MenuBarIconSlashTemplate"
             }
         }
 
@@ -233,6 +241,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             switch self {
             case .shaping: return "CoreEQ"
             case .off: return "CoreEQ, equalizer off"
+            case .paused: return "CoreEQ, \(Theme.recordingPauseTitle.lowercased())"
             case .unavailable: return "CoreEQ, not processing audio"
             }
         }
@@ -243,16 +252,20 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private struct EngineState {
         let status: AudioEngine.Status
         let isEnabled: Bool
+        let isPausedForRecording: Bool
 
         var icon: StatusIcon {
             guard AudioEngine.canProcess(status: status) else { return .unavailable }
-            return AudioEngine.isProcessing(status: status, isEnabled: isEnabled)
-                ? .shaping : .off
+            guard isEnabled else { return .off }
+            return isPausedForRecording ? .paused : .shaping
         }
     }
 
     private func updateStatusItemIcon() {
-        applyStatusIcon(for: .init(status: audioEngine.status, isEnabled: audioEngine.isEnabled))
+        applyStatusIcon(
+            for: .init(
+                status: audioEngine.status, isEnabled: audioEngine.isEnabled,
+                isPausedForRecording: audioEngine.isPausedForRecording))
     }
 
     private func applyStatusIcon(for state: EngineState) {
@@ -294,6 +307,20 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
         item.toolTip = audioEngine.status.description
+        return item
+    }
+
+    /// The pause for a recording, in the four words a menu row can hold. The
+    /// full sentence is its tooltip and the main window's card; the row leads
+    /// to the setting that controls it.
+    private func recordingPauseItem() -> NSMenuItem? {
+        guard audioEngine.isPausedForRecording else { return nil }
+        let item = NSMenuItem(
+            title: Theme.recordingPauseTitle, action: #selector(openPermission), keyEquivalent: "")
+        item.target = self
+        item.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
+        item.toolTip = Theme.recordingPauseExplanation
         return item
     }
 

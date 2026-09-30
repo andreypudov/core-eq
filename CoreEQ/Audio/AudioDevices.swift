@@ -336,7 +336,16 @@ enum AudioDevices {
     /// A tap that delivers nothing proves nothing on its own — silence is what
     /// silence sounds like. A tap that delivers nothing *while something else is
     /// playing* is a tap that is not receiving.
-    static func isAnyProcessPlayingOutput(excluding excluded: AudioObjectID) -> Bool {
+    ///
+    /// `ignoringCapturing` leaves out processes that are also capturing input —
+    /// recorders and call apps. Those can hold output open while sending
+    /// nothing: measured, QuickTime recording shows as running output, and
+    /// CoreEQ launched beside it read its silence as a refused permission. For
+    /// the permission verdict that is the right trade, because leaving one out
+    /// only makes the verdict wait, never wrong.
+    static func isAnyProcessPlayingOutput(
+        excluding excluded: AudioObjectID, ignoringCapturing: Bool = false
+    ) -> Bool {
         var listAddress = address(kAudioHardwarePropertyProcessObjectList)
         var dataSize: UInt32 = 0
         guard
@@ -357,13 +366,70 @@ enum AudioDevices {
             var runningAddress = address(kAudioProcessPropertyIsRunningOutput)
             var isRunning: UInt32 = 0
             var size = UInt32(MemoryLayout<UInt32>.size)
-            if AudioObjectGetPropertyData(process, &runningAddress, 0, nil, &size, &isRunning)
-                == noErr, isRunning != 0
-            {
-                return true
+            guard
+                AudioObjectGetPropertyData(process, &runningAddress, 0, nil, &size, &isRunning)
+                    == noErr, isRunning != 0
+            else { continue }
+            if ignoringCapturing {
+                var inputAddress = address(kAudioProcessPropertyIsRunningInput)
+                var isCapturing: UInt32 = 0
+                size = UInt32(MemoryLayout<UInt32>.size)
+                if AudioObjectGetPropertyData(process, &inputAddress, 0, nil, &size, &isCapturing)
+                    == noErr, isCapturing != 0
+                {
+                    continue
+                }
             }
+            return true
         }
         return false
+    }
+
+    /// Every audio process, as much as `RecordingDetection` needs to know.
+    ///
+    /// Measured at 14 ms a pass (40 ms at worst) across about 26 processes,
+    /// which is why the engine runs it off the main thread. The input device
+    /// list is read only for processes that are capturing, which is few.
+    static func recordingSnapshot() -> [RecordingDetection.Process] {
+        var listAddress = address(kAudioHardwarePropertyProcessObjectList)
+        var dataSize: UInt32 = 0
+        guard
+            AudioObjectGetPropertyDataSize(
+                AudioObjectID(kAudioObjectSystemObject), &listAddress, 0, nil, &dataSize) == noErr,
+            dataSize > 0
+        else { return [] }
+
+        var processes = [AudioObjectID](
+            repeating: 0, count: Int(dataSize) / MemoryLayout<AudioObjectID>.size)
+        guard
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject), &listAddress, 0, nil, &dataSize,
+                &processes) == noErr
+        else { return [] }
+
+        return processes.compactMap { process in
+            var inputAddress = address(kAudioProcessPropertyIsRunningInput)
+            var isRunningInput: UInt32 = 0
+            var size = UInt32(MemoryLayout<UInt32>.size)
+            guard
+                AudioObjectGetPropertyData(process, &inputAddress, 0, nil, &size, &isRunningInput)
+                    == noErr, isRunningInput != 0
+            else { return nil }
+
+            var pidAddress = address(kAudioProcessPropertyPID)
+            var pid: Int32 = -1
+            size = UInt32(MemoryLayout<Int32>.size)
+            AudioObjectGetPropertyData(process, &pidAddress, 0, nil, &size, &pid)
+
+            var devicesAddress = address(
+                kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput)
+            var devicesSize: UInt32 = 0
+            AudioObjectGetPropertyDataSize(process, &devicesAddress, 0, nil, &devicesSize)
+
+            return RecordingDetection.Process(
+                pid: pid, isRunningInput: true,
+                inputDeviceCount: Int(devicesSize) / MemoryLayout<AudioObjectID>.size)
+        }
     }
 
     static func name(of deviceID: AudioDeviceID) -> String? {
@@ -469,6 +535,16 @@ enum AudioDevices {
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value)
         guard status == noErr else { return kAudioDeviceTransportTypeUnknown }
         return value
+    }
+
+    /// CoreEQ's own aggregate devices that exist right now.
+    ///
+    /// One while the engine runs, none while it is stopped. More than one is a
+    /// leak: two paths rendering the same audio, which is one way an echo could
+    /// happen. Visible here because the aggregates are private to this process,
+    /// and this process is the one asking.
+    static func coreEQAggregateCount() -> Int {
+        allDeviceIDs().filter(isCoreEQAggregate).count
     }
 
     private static func isCoreEQAggregate(_ deviceID: AudioDeviceID) -> Bool {

@@ -310,6 +310,36 @@ struct DiagnosticsReportTests {
         #expect(report.contains("4 min ago"))
     }
 
+    /// One aggregate is the engine; a second is a path left behind, and two
+    /// paths render the same audio twice — one way the echo could arise.
+    /// Said even with idling switched off, because the pause has its own
+    /// setting and happens regardless.
+    @Test func aPauseForARecordingIsNamed() {
+        var paused = engine()
+        paused.idling = DiagnosticsReport.Idling(
+            isIdle: true, isPausedForRecording: true, isEnabled: false)
+        #expect(
+            text(engine: paused).contains(
+                "idling:          YES — paused while a recording captures system audio"))
+    }
+
+    @Test func aSecondAudioPathIsCalledOut() {
+        var single = engine()
+        single.aggregatesAlive = 1
+        let one = text(engine: single)
+        #expect(one.contains("audio paths:     1 CoreEQ aggregate(s) alive"))
+        #expect(!one.contains("processed twice"))
+
+        var leaked = engine()
+        leaked.aggregatesAlive = 2
+        #expect(
+            text(engine: leaked).contains("NOTE: more than one — audio may be processed twice."))
+    }
+
+    @Test func anUncountedEngineSaysNothingAboutAudioPaths() {
+        #expect(!text(engine: engine()).contains("audio paths:"))
+    }
+
     /// Durations are rounded to the unit a reader thinks in, and every case here
     /// is a boundary where the wrong choice reads absurdly. The 3_599 one is the
     /// reason minutes are tested after rounding rather than before: it used to

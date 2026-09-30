@@ -113,23 +113,76 @@ was observed accidentally. While verifying the multichannel work, a test harness
 tapped system audio and wrote its own output back to the same device without
 excluding itself from the tap. It captured what it had just written, and the
 level compounded across the run — a 0.4 peak measured 1.56, then 26, then 71.
-=AudioEngine= excludes its own process for exactly this reason. Two taps in one
-path, one of them playing back what the other captures, is the same shape, and
-that is what a capture tool and CoreEQ are doing to each other.
+=AudioEngine= excludes its own process for exactly this reason — and since
+<2026-09-30 Wed> refuses to build a tap at all when it cannot identify that
+process, rather than building one that hears itself. The lookup used to fail
+silently: Core Audio answers an unknown process with success and object 0, and
+excluding object 0 excludes nothing.
 
-Three things to do:
+*Measured: screen capture is not feedback, it is two copies.* A probe recorded
+system audio through ScreenCaptureKit, the API screen recorders use, while
+=afplay= played eight clicks, and counted how many times each click arrived:
+
+| CoreEQ                 | Arrivals per click | Second copy         |
+|------------------------+--------------------+---------------------|
+| quit                   | 1                  | —                   |
+| on, a headphone preset | 2                  | +27.6 ms, ⅓ level   |
+| on, Flat               | 2                  | +27.2 ms, 80% level |
+| switched off           | 1                  | —                   |
+
+The recorder captures each application's audio before CoreEQ's tap mutes it at
+the device, and it also captures CoreEQ's own output — the same audio,
+equalized, 27 ms later. Two copies that close together are heard as comb
+filtering, which is the “Doppler echo” in the reports. Flat is the worst case:
+the copy is nearly as loud as the original. Nothing loops and nothing
+compounds, so this is not the feedback shape above, and the recordings did not
+fail — they doubled. It is structural: any ScreenCaptureKit recorder sees it.
+
+Switching CoreEQ off removes it, measured, because off stops the IO proc and
+releases the mute. Leaving CoreEQ out of a recorder's own audio sources, where
+the recorder allows that, should give a clean but unequalized recording; that
+one is not measured.
+
+What is left:
 
 - Audit the teardown and rebuild path around sleep, wake, and device changes,
-  and confirm exactly one IO proc is ever running. The report now names how many
-  restarts a session has had, why the last one happened, and how long ago, so a
-  report filed alongside an echo says whether a state change preceded it — the
-  wake-from-sleep case is a restart by definition.
-- Reproduce against a screen capture tool. Capture tools take their own tap of
-  the system audio, so CoreEQ's global tap and theirs are interacting.
-  “Every capture tool fails” makes this a real conflict, not a quirk of one app.
-- When a second system-audio tool genuinely is present, detect it and say so
-  plainly in the UI rather than leaving the user to work out why their audio
-  sounds doubled.
+  and confirm exactly one IO proc is ever running. The report names how many
+  restarts a session has had, why the last one happened, and how long ago, and
+  since <2026-09-30 Wed> how many CoreEQ aggregates are alive — more than one is
+  two paths rendering the same audio. On the development machine it reads one,
+  including across the rebuild that follows proving the tap. The wake case
+  itself is still to be reproduced.
+- Detect a recording in progress and say so plainly, rather than leaving the
+  user to work out why their recording sounds doubled — or step aside for its
+  duration.
+
+  It can be detected, from Core Audio alone and with no extra permission. A
+  process that is capturing input but whose input devices include no real
+  device is reading a tap, which means system audio. Measured on
+  <2026-09-30 Wed>: while ScreenCaptureKit captured system audio, =replayd=
+  (the system service that does the capturing for every ScreenCaptureKit
+  recorder) showed as running input with no input device, from the moment the
+  capture started to the moment it stopped, and at no other time. Audacity and
+  QuickTime recording the microphone showed as running input *from the MacBook
+  Pro Microphone*, and are correctly left alone. The engine already listens to
+  the process list for idling, so this is one more property on the same
+  mechanism.
+
+  A screen recording *without* audio does not make =replayd= run input —
+  measured, a video-only capture of 248 frames left CoreEQ processing — so
+  silent screencasts are left alone. Recorders that loop audio through a
+  virtual device (BlackHole, Loopback) read from a device like any microphone,
+  and this rule does not see them.
+
+  Built: *Pause while recording system audio*, in Settings → General and on by
+  default. CoreEQ steps aside the way idling does, without touching the on/off
+  switch, says so on the graph and in the menu, and comes back when the
+  recording stops. Core Audio sends no notification when a process starts
+  capturing, so it is polled — on a background queue, since a sweep costs
+  14 ms and up to 40, and only while CoreEQ is rendering or paused. Measured
+  end to end, the recording came out clean; the pause landed 1.25 s after
+  CoreEQ resumed, so the first second or so of a recording can still carry the
+  doubled sound.
 
 ** Documentation that answers the repeated questions
 
@@ -240,12 +293,10 @@ Two things to decide, both smaller than the questions above:
 - Whether an excluded app is visible as excluded outside the settings pane, so
   that “CoreEQ is doing nothing to this app” is shown rather than remembered.
 
-Worth testing while this is built: whether excluding a screen capture tool
-relieves the doubling under *Echo and doubled audio*. The mechanism described
-there is one tool playing back what the other captures; if CoreEQ is not
-capturing the capture tool, that loop cannot close on CoreEQ's side. A
-hypothesis, not a fix — the conflict may live entirely in the other tool's tap —
-but cheap to check once an exclusion list exists.
+Not a cure for the doubled screen recordings under *Echo and doubled audio*,
+which this section once hoped it might be. That was measured and is not a loop
+through CoreEQ's tap: the recorder hears the original and CoreEQ's copy, and
+excluding the recorder from CoreEQ changes neither.
 
 * Later — worth doing, not yet scheduled
 

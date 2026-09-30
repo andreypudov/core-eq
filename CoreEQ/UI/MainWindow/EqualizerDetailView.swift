@@ -64,6 +64,8 @@ struct EqualizerDetailView: View {
                         permissionOverlay
                     } else if let failure = engineFailure {
                         engineOverlay(failure)
+                    } else if audioEngine.isPausedForRecording {
+                        recordingOverlay
                     }
                 }
 
@@ -694,6 +696,47 @@ struct EqualizerDetailView: View {
             }
             .controlSize(.small)
             .help("Open the diagnostics report")
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(maxWidth: 320)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.primary.opacity(0.12))
+        )
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+        .accessibilityElement(children: .combine)
+        .transition(.opacity)
+    }
+
+    /// Why the curve is dimmed while a recording runs: the one pause the user
+    /// did not ask for in the moment, so the one that has to explain itself.
+    ///
+    /// Same card, same place as a failure — it is the same kind of news, that
+    /// the sound is not being equalized — but not a warning. Nothing is wrong,
+    /// and it ends by itself. The button leads to the setting, for someone who
+    /// would rather keep their EQ.
+    private var recordingOverlay: some View {
+        VStack(spacing: 8) {
+            Label(Theme.recordingPauseTitle, systemImage: "record.circle")
+                .font(Theme.Font.heading)
+                .foregroundStyle(.primary)
+
+            Text(Theme.recordingPauseExplanation)
+                .font(Theme.Font.label)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button("Settings…") {
+                SettingsOpener.shared.open(tab: .general)
+            }
+            .controlSize(.small)
+            .help("Choose whether CoreEQ pauses while recording")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)

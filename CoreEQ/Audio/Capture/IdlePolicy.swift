@@ -47,6 +47,8 @@ enum IdlePolicy {
     ///   - isAudioStarting: whether something has just announced itself as about
     ///     to use audio, which arrives slightly before it plays.
     ///   - isRecovering: whether the last attempt to build the path failed.
+    ///   - stepsAsideForRecording: whether a recording is capturing system audio
+    ///     and the user wants CoreEQ out of its way. See `RecordingDetection`.
     ///   - idleAfter: the silence that counts as nothing playing.
     /// - Returns: what to do.
     static func evaluate(
@@ -58,6 +60,7 @@ enum IdlePolicy {
         pausesWhenSilent: Bool,
         isAudioStarting: Bool = false,
         isRecovering: Bool = false,
+        stepsAsideForRecording: Bool = false,
         idleAfter: TimeInterval = idleAfter
     ) -> Verdict {
         // A path that cannot be built is not a path that should be built twice a
@@ -67,6 +70,22 @@ enum IdlePolicy {
         // engine refuses would be retried at the poll interval forever, which is
         // the same fault as a retry loop with no ceiling.
         guard !isRecovering else { return isRunning ? .keepRunning : .stayIdle }
+
+        // A recording is capturing system audio, and while CoreEQ renders it
+        // hears every sound twice. Stepping aside is what switching off does —
+        // measured clean — without touching the switch, so the equalizer comes
+        // back by itself when the recording stops.
+        //
+        // Ahead of `pausesWhenSilent` because it has its own setting: turning
+        // off idling is a workaround for idling going wrong, and should not
+        // quietly take this with it. Not before the tap is proven, though. An
+        // unproven tap is not muting and the render path writes nothing, so
+        // there is no second copy to remove, and idling would tear down the
+        // path that proving needs.
+        if stepsAsideForRecording {
+            if !isRunning { return .stayIdle }
+            if isCaptureProven { return .goIdle }
+        }
 
         // The escape hatch, and the first thing checked. Every silent-Mac defect
         // in this app's history had no workaround from inside the app; this one

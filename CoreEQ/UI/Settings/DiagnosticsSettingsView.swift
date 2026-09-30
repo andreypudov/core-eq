@@ -121,6 +121,7 @@ struct DiagnosticsSettingsView: View {
         snapshot.restarts = EngineStatusBridge.shared.restarts
         snapshot.level = EngineStatusBridge.shared.level
         snapshot.idling = EngineStatusBridge.shared.idling
+        snapshot.aggregatesAlive = AudioDevices.coreEQAggregateCount()
         return snapshot
     }
 
