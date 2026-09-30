@@ -13,6 +13,50 @@ Mac with every layer of the app reporting that it worked. A fix is easy to
 summarise; how something managed to look healthy while producing no sound is the
 part worth having written down.
 
+* 1.9 — Open the preset format
+
+Not yet released.
+
+** A sample rate change left the sound chopped
+
+Reported in #27 against a Universal Audio Volt 476P: a DAW opening a session at
+another rate, or a player such as Qobuz that switches the device to each
+track's rate, left CoreEQ's output glitchy and chopped until the app was
+restarted or the output switched away and back.
+
+Reproduced on a MacBook Pro's own speakers, with no DAW and no interface:
+switching them from 44.1 to 48 kHz under running music was enough. What made it
+worth writing down is what the engine reported while it happened. The aggregate
+followed the device and announced the new rate, the filters were retuned to it,
+and the rate trace saw no window in which the two disagreed. By every measure
+the engine had, it had followed the change. The sound was broken regardless,
+and set back to 44.1 kHz it was fine again. Part of the path is fixed when it is
+built, and retuning filters does not reach it; building the path again does,
+which is why both workarounds in the report worked.
+
+BlackHole does not reproduce it. Switched the same way, the old engine survived
+the change on a virtual device, so =make audio-test= cannot catch this defect;
+its new rate check guards the fix instead.
+
+The first fix rebuilt the path 0.3 s after the first rate notification, and the
+rate change it answered was followed by coreaudiod not answering for minutes —
+with no CoreEQ left running, and no way to restart the service under System
+Integrity Protection, so the Mac had to be restarted. Two CoreEQs were running
+at the time, which is why the cause is not proven. A rate change is not one
+event: the device renegotiates, the aggregate follows, and both notify.
+Tearing devices down and creating them in the middle of that is the likeliest
+trigger, and the fix below does not do it.
+
+*Fixed.* CoreEQ watches the output device's rate as well as its aggregate's.
+Any notification starts a one-second quiet period that the next one restarts;
+when it ends, the rate is read twice, a quarter of a second apart, and the path
+is rebuilt only if the two readings agree and differ from the rate it was built
+at. Measured by ear on the speakers: 48 to 44.1 kHz and back each gave one
+rebuild about a second after the change and clean playback, a round trip
+through 44.1 kHz in 0.3 s gave none and stayed clean, and coreaudiod answered
+throughout. The diagnostics report names the change, as in =sample rate changed
+from 48000 to 44100 Hz=.
+
 * 1.8 — Make it work everywhere it claims to
 
 Released <2026-09-20 Sun>.
