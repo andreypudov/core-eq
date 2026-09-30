@@ -1,0 +1,58 @@
+#+TITLE: CoreEQ 1.9 — Open the preset format
+#+AUTHOR: Andrey Pudov
+#+DATE: <2026-09-30 Wed>
+#+OPTIONS: toc:nil num:nil
+
+The most requested feature, by a clear margin, was loading an AutoEQ or
+EqualizerAPO profile — asked for as AutoEQ, EqualizerAPO, Wavelet, and “EQ txt
+files”, which are all the same file. 1.9 reads it and writes it. It also answers
+the screen recordings that came out with an echo, and a sample rate change that
+left the sound chopped until CoreEQ was restarted.
+
+* New
+
+- *Import and export.* EqualizerAPO and AutoEQ text, and CoreEQ's own =.coreeq=,
+  from the =+= under the preset list, by pasting with =⌘V=, or by dropping a file
+  on the list. Every import shows what it found first, including anything
+  dropped to fit sixteen filters, adjusted to fit CoreEQ's limits, or skipped.
+  UTF-8, UTF-16, and Windows-1252 files all read. Export is on a preset's
+  context menu, and exporting the preset you are listening to writes what you
+  hear. A real AutoEQ profile, the Sennheiser HD 600, matches the response
+  AutoEQ publishes for it within 0.064 dB, and what CoreEQ writes reloads
+  identically. Contributed by Sebastian Ullrich.
+- *An AutoEQ guide.* The AutoEQ button beside the =+= walks through getting a
+  correction for your headphones from autoeq.app.
+- *Pause while recording system audio.* A screen recording captures each app's
+  sound and CoreEQ's equalized copy 27 ms later, which sounds like an echo.
+  CoreEQ now steps aside while such a recording runs, says so, and comes back
+  when it stops. On by default, in Settings → General. Microphone recordings
+  are left alone.
+- *Preset descriptions.* Rest the pointer on a built-in preset, in the sidebar
+  or the menu, for a line on what it is for.
+
+* Fixed
+
+- *A sample rate change left the sound chopped* (#27). A DAW or a player such as
+  Qobuz switching the output's rate left CoreEQ glitching until a restart. It
+  now rebuilds its audio path once the new rate has settled.
+- *The menu's switch looked the same on and off* (#26). It is now drawn in your
+  accent colour when on.
+- *Starting during a recording could claim the permission was refused.* A
+  recorder holding the output open read as audio CoreEQ should have heard.
+- *A tap could be built that heard CoreEQ itself*, when its own audio process
+  could not be identified. It now waits and retries instead.
+
+* Notes
+
+The README now shows how to check for yourself that CoreEQ installs no audio
+driver, and states what it does not do on purpose: no volume control, not
+bit-perfect, one curve for every channel.
+
+The echo some people hear after waking from sleep is not fixed, because it has
+not been reproduced. If it happens to you, the diagnostics report now says
+whether a second audio path was left behind, and that report is the fastest way
+to an answer.
+
+The full account of each change — what was measured, and what the first fix got
+wrong — is in [[file:../RELEASE_NOTES.org][RELEASE_NOTES.org]], and what is still owed is in
+[[file:../ROADMAP.org][ROADMAP.org]].
