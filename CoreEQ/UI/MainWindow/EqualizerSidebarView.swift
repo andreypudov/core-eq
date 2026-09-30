@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Sidebar column of the main window: the app mark, the preset list, and the
-/// add / remove / more actions along the bottom.
+/// `+` menu and the AutoEQ guide in the bar along the bottom.
 ///
 /// Hosted inside an `NSSplitViewItem(sidebarWithViewController:)`, which
 /// supplies the sidebar material and the full-height layout that runs it up
@@ -34,8 +34,11 @@ struct EqualizerSidebarView: View {
     /// Preset awaiting delete confirmation.
     @State private var deletionCandidate: String?
 
-    /// Controls visibility of the AutoEQ web optimizer guide sheet.
+    /// Controls visibility of the AutoEQ guide sheet.
     @State private var showingAutoEQGuide = false
+    /// Set by the guide's Paste button: the clipboard is read once the sheet
+    /// has gone.
+    @State private var pasteAfterGuide = false
 
     /// Error message from a failed file or clipboard import.
     @State private var importErrorMessage: String?
@@ -93,10 +96,10 @@ struct EqualizerSidebarView: View {
                 handleDrop(providers: providers)
             }
 
+            // Full width, as a sidebar's bottom bar is ruled off in AppKit.
             Divider()
-                .padding(.horizontal, 10)
 
-            sidebarActionBar
+            bottomBar
         }
         .alert(
             "Delete the preset “\(deletionCandidate ?? "")”?", isPresented: deletionAlertPresented
@@ -132,7 +135,7 @@ struct EqualizerSidebarView: View {
             Button("Cancel", role: .cancel) { pendingImport = nil }
         } message: {
             if let preview = pendingImport {
-                Text(importConfirmationMessage(for: preview))
+                Text(ImportSummary.message(for: preview))
             }
         }
         .alert(
@@ -144,8 +147,21 @@ struct EqualizerSidebarView: View {
         } message: {
             Text(exportErrorMessage ?? "")
         }
-        .sheet(isPresented: $showingAutoEQGuide) {
-            AutoEQGuideSheet(profileManager: profileManager)
+        // The guide's paste waits for the sheet to go, so the preview is the
+        // same dialog every other import shows rather than a second one of
+        // the guide's own.
+        .sheet(
+            isPresented: $showingAutoEQGuide,
+            onDismiss: {
+                guard pasteAfterGuide else { return }
+                pasteAfterGuide = false
+                previewClipboard()
+            }
+        ) {
+            AutoEQGuideSheet {
+                pasteAfterGuide = true
+                showingAutoEQGuide = false
+            }
         }
         // A preset created outside the sidebar arrives as a rename request; seed
         // the field with the generated name so typing replaces it.
@@ -364,8 +380,8 @@ struct EqualizerSidebarView: View {
 
     /// The actions that belong to one preset, on its row's context menu.
     ///
-    /// Creating, importing, and pasting live in the action bar beneath the list,
-    /// which is where they act on the library rather than on a row; a right
+    /// Creating, importing, and pasting live in the bar beneath the list, which
+    /// is where they act on the library rather than on a row; a right
     /// click on a preset is about that preset, so this menu holds only what
     /// reads or writes it.
     @ViewBuilder
@@ -389,10 +405,10 @@ struct EqualizerSidebarView: View {
         Divider()
 
         Menu("Export Preset") {
-            Button("EqualizerAPO (.txt)…") {
+            Button("EqualizerAPO…") {
                 showExportDialog(for: name, format: .equalizerAPO)
             }
-            Button("CoreEQ Native (.coreeq)…") {
+            Button("CoreEQ…") {
                 showExportDialog(for: name, format: .coreEQJSON)
             }
         }
@@ -430,25 +446,9 @@ struct EqualizerSidebarView: View {
         if let coreeqType = UTType(filenameExtension: "coreeq") { types.append(coreeqType) }
         panel.allowedContentTypes = Array(Set(types))
 
-        NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
-            panel.beginSheetModal(for: window) { response in
-                guard response == .OK, let url = panel.url else { return }
-                do {
-                    try preview(url: url)
-                } catch {
-                    importErrorMessage = error.localizedDescription
-                }
-            }
-        } else {
-            panel.begin { response in
-                guard response == .OK, let url = panel.url else { return }
-                do {
-                    try preview(url: url)
-                } catch {
-                    importErrorMessage = error.localizedDescription
-                }
-            }
+        present(panel) { response in
+            guard response == .OK, let url = panel.url else { return }
+            previewFile(at: url)
         }
     }
 
@@ -487,8 +487,7 @@ struct EqualizerSidebarView: View {
         panel.allowedContentTypes = allowedTypes
         panel.allowsOtherFileTypes = true
 
-        NSApp.activate(ignoringOtherApps: true)
-        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+        present(panel) { response in
             guard response == .OK, let url = panel.url else { return }
             do {
                 try content.write(to: url, atomically: true, encoding: .utf8)
@@ -496,11 +495,19 @@ struct EqualizerSidebarView: View {
                 exportErrorMessage = "Failed to export preset: \(error.localizedDescription)"
             }
         }
+    }
 
+    /// Shows an open or save panel as a sheet on the main window, or on its own
+    /// when there is no window to attach it to.
+    private func present(
+        _ panel: NSSavePanel,
+        then handler: @escaping (NSApplication.ModalResponse) -> Void
+    ) {
+        AppActivation.activate()
         if let window = NSApp.keyWindow ?? NSApp.mainWindow {
-            panel.beginSheetModal(for: window, completionHandler: handleResponse)
+            panel.beginSheetModal(for: window, completionHandler: handler)
         } else {
-            panel.begin(completionHandler: handleResponse)
+            panel.begin(completionHandler: handler)
         }
     }
 
@@ -509,36 +516,24 @@ struct EqualizerSidebarView: View {
             if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
                     guard let url else { return }
-                    Task { @MainActor in
-                        do {
-                            try preview(url: url)
-                        } catch {
-                            importErrorMessage = error.localizedDescription
-                        }
-                    }
+                    Task { @MainActor in previewFile(at: url) }
                 }
                 return true
             } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
                 _ = provider.loadObject(ofClass: String.self) { text, _ in
                     guard let text else { return }
                     Task { @MainActor in
+                        // Some sources drag a file as its path or URL in plain
+                        // text. That is a file drop, and a file that cannot be
+                        // read reports why — rather than falling through and
+                        // parsing the path itself as a preset.
                         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                         if let url = URL(string: trimmed), url.isFileURL {
-                            do {
-                                try preview(url: url)
-                                return
-                            } catch {}
+                            previewFile(at: url)
                         } else if FileManager.default.fileExists(atPath: trimmed) {
-                            let url = URL(fileURLWithPath: trimmed)
-                            do {
-                                try preview(url: url)
-                                return
-                            } catch {}
-                        }
-                        do {
-                            pendingImport = try profileManager.previewImport(from: text)
-                        } catch {
-                            importErrorMessage = error.localizedDescription
+                            previewFile(at: URL(fileURLWithPath: trimmed))
+                        } else {
+                            previewText(text)
                         }
                     }
                 }
@@ -548,30 +543,45 @@ struct EqualizerSidebarView: View {
         return false
     }
 
-    private func preview(url: URL) throws {
-        let text = try String(contentsOf: url, encoding: .utf8)
-        pendingImport = try profileManager.previewImport(
-            from: text,
-            name: ProfileManager.cleanPresetName(
-                from: url.deletingPathExtension().lastPathComponent))
-    }
+    // The view's only part in an import is reading the clipboard or naming the
+    // file; parsing, naming, and adding all live in `ProfileManager`.
 
-    private func previewClipboard() {
-        guard let text = NSPasteboard.general.string(forType: .string) else {
-            importErrorMessage = "No valid EqualizerAPO preset found on clipboard."
-            return
-        }
+    private func previewFile(at url: URL) {
         do {
-            pendingImport = try profileManager.previewImport(from: text, name: "Pasted Preset")
+            pendingImport = try profileManager.previewImport(fileAt: url)
         } catch {
             importErrorMessage = error.localizedDescription
         }
     }
 
-    // MARK: - Action Bar
+    private func previewText(_ text: String) {
+        do {
+            pendingImport = try profileManager.previewImport(text: text)
+        } catch {
+            importErrorMessage = error.localizedDescription
+        }
+    }
 
-    private var sidebarActionBar: some View {
-        HStack(spacing: 8) {
+    private func previewClipboard() {
+        guard let text = NSPasteboard.general.string(forType: .string) else {
+            importErrorMessage = "The clipboard holds no preset text."
+            return
+        }
+        previewText(text)
+    }
+
+    // MARK: - Bottom bar
+
+    /// The bar under the list, holding what acts on the library rather than on
+    /// one preset — the place Xcode's navigator and Reminders' sidebar keep
+    /// their `+`.
+    ///
+    /// A borderless pull-down, so it is a real `NSPopUpButton` drawn the way
+    /// AppKit draws one in a sidebar: a plain glyph, no bezel, no chevron.
+    /// Deleting stays on the row's context menu, where the confirmation names
+    /// the preset it removes. The AutoEQ guide sits at the other end.
+    private var bottomBar: some View {
+        HStack(spacing: 0) {
             Menu {
                 Button("New Preset") {
                     profileManager.addProfile(filters: profileManager.currentFilters)
@@ -579,100 +589,38 @@ struct EqualizerSidebarView: View {
 
                 Divider()
 
-                Button("Import Preset File…") {
-                    showImportDialog()
-                }
+                Button("Import Preset…") { showImportDialog() }
 
                 // No key equivalent here: ⌘V is owned by `ClipboardPasteCommand`
                 // so that it can defer to text editing. The hint lives in the
                 // tooltip instead.
-                Button("Paste Preset from Clipboard") {
-                    previewClipboard()
-                }
-                .help("Paste a preset from the clipboard (⌘V)")
+                Button("Paste Preset") { previewClipboard() }
+                    .help("Paste a preset from the clipboard (⌘V)")
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .medium))
-                    Text("Preset")
-                        .font(Theme.Font.label)
-                }
-                .frame(height: 22)
-                .contentShape(Rectangle())
+                // No font or colour here: AppKit draws a borderless pop-up's
+                // image itself and ignores both, which is the point of using it.
+                Image(systemName: "plus")
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
-            .help("Add or import a preset")
+            .accessibilityLabel("Add Preset")
+            .help("New or imported preset")
 
-            Spacer()
+            Spacer(minLength: 0)
 
+            // Borderless like the `+`, so both read as the bar's chrome: the
+            // system draws the pair alike, and neither outshouts the list.
             Button {
                 showingAutoEQGuide = true
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "waveform.badge.magnifyingglass")
-                        .font(.system(size: 11))
-                    Text("AutoEQ")
-                        .font(Theme.Font.label)
-                }
-                .foregroundColor(.accentColor)
-                .frame(height: 22)
-                .padding(.horizontal, 6)
-                .contentShape(Rectangle())
+                Label("AutoEQ", systemImage: "waveform.badge.magnifyingglass")
             }
-            .buttonStyle(.plain)
-            .help("Open AutoEQ Web Optimizer guide")
+            .buttonStyle(.borderless)
+            .help("Presets for your headphones from AutoEQ")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-    }
-
-    // MARK: - Import confirmation
-
-    /// The body of the "Import Preset?" dialog: what was brought in, then any
-    /// content the parser could not keep.
-    ///
-    /// Composed as one newline-separated string because a macOS alert shows a
-    /// single informative text, not a stack of views. Warnings state what
-    /// happened and nothing more — the import still succeeds, so the tone stays
-    /// informational and the Import button stays the obvious next step.
-    private func importConfirmationMessage(for preview: ProfileManager.ImportPreview) -> String {
-        var lines = [
-            preview.name,
-            "\(preview.filterCount) \(preview.filterCount == 1 ? "filter" : "filters")",
-            String(format: "Preamp: %.1f dB", preview.preamp),
-        ]
-
-        if preview.droppedFilterCount > 0 {
-            let subject = preview.droppedFilterCount == 1 ? "filter was" : "filters were"
-            lines.append("")
-            lines.append(
-                "\(preview.droppedFilterCount) \(subject) dropped to fit CoreEQ’s "
-                    + "\(BuiltInProfiles.maxFreeFilters)-filter limit.")
-        }
-
-        if !preview.unparsedLines.isEmpty {
-            let total = preview.unparsedLines.count
-            lines.append("")
-            lines.append(total == 1 ? "1 line was skipped:" : "\(total) lines were skipped:")
-            for line in preview.unparsedLines.prefix(3) {
-                lines.append(clippedLine(line))
-            }
-            if total > 3 {
-                lines.append("… and \(total - 3) more")
-            }
-        }
-
-        return lines.joined(separator: "\n")
-    }
-
-    /// Clips a skipped line to keep the alert a dialog rather than a wall of
-    /// text. The head is what identifies the line; the tail is the parameters
-    /// the parser could not model anyway.
-    private func clippedLine(_ line: String, limit: Int = 56) -> String {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard trimmed.count > limit else { return trimmed }
-        return String(trimmed.prefix(limit - 1)) + "…"
+        .padding(.horizontal, 12)
+        .frame(height: 28)
     }
 
     // MARK: - Bindings

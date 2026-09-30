@@ -1,47 +1,7 @@
-import AppKit
 import Foundation
 import Testing
 
 @testable import CoreEQ
-
-/// A `UserDefaults` that lives only in memory.
-///
-/// A per-test `UserDefaults(suiteName:)` is the obvious isolation, but it leaks:
-/// cfprefsd persists each written suite to `~/Library/Preferences`
-/// asynchronously, and can flush it back to disk *after*
-/// `removePersistentDomain(forName:)` and even after the backing file has been
-/// deleted. Cleanup therefore cannot be made reliable — one empty plist per
-/// written suite is recreated every run. Keeping the store entirely in memory
-/// means there is never a plist to clean up.
-private final class InMemoryDefaults: UserDefaults {
-    private var storage: [String: Any] = [:]
-
-    override func object(forKey defaultName: String) -> Any? { storage[defaultName] }
-
-    override func string(forKey defaultName: String) -> String? {
-        storage[defaultName] as? String
-    }
-
-    override func array(forKey defaultName: String) -> [Any]? {
-        storage[defaultName] as? [Any]
-    }
-
-    override func data(forKey defaultName: String) -> Data? {
-        storage[defaultName] as? Data
-    }
-
-    override func set(_ value: Any?, forKey defaultName: String) {
-        if let value {
-            storage[defaultName] = value
-        } else {
-            storage.removeValue(forKey: defaultName)
-        }
-    }
-
-    override func removeObject(forKey defaultName: String) {
-        storage.removeValue(forKey: defaultName)
-    }
-}
 
 @MainActor
 struct ProfileManagerImportExportTests {
@@ -52,6 +12,13 @@ struct ProfileManagerImportExportTests {
         return (manager, defaults)
     }
 
+    /// Previews and commits, as the sidebar's Import dialog does.
+    private func importText(
+        _ text: String, name: String? = nil, into manager: ProfileManager
+    ) throws -> String {
+        manager.commitImport(try manager.previewImport(text: text, suggestedName: name))
+    }
+
     @Test func importProfileFromTextCreatesAndActivatesUserPreset() throws {
         let (manager, defaults) = makeManager()
 
@@ -60,7 +27,7 @@ struct ProfileManagerImportExportTests {
             Filter 1: ON PK Fc 1500 Hz Gain 3.5 dB Q 1.50
             """
 
-        let importedName = try manager.importProfile(from: text, name: "IEM Target")
+        let importedName = try importText(text, name: "IEM Target", into: manager)
         #expect(importedName == "IEM Target")
         #expect(manager.activeProfileName == "IEM Target")
         #expect(manager.canEditProfile(named: "IEM Target"))
@@ -83,19 +50,64 @@ struct ProfileManagerImportExportTests {
             Preamp: -2.0 dB
             Filter 1: ON LSC Fc 100 Hz Gain 4.0 dB Q 0.70
             """
-        let name = try manager.importProfile(from: text, name: "Export Test")
+        let name = try importText(text, name: "Export Test", into: manager)
         let exported = try manager.exportProfileToEqualizerAPO(named: name)
 
         #expect(exported.contains("Preamp: -2.0 dB"))
-        #expect(exported.contains("LSC Fc 100 Hz Gain 4.0 dB Q 0.70"))
+        #expect(exported.contains("LSC Fc 100.0 Hz Gain 4.0 dB Q 0.70"))
+    }
+
+    @Test func exportOfActivePresetWritesUnsavedEdits() throws {
+        let (manager, _) = makeManager()
+        let name = try importText(
+            "Preamp: -2.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00", name: "Edited",
+            into: manager)
+
+        let filterID = try #require(manager.freeFilters.first).id
+        manager.setFilterGain(-3.5, id: filterID)
+        manager.setPreamp(-6.0)
+        #expect(manager.isModified)
+
+        let exported = try manager.exportProfileToEqualizerAPO(named: name)
+        #expect(exported.contains("Preamp: -6.0 dB"))
+        #expect(exported.contains("PK Fc 1000.0 Hz Gain -3.5 dB"))
+    }
+
+    @Test func exportOfActivePresetIncludesQuickEQTone() throws {
+        let (manager, _) = makeManager()
+        let name = manager.activeProfileName
+        manager.setTone(bass: 4)
+
+        let json = try manager.exportProfileToJSON(named: name)
+        let exported = try JSONDecoder().decode(EQProfile.self, from: Data(json.utf8))
+        #expect(exported.filters == manager.currentFilters)
+        #expect(exported.preamp == manager.currentPreamp)
+        #expect(exported.autoGain == manager.isAutoGain)
+    }
+
+    @Test func exportOfInactivePresetWritesSavedState() throws {
+        let (manager, _) = makeManager()
+        let saved = try importText(
+            "Preamp: -2.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00", name: "Saved",
+            into: manager)
+        manager.setPreamp(-6.0)
+
+        // Switching away discards the unsaved trim, so "Saved" is back to what
+        // it was imported with.
+        manager.setActiveProfile(name: BuiltInProfiles.defaultProfileName)
+        manager.setTone(bass: 4)
+
+        let exported = try manager.exportProfileToEqualizerAPO(named: saved)
+        #expect(exported.contains("Preamp: -2.0 dB"))
+        #expect(exported.contains("PK Fc 1000.0 Hz Gain 2.0 dB"))
     }
 
     @Test func previewDoesNotPersistOrActivateUntilCommit() throws {
         let (manager, _) = makeManager()
         let original = manager.activeProfileName
         let preview = try manager.previewImport(
-            from: "Preamp: -3.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00",
-            name: "Preview Test")
+            text: "Preamp: -3.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00",
+            suggestedName: "Preview Test")
 
         #expect(manager.profile(named: "Preview Test") == nil)
         #expect(manager.activeProfileName == original)
@@ -136,7 +148,7 @@ struct ProfileManagerImportExportTests {
         let content = "Preamp: -2.99 dB\nFilter 1: ON LSC Fc 105.0 Hz Gain -1.9 dB Q 0.70\n"
         try content.write(to: tempURL, atomically: true, encoding: .utf8)
 
-        let importedName = try manager.importProfile(from: tempURL)
+        let importedName = manager.commitImport(try manager.previewImport(fileAt: tempURL))
         #expect(importedName == "ARTTI T10")
         #expect(manager.activeProfileName == "ARTTI T10")
         #expect(manager.currentPreamp == -2.99)
@@ -146,8 +158,8 @@ struct ProfileManagerImportExportTests {
         let (manager, _) = makeManager()
 
         let preview = try manager.previewImport(
-            from: "Preamp: -3.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00",
-            name: "Count Test")
+            text: "Preamp: -3.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00",
+            suggestedName: "Count Test")
         #expect(preview.filterCount == 1)
         #expect(preview.droppedFilterCount == 0)
         #expect(preview.unparsedLines.isEmpty)
@@ -161,10 +173,120 @@ struct ProfileManagerImportExportTests {
             lines.append("Filter \(i): ON PK Fc \(100 * i) Hz Gain \(Double(i % 10)) dB Q 1.0")
         }
         let preview = try manager.previewImport(
-            from: lines.joined(separator: "\n"), name: "Trim Test")
+            text: lines.joined(separator: "\n"), suggestedName: "Trim Test")
 
         #expect(preview.filterCount == BuiltInProfiles.maxFreeFilters)
         #expect(preview.droppedFilterCount == 4)
         #expect(preview.unparsedLines == ["GraphicEQ: 10 -20 30"])
+    }
+
+    @Test func unnamedTextImportLandsInRename() throws {
+        let (manager, _) = makeManager()
+        let preview = try manager.previewImport(
+            text: "Filter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00")
+        #expect(preview.needsName)
+
+        let stored = manager.commitImport(preview)
+        #expect(stored == ProfileManager.untitledImportName)
+        #expect(manager.profileAwaitingRename == stored)
+    }
+
+    @Test func namedImportDoesNotAskForAName() throws {
+        let (manager, _) = makeManager()
+        let preview = try manager.previewImport(
+            text: "Filter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00", suggestedName: "HD 600")
+        #expect(!preview.needsName)
+
+        manager.commitImport(preview)
+        #expect(manager.profileAwaitingRename == nil)
+    }
+
+    @Test func coreEQTextCarriesItsOwnName() throws {
+        let (manager, _) = makeManager()
+        let json = try ParametricEQSerializer.serializeToCoreEQJSON(
+            EQProfile(name: "Shared", filters: BuiltInProfiles.emptyBandChain()))
+
+        let preview = try manager.previewImport(text: json)
+        #expect(preview.name == "Shared")
+        #expect(!preview.needsName)
+    }
+
+    @Test func previewReportsAdjustedValues() throws {
+        let (manager, _) = makeManager()
+        let preview = try manager.previewImport(
+            text: "Preamp: -20.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 18.0 dB Q 1.00",
+            suggestedName: "Loud")
+        #expect(preview.adjustedValueCount == 2)
+    }
+
+    @Test func oversizedFileIsRejectedBeforeReading() throws {
+        let (manager, _) = makeManager()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "\(UUID().uuidString).txt")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(count: ParametricEQParser.maxFileSize + 1).write(to: url)
+
+        #expect(throws: ParametricEQParser.ParseError.fileTooLarge) {
+            try manager.previewImport(fileAt: url)
+        }
+    }
+
+    @Test func exportOfMissingPresetSaysSo() {
+        let (manager, _) = makeManager()
+        #expect(throws: ProfileManager.ExportError.presetNotFound("Gone")) {
+            try manager.exportProfileToEqualizerAPO(named: "Gone")
+        }
+    }
+
+    @Test func fileImportReadsUTF16AndNamesItAfterTheFile() throws {
+        let (manager, _) = makeManager()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // What Notepad saves as "Unicode": UTF-16 LE with a byte-order mark.
+        let url = directory.appendingPathComponent("Sennheiser HD 600 ParametricEQ.txt")
+        var data = Data([0xFF, 0xFE])
+        data.append(
+            "Preamp: -6.4 dB\r\nFilter 1: ON PK Fc 28 Hz Gain 6.2 dB Q 2.10\r\n".data(
+                using: .utf16LittleEndian)!)
+        try data.write(to: url)
+
+        let preview = try manager.previewImport(fileAt: url)
+        #expect(preview.name == "Sennheiser HD 600")
+        #expect(preview.preamp == -6.4)
+        #expect(preview.filterCount == 1)
+    }
+
+    @Test func missingFileReportsAnErrorAndAddsNothing() {
+        let (manager, _) = makeManager()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "\(UUID().uuidString).txt")
+
+        #expect(throws: (any Error).self) {
+            try manager.previewImport(fileAt: url)
+        }
+        #expect(manager.library.user.isEmpty)
+    }
+
+    @Test func importTakingAnExistingNameGetsASuffix() throws {
+        let (manager, _) = makeManager()
+        let stored = try importText(
+            "Filter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00", name: "Flat", into: manager)
+
+        #expect(stored == "Flat 2")
+        #expect(manager.profile(named: "Flat")?.isBuiltIn == true)
+    }
+
+    @Test func secondUnnamedImportRenamesTheNewOne() throws {
+        let (manager, _) = makeManager()
+        let text = "Filter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00"
+        manager.commitImport(try manager.previewImport(text: text))
+        manager.profileAwaitingRename = nil
+
+        let second = manager.commitImport(try manager.previewImport(text: text))
+        #expect(second == "\(ProfileManager.untitledImportName) 2")
+        #expect(manager.profileAwaitingRename == second)
     }
 }
