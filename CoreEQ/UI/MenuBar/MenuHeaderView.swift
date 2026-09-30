@@ -1,14 +1,16 @@
 import AppKit
 
-/// Header row: a bold "CoreEQ" title on the left and a native `NSSwitch` on the
-/// right, matching the Wi‑Fi menu's title-plus-toggle header. No icon.
+/// Header row: a bold "CoreEQ" title on the left and a switch on the right,
+/// matching the Wi‑Fi menu's title-plus-toggle header. No icon. The switch is
+/// `MenuSwitch`, not `NSSwitch`, so that on looks different from off.
 @MainActor
 final class MenuHeaderView: NSView {
-    private let toggle = NSSwitch()
+    private let toggle: MenuSwitch
     private let onToggle: (Bool) -> Void
 
     init(isOn: Bool, isEnabled: Bool = true, onToggle: @escaping (Bool) -> Void) {
         self.onToggle = onToggle
+        self.toggle = MenuSwitch(isOn: isOn)
         super.init(frame: .zero)
         // View-based menu items are sized by Auto Layout, so drive the whole
         // view from constraints (fixed content width, fixed row height).
@@ -18,7 +20,6 @@ final class MenuHeaderView: NSView {
         title.font = NSFont.menuFont(ofSize: 0).bold()
         title.translatesAutoresizingMaskIntoConstraints = false
 
-        toggle.state = isOn ? .on : .off
         // Off while the engine cannot run at all: switching on would then set a
         // preference and change no sound.
         toggle.isEnabled = isEnabled
@@ -45,6 +46,6 @@ final class MenuHeaderView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     @objc private func switchToggled() {
-        onToggle(toggle.state == .on)
+        onToggle(toggle.isOn)
     }
 }

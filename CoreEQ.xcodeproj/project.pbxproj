@@ -46,6 +46,7 @@
 				UI/MenuBar/MenuListMetrics.swift,
 				UI/MenuBar/MenuListView.swift,
 				UI/MenuBar/MenuRowView.swift,
+				UI/MenuBar/MenuSwitch.swift,
 				UI/MenuBar/QuickEQBodyView.swift,
 				UI/MenuBar/QuickEQMenuMetrics.swift,
 				UI/PowerToggleStyle.swift,
