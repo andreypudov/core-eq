@@ -305,6 +305,84 @@ struct ParametricEQParserTests {
         #expect(parsed.filters.filter { !$0.isBand }.first?.isEnabled == false)
     }
 
+    /// What a filter is, without the colour — colour is not part of the
+    /// EqualizerAPO format, so it cannot survive a round trip through it.
+    private func shape(_ filters: [EQFilter]) -> [String] {
+        filters.map {
+            "\($0.kind) \($0.frequency) \($0.gain) \($0.q) \($0.isEnabled) \(String(describing: $0.band))"
+        }
+    }
+
+    /// The roadmap's criterion: what CoreEQ writes out reloads identically.
+    /// This is the preset that failed it — six edited ladder bands and twelve
+    /// filters, eighteen lines, of which two were dropped and six came back as
+    /// filters instead of bands.
+    @Test func equalizerAPOExportReloadsIdentically() throws {
+        var bands = BuiltInProfiles.emptyBandChain()
+        for (slot, gain) in [(0, 1.75), (1, 3.25), (2, -2.5), (5, 2.37), (8, -0.5), (10, 6.0)] {
+            bands[slot].gain = gain
+        }
+        let free: [EQFilter] = [
+            EQFilter(kind: .bell, frequency: 60, gain: -5.25, q: 0.5),
+            EQFilter(kind: .lowShelf, frequency: 105, gain: 3.5, q: 0.7),
+            EQFilter(kind: .highShelf, frequency: 9_000, gain: -2.75, q: 0.7),
+            EQFilter(kind: .highPass, frequency: 25, gain: 0, q: 0.71),
+            EQFilter(kind: .lowPass, frequency: 18_500, gain: 0, q: 0.71, isEnabled: false),
+            EQFilter(kind: .bell, frequency: 74.3, gain: 1.2, q: 1.5),
+            EQFilter(kind: .bell, frequency: 1_829.9, gain: -3.6, q: 1.64),
+            EQFilter(kind: .bell, frequency: 5_213.3, gain: 1.2, q: 5.99),
+            EQFilter(kind: .bell, frequency: 1_000, gain: 2.0, q: 2.5),
+            EQFilter(kind: .bell, frequency: 3_150, gain: -4.25, q: 3.0),
+            EQFilter(kind: .bell, frequency: 12_000, gain: 1.75, q: 0.9),
+            EQFilter(kind: .bell, frequency: 440, gain: -1.5, q: 4.37),
+        ]
+        let original = EQProfile(
+            name: "Mine", filters: FilterChain.normalized(bands + free), preamp: -2.37,
+            autoGain: false)
+
+        let parsed = try ParametricEQParser.parse(
+            text: ParametricEQSerializer.serializeToEqualizerAPO(original))
+
+        #expect(parsed.droppedFilterCount == 0)
+        #expect(parsed.preamp == original.preamp)
+        #expect(shape(parsed.filters) == shape(original.filters))
+    }
+
+    @Test func aFilterThatIsExactlyARungReturnsToTheLadder() throws {
+        let parsed = try ParametricEQParser.parse(
+            text: "Filter 1: ON PK Fc 1000.0 Hz Gain 3.0 dB Q 1.41")
+        #expect(parsed.filters[5].gain == 3.0)
+        #expect(parsed.filters.filter { !$0.isBand }.isEmpty)
+    }
+
+    /// Anything the ladder cannot express stays a filter: another Q, a
+    /// disabled filter, and a second one on a rung already taken.
+    @Test func onlyAnExactRungReturnsToTheLadder() throws {
+        let text = """
+            Filter 1: ON PK Fc 1000 Hz Gain 3.0 dB Q 1.00
+            Filter 2: OFF PK Fc 2000 Hz Gain 2.0 dB Q 1.41
+            Filter 3: ON PK Fc 4000 Hz Gain 1.0 dB Q 1.41
+            Filter 4: ON PK Fc 4000 Hz Gain -1.0 dB Q 1.41
+            Filter 5: ON LSC Fc 125 Hz Gain 2.0 dB Q 1.41
+            """
+        let parsed = try ParametricEQParser.parse(text: text)
+        let free = parsed.filters.filter { !$0.isBand }
+        #expect(parsed.filters[7].gain == 1.0)
+        #expect(free.count == 4)
+        #expect(free.map(\.frequency) == [1000, 2000, 4000, 125])
+    }
+
+    @Test func numbersAreWrittenAsPreciselyAsTheyAre() {
+        #expect(ParametricEQSerializer.formatGain(1.75) == "1.75")
+        #expect(ParametricEQSerializer.formatGain(2) == "2.0")
+        #expect(ParametricEQSerializer.formatGain(-2.37) == "-2.37")
+        #expect(ParametricEQSerializer.formatGain(-0.00001) == "0.0")
+        #expect(ParametricEQSerializer.formatFrequency(105) == "105.0")
+        #expect(ParametricEQSerializer.formatFrequency(74.3) == "74.3")
+        #expect(ParametricEQSerializer.formatQ(0.7) == "0.70")
+        #expect(ParametricEQSerializer.formatQ(1.234567) == "1.2346")
+    }
+
     @Test func flatExportImportsAgain() throws {
         let flat = EQProfile(name: "Flat", filters: BuiltInProfiles.emptyBandChain())
         let text = ParametricEQSerializer.serializeToEqualizerAPO(flat)
@@ -392,7 +470,8 @@ struct ParametricEQParserTests {
         let serialized = ParametricEQSerializer.serializeToEqualizerAPO(
             EQProfile(name: "ARTTI T10", filters: parsed.filters, preamp: parsed.preamp)
         )
-        #expect(serialized.contains("Preamp: -3.0 dB"))
+        // Written as it was read, not rounded to AutoEQ's one decimal.
+        #expect(serialized.contains("Preamp: -2.99 dB"))
         #expect(serialized.contains("PK Fc 74.3 Hz Gain 1.2 dB Q 1.50"))
         #expect(serialized.contains("PK Fc 1829.9 Hz Gain -3.6 dB Q 1.64"))
         #expect(serialized.contains("PK Fc 5213.3 Hz Gain 1.2 dB Q 5.99"))
