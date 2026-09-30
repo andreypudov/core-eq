@@ -69,21 +69,32 @@ enum ParametricEQSerializer {
 
     // MARK: - Formatting Helpers
 
-    /// AutoEQ's canonical EqualizerAPO precision: frequency and gain one
-    /// decimal, Q two. One decimal of frequency is what AutoEQ itself writes,
-    /// and whole hertz turned an imported 74.3 Hz into 74 on the way back out.
+    /// Every number is written with as many decimals as it needs, up to four,
+    /// so what CoreEQ writes reads back as the same number.
+    ///
+    /// AutoEQ writes one decimal, and one decimal is what this used to write —
+    /// which turned a built-in's 1.75 dB into 1.8 and an imported 74.3 Hz
+    /// into 74 on the way back in. The minimum keeps AutoEQ's look for the
+    /// values it has: "2.0", "105.0", "0.70".
     static func formatFrequency(_ freq: Double) -> String {
-        String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), freq)
+        format(freq, minimumDecimals: 1)
     }
 
-    /// Formats gain using AutoEQ's one decimal place.
     static func formatGain(_ gain: Double) -> String {
-        String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), gain)
+        format(gain, minimumDecimals: 1)
     }
 
-    /// Formats Q factor with up to two decimals.
     static func formatQ(_ q: Double) -> String {
-        return String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), q)
+        format(q, minimumDecimals: 2)
+    }
+
+    private static func format(_ value: Double, minimumDecimals: Int) -> String {
+        var text = String(format: "%.4f", locale: Locale(identifier: "en_US_POSIX"), value)
+        guard let point = text.firstIndex(of: ".") else { return text }
+        let shortest = text.index(point, offsetBy: minimumDecimals + 1)
+        while text.endIndex > shortest, text.last == "0" { text.removeLast() }
+        // A value that rounds to zero keeps no sign: "-0.0" reads as a cut.
+        return text.hasPrefix("-") && Double(text) == 0 ? String(text.dropFirst()) : text
     }
 
     /// Serializes an `EQProfile` into a native `.coreeq` JSON string.

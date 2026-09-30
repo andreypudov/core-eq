@@ -159,7 +159,14 @@ enum ParametricEQParser {
             throw ParseError.noValidFiltersFound
         }
 
-        let (freeFilters, droppedFilterCount) = trimFreeFilters(rawFilters.filter { !$0.isBand })
+        let (bands, loose) = ladderBands(in: rawFilters)
+        let (kept, droppedFilterCount) = trimFreeFilters(loose)
+        // Colours in order again, now that the bands have left gaps.
+        let freeFilters = kept.enumerated().map { index, filter in
+            var recoloured = filter
+            recoloured.colorIndex = index % EQFilter.colorCount
+            return recoloured
+        }
 
         return ParsedPreset(
             name: defaultName,
@@ -170,11 +177,45 @@ enum ParametricEQParser {
             // the trim is computed, as it is for every built-in.
             autoGain: !sawPreampLine,
             // Normalising is also what clamps every value into range.
-            filters: FilterChain.normalized(freeFilters),
+            filters: FilterChain.normalized(bands + freeFilters),
             droppedFilterCount: droppedFilterCount,
             unparsedLines: unparsedLines,
-            adjustedValueCount: outOfRangeCount(freeFilters, preamp: preamp)
+            adjustedValueCount: outOfRangeCount(bands + freeFilters, preamp: preamp)
         )
+    }
+
+    /// Separates the filters that are ladder bands from the ones that are not.
+    ///
+    /// EqualizerAPO text has no notion of a ladder, so CoreEQ writes each band
+    /// as a peaking filter at the rung's frequency with the ladder's Q — and
+    /// read back, those used to arrive as free filters. A preset with six
+    /// edited bands and twelve filters exported eighteen lines, lost two of
+    /// them to the sixteen-filter cap on the way back in, and came back with
+    /// its sliders flat.
+    ///
+    /// So a filter that is exactly a rung — a bell, enabled, on a ladder
+    /// frequency, at `BuiltInProfiles.defaultQ` — goes back into that slot.
+    /// The first one per slot does; a second on the same rung stays a filter.
+    /// A disabled one stays a filter too, because a band cannot be switched
+    /// off. This never changes the sound, only where it is shown: a ladder
+    /// band *is* that bell. A file from elsewhere that happens to match loses
+    /// nothing, and gains a filter slot.
+    private static func ladderBands(in filters: [EQFilter]) -> (bands: [EQFilter], free: [EQFilter])
+    {
+        var bands: [EQFilter] = []
+        var free: [EQFilter] = []
+        var taken = Set<Int>()
+        for filter in filters {
+            if filter.kind == .bell, filter.isEnabled, filter.q == BuiltInProfiles.defaultQ,
+                let slot = BuiltInProfiles.frequencies.firstIndex(of: filter.frequency),
+                taken.insert(slot).inserted
+            {
+                bands.append(EQFilter.band(slot: slot, gain: filter.gain))
+            } else {
+                free.append(filter)
+            }
+        }
+        return (bands, free)
     }
 
     /// How many values `FilterChain.normalized` and the preamp clamp will
