@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-@testable import CoreEQ
-
 struct ParametricEQParserTests {
     // MARK: - Parsing EqualizerAPO Format
 

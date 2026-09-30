@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-@testable import CoreEQ
-
 @MainActor
 struct ProfileManagerImportExportTests {
     private func makeManager() -> (manager: ProfileManager, defaults: UserDefaults) {
