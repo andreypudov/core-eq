@@ -103,6 +103,12 @@ Bug reports and pull requests are welcome. [[file:CONTRIBUTING.md][CONTRIBUTING.
 in a report, the commit message format, and what a pull request needs;
 [[file:SECURITY.md][SECURITY.md]] covers reporting a vulnerability.
 
+* Acknowledgements
+
+Thank you to [[https://github.com/souljedi][Sebastian Ullrich (@souljedi)]] for AutoEQ and EqualizerAPO
+preset import ([[https://github.com/andreypudov/core-eq/pull/25][#25]]) — CoreEQ's first contribution from outside, and the
+most requested feature it had.
+
 * License
 
 Apache License 2.0. See [[file:LICENSE][LICENSE]].
