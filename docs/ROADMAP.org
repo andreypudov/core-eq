@@ -32,12 +32,13 @@ at the wrong sample rate — was measured and turned out not to happen; it is in
 the release notes with the numbers.
 
 1.8 shipped on <2026-09-20 Sun> with the five above settled and the rest of this
-section still open.
+section still open. 1.9 settled two more: screen recordings that captured the
+sound twice, and the documentation that answered the same questions one comment
+at a time. Both have moved to [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]].
 
-What is left here: audio arriving twice and every screen capture tool failing,
-and two smaller reports. They affect people doing nothing unusual, and none can
-be worked around from inside the app, so by the ordering rule they head the next
-release, ahead of the preset format below.
+What is left here: an echo after waking that has not been reproduced, and a
+report of noise over Bluetooth. They affect people doing nothing unusual, so by
+the ordering rule they still head the next release.
 
 ** Bluetooth noise at higher volume
 
@@ -87,13 +88,14 @@ already knew. Next time this is reported, ask for the report first.
 
 ** Echo and doubled audio
 
-Three symptoms that sound like one another, and the second is the one that makes
-this a defect rather than an explanation:
+Two symptoms that sound like one another are left of the three this began with:
 
 - Running alongside SoundSource produces a flangey delay.
-- With CoreEQ active, screen recording fails in *every* capture tool tested, and
-  the captured audio has “a Doppler echo delay”. Reported twice.
 - After waking from sleep, audio sometimes plays with an echo.
+
+The third — screen recordings with “a Doppler echo delay” — was measured and
+answered in 1.9, and is in [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]]. The recorder hears each app's
+sound and CoreEQ's equalized copy of it; nothing loops, and nothing leaked.
 
 A fourth symptom was listed here — the Audio4C reports where sound starts and
 then vanishes — and has been removed. It was the channel layout bug in
@@ -105,50 +107,23 @@ signal arrives twice slightly offset. The wake-from-sleep case does not — no
 second tool is involved, so something on CoreEQ's side is producing two copies
 of the audio by itself. The likely shape is an IO proc or an aggregate device
 that survives a state change it should not have survived, leaving two of them
-running. That would explain the echo after wake, and it is worth testing
-whether it also explains the capture-tool case.
+running. That would explain the echo after wake.
 
 The feedback shape is not hypothetical, and it is worth writing down because it
 was observed accidentally. While verifying the multichannel work, a test harness
 tapped system audio and wrote its own output back to the same device without
 excluding itself from the tap. It captured what it had just written, and the
 level compounded across the run — a 0.4 peak measured 1.56, then 26, then 71.
-=AudioEngine= excludes its own process for exactly this reason — and since
-<2026-09-30 Wed> refuses to build a tap at all when it cannot identify that
-process, rather than building one that hears itself. The lookup used to fail
-silently: Core Audio answers an unknown process with success and object 0, and
-excluding object 0 excludes nothing.
+=AudioEngine= excludes its own process for exactly this reason, and since 1.9
+refuses to build a tap at all when it cannot identify that process — the lookup
+used to fail silently, which the release notes record.
 
-*Measured: screen capture is not feedback, it is two copies.* A probe recorded
-system audio through ScreenCaptureKit, the API screen recorders use, while
-=afplay= played eight clicks, and counted how many times each click arrived:
-
-| CoreEQ                 | Arrivals per click | Second copy         |
-|------------------------+--------------------+---------------------|
-| quit                   | 1                  | —                   |
-| on, a headphone preset | 2                  | +27.6 ms, ⅓ level   |
-| on, Flat               | 2                  | +27.2 ms, 80% level |
-| switched off           | 1                  | —                   |
-
-The recorder captures each application's audio before CoreEQ's tap mutes it at
-the device, and it also captures CoreEQ's own output — the same audio,
-equalized, 27 ms later. Two copies that close together are heard as comb
-filtering, which is the “Doppler echo” in the reports. Flat is the worst case:
-the copy is nearly as loud as the original. Nothing loops and nothing
-compounds, so this is not the feedback shape above, and the recordings did not
-fail — they doubled. It is structural: any ScreenCaptureKit recorder sees it.
-
-Switching CoreEQ off removes it, measured, because off stops the IO proc and
-releases the mute. Leaving CoreEQ out of a recorder's own audio sources, where
-the recorder allows that, should give a clean but unequalized recording; that
-one is not measured.
-
-What is left:
+What is left is the wake case:
 
 - Audit the teardown and rebuild path around sleep, wake, and device changes,
   and confirm exactly one IO proc is ever running. The report names how many
   restarts a session has had, why the last one happened, and how long ago, and
-  since <2026-09-30 Wed> how many CoreEQ aggregates are alive — more than one is
+  since 1.9 how many CoreEQ aggregates are alive — more than one is
   two paths rendering the same audio. On the development machine it reads one,
   including across the rebuild that follows proving the tap.
 
@@ -167,86 +142,6 @@ What is left:
   report comes with it: =audio paths= above one is a leaked path, the
   self-exclusion error is a tap that could not leave CoreEQ out, and an echo
   with neither points somewhere not yet looked at.
-- Detect a recording in progress and say so plainly, rather than leaving the
-  user to work out why their recording sounds doubled — or step aside for its
-  duration.
-
-  It can be detected, from Core Audio alone and with no extra permission. A
-  process that is capturing input but whose input devices include no real
-  device is reading a tap, which means system audio. Measured on
-  <2026-09-30 Wed>: while ScreenCaptureKit captured system audio, =replayd=
-  (the system service that does the capturing for every ScreenCaptureKit
-  recorder) showed as running input with no input device, from the moment the
-  capture started to the moment it stopped, and at no other time. Audacity and
-  QuickTime recording the microphone showed as running input *from the MacBook
-  Pro Microphone*, and are correctly left alone. The engine already listens to
-  the process list for idling, so this is one more property on the same
-  mechanism.
-
-  A screen recording *without* audio does not make =replayd= run input —
-  measured, a video-only capture of 248 frames left CoreEQ processing — so
-  silent screencasts are left alone. Recorders that loop audio through a
-  virtual device (BlackHole, Loopback) read from a device like any microphone,
-  and this rule does not see them.
-
-  Built: *Pause while recording system audio*, in Settings → General and on by
-  default. CoreEQ steps aside the way idling does, without touching the on/off
-  switch, says so on the graph and in the menu, and comes back when the
-  recording stops. Core Audio sends no notification when a process starts
-  capturing, so it is polled — on a background queue, since a sweep costs
-  14 ms and up to 40, and only while CoreEQ is rendering or paused. Measured
-  end to end, the recording came out clean; the pause landed 1.25 s after
-  CoreEQ resumed, so the first second or so of a recording can still carry the
-  doubled sound.
-
-** Documentation that answers the repeated questions
-
-Cheap, and it closes three of the recurring threads:
-
-- A one-line description per preset, so the list does not assume the reader
-  already knows what Acoustic or Spoken Word is for.
-- A =/Library/Audio/Plug-Ins/HAL= listing as the way to verify the no-driver
-  claim independently. A commenter proposed this unprompted, and it is better
-  proof than any wording I could write.
-- A stated-limits section in the README covering global volume, multichannel,
-  and bit-perfect playback, so the deliberate non-goals stop being answered one
-  comment at a time.
-
-* 1.9 — Open the preset format
-
-The most requested feature by a clear margin, asked for from four directions:
-AutoEQ, EqualizerAPO, Wavelet, and “EQ txt files”. All four describe the same
-file.
-
-** Import
-
-AutoEQ's parametric export gives a preamp value and a frequency/gain/Q triple
-per band. EqualizerAPO consumes that format and Wavelet ships the same
-database, so one parser covers every request in the thread.
-
-The chain already expresses what the format says: free filters take any centre
-in =filterFrequencyRange= (20 Hz – 20 kHz) with Q from 0.1 to 10, and the
-profile's preamp maps onto the existing output trim. So the work is a parser, a
-file picker, and three decisions the format forces:
-
-- A profile with more than =maxFreeFilters= (16) bands. Truncating by
-  significance beats refusing the file.
-- A band past the ±12 dB =gainRange=. Clamp and say so, rather than silently.
-- Whether an imported profile replaces the ladder or sits on top of it. Replace
-  is almost certainly right: a correction curve is a complete statement about
-  the headphone, not an adjustment to an existing one.
-
-** Export
-
-Asked for once, alongside import, and nearly free once the parser exists.
-Writing the same format back makes a CoreEQ profile something you can hand to
-someone on another platform.
-
-** Done when
-
-An AutoEQ profile downloaded for a real pair of headphones loads and measures
-correct against its published response, and what CoreEQ writes out reloads
-identically.
 
 * 1.10 — Open the scope: per-application EQ, volume, and exclusion
 
@@ -308,10 +203,10 @@ Two things to decide, both smaller than the questions above:
 - Whether an excluded app is visible as excluded outside the settings pane, so
   that “CoreEQ is doing nothing to this app” is shown rather than remembered.
 
-Not a cure for the doubled screen recordings under *Echo and doubled audio*,
-which this section once hoped it might be. That was measured and is not a loop
-through CoreEQ's tap: the recorder hears the original and CoreEQ's copy, and
-excluding the recorder from CoreEQ changes neither.
+Not a cure for doubled screen recordings, which this section once hoped it
+might be. That was measured in 1.9 and is not a loop through CoreEQ's tap: the
+recorder hears the original and CoreEQ's copy, and excluding the recorder from
+CoreEQ changes neither. 1.9 answers it by stepping aside while a recording runs.
 
 * Later — worth doing, not yet scheduled
 
@@ -360,7 +255,7 @@ Requested, naming [[https://autoeq.app][autoeq.app]] as the source.
 
 The step past file import: search the community database by headphone model and
 apply it, the way Poweramp does. Open data, so the work is a network fetch plus
-the parser 1.9 already has to write.
+the parser 1.9 added.
 
 *Automatic* is worth pinning down before any of this is built, because it reads
 two ways. Fetching a profile without the user downloading a file by hand is this
@@ -379,7 +274,7 @@ user action, and the wording in the app says so.
 ** Preset recommendation
 
 “Please recommend a configuration or built-in option” read two ways: tell me
-which to pick, or pick for me. The 1.8 preset descriptions answer the first
+which to pick, or pick for me. The 1.9 preset descriptions answer the first
 cheaply. The second needs the app to know the device and the material, which is
 worth thinking about rather than guessing at.
 

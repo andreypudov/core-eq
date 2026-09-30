@@ -17,6 +17,134 @@ part worth having written down.
 
 Not yet released.
 
+The most requested feature by a clear margin, asked for from four directions —
+AutoEQ, EqualizerAPO, Wavelet, and “EQ txt files” — all of which describe the
+same file. Alongside it, the half of *Echo and doubled audio* that could be
+measured, and two defects found on the way.
+
+** Import and export
+
+Contributed by Sebastian Ullrich in #25, and followed up in #28.
+
+AutoEQ's parametric export is a preamp and a frequency, gain and Q per filter;
+EqualizerAPO reads the same text, and Wavelet ships the same database, so one
+parser answers every request in the thread. The chain already expressed what
+the format says — free filters anywhere from 20 Hz to 20 kHz with Q from 0.1 to
+10, and a preamp that maps onto the output trim — so the work was the parser, a
+way in, and the three decisions the format forces:
+
+- *More than sixteen filters.* Truncated by significance rather than refused:
+  pass filters are kept first, then the strongest by gain, in their original
+  order, and the preview says how many were dropped.
+- *Values past CoreEQ's limits.* Clamped, and counted in the preview — ±12 dB of
+  gain and preamp, 20 Hz to 20 kHz, Q 0.1 to 10. Values in a =.coreeq= file
+  were always clamped, but silently; they are counted too now.
+- *Replace or stack.* Replace. A correction curve is a complete statement about
+  the headphone, not an adjustment to whatever was on the ladder.
+
+What reads it: =Preamp:=, and =PK=, =LSC=, =HSC=, =HP= and =LP= filters with Q or
+bandwidth in octaves; CoreEQ's own =.coreeq=; text in UTF-8, UTF-16 with a
+byte-order mark, and Windows-1252, since EqualizerAPO configs are edited in
+Notepad. Lines it does not model — =GraphicEQ:=, =Channel:=, =Convolution:= —
+are skipped and listed rather than failing the file, so filters meant for one
+channel apply to both. A file without a =Preamp:= line gets the computed trim,
+because a boost-heavy correction with no trim of its own clips at 0 dB. Every
+import shows what it found before anything is added: from the =+= under the
+list, =⌘V=, a file dropped on the list, or the AutoEQ guide beside the =+=. A
+file is named after itself; pasted text lands in rename.
+
+Export writes either format from a preset's context menu. Exporting the preset
+being listened to writes what is heard — unsaved edits and Quick EQ tone
+included — the way an edited document exports with its edits.
+
+Two things made the round trip lossy until the end. EqualizerAPO text has no
+ladder, so each band was written as a peaking filter and read back as a free
+one: a preset with six edited bands and twelve filters exported eighteen lines
+and lost two of them to the cap on the way back in. And numbers were written to
+one decimal, which turned a built-in's 1.75 dB into 1.8. A filter that is
+exactly a rung — a bell, enabled, on a ladder frequency, at the ladder's Q — now
+returns to its slot, which never changes the sound because a band *is* that
+bell, and every number is written with the decimals it needs, up to four.
+
+*Done*, on the roadmap's own terms. What CoreEQ writes out reloads identically,
+tested with that eighteen-line preset. And a real AutoEQ profile, the
+Sennheiser HD 600 as measured by oratory1990, imports all ten filters and
+computes within 0.064 dB of the response AutoEQ publishes for it at 44.1 kHz,
+and within 0.108 dB at 48 kHz, across all 695 published frequencies — using
+the same filter definition the engine renders with.
+
+** Screen recordings captured the sound twice
+
+Reported twice as “screen recording fails in every capture tool”, with “a
+Doppler echo delay” in what was captured.
+
+Measured with a probe that recorded system audio through ScreenCaptureKit, the
+API screen recorders use, while eight clicks played:
+
+| CoreEQ                 | Arrivals per click | Second copy         |
+|------------------------+--------------------+---------------------|
+| quit                   | 1                  | —                   |
+| on, a headphone preset | 2                  | +27.6 ms, ⅓ level   |
+| on, Flat               | 2                  | +27.2 ms, 80% level |
+| switched off           | 1                  | —                   |
+
+A recorder captures each application's sound before CoreEQ's tap mutes it at
+the device, and it also captures CoreEQ's own output: the same audio,
+equalized, 27 ms later. Two copies that close are heard as comb filtering. It
+had been filed next to a feedback loop, and it is not one — nothing compounds,
+and the recordings did not fail, they doubled. Any ScreenCaptureKit recorder
+sees it, and no fix in the audio path can remove it.
+
+What can be done is to step aside, and a recording can be seen from Core Audio
+alone. A process capturing input from no real device is reading a tap, which is
+system audio: during a ScreenCaptureKit capture, =replayd= shows as exactly
+that, from start to stop and at no other time. Audacity and QuickTime recording
+the microphone capture from the microphone and are left alone, and so is a
+video-only capture. Core Audio sends no notification when a process starts
+capturing, so this is polled — on a background queue, because a sweep costs
+14 ms and up to 40, and only while CoreEQ is rendering.
+
+*Fixed, as far as it can be.* *Pause while recording system audio*, on by
+default in Settings → General: CoreEQ steps aside the way idling does, without
+touching the on/off switch, says so on the graph and in the menu, and comes back
+when the recording stops. Measured end to end, the recording came out clean. The
+pause lands about a second after CoreEQ starts rendering, so the start of a
+recording can still carry the doubled sound; the README says to switch off
+first when the start matters. Recorders that loop audio through a virtual
+device such as BlackHole read from a device like any microphone, and are not
+seen.
+
+** A tap that could hear CoreEQ
+
+Found while chasing the echo after waking, which is still open on the roadmap.
+
+Every tap has to leave CoreEQ's own process out, or it captures what CoreEQ has
+just played. The lookup of that process could fail in two ways, and only one
+looked like failure: the call can return an error, or it can succeed and hand
+back object 0 for a process Core Audio does not know — measured, a PID with no
+audio client comes back as status 0, object 0. Excluding object 0 excludes
+nothing, and the tap was built anyway.
+
+*Fixed.* No tap is built without a real process to exclude. The start fails,
+the ordinary retries apply, and the sound is left alone in the meantime. The
+diagnostics report also counts CoreEQ's own aggregate devices, since more than
+one alive is two paths rendering the same audio.
+
+** Starting during a recording read as a refused permission
+
+Found testing the pause above. CoreEQ launched while QuickTime was recording
+showed “not allowed to process audio”, and cleared itself once music played.
+
+A refused permission cannot be asked about, only inferred: a tap that delivers
+nothing while something is playing. “Playing” meant a process holding the
+output open, and a recorder holds it open while sending nothing, so its silence
+read as a refusal. Separately, two seconds was too short even for real players:
+once, sound arrived 1.3 s after the verdict had already been given.
+
+*Fixed.* The verdict ignores processes that are also capturing input — leaving
+one out can only make it wait, never make it wrong — and waits six seconds
+rather than two. A refusal is a lasting state, so saying so later costs nothing.
+
 ** A sample rate change left the sound chopped
 
 Reported in #27 against a Universal Audio Volt 476P: a DAW opening a session at
@@ -56,6 +184,36 @@ rebuild about a second after the change and clean playback, a round trip
 through 44.1 kHz in 0.3 s gave none and stayed clean, and coreaudiod answered
 throughout. The diagnostics report names the change, as in =sample rate changed
 from 48000 to 44100 Hz=.
+
+** The menu's switch looked the same on and off
+
+Reported in #26: the switch in the status menu was grey whether CoreEQ was on or
+off, told apart only by where the knob sat.
+
+=NSSwitch= fills its track with the accent colour only while its app is the
+active one, and a menu bar app is not active while its menu is open. The Wi-Fi
+menu does not have the problem because Control Center draws its own switches.
+Activating CoreEQ when the menu opens would colour it and take the keyboard from
+whatever app the user is in, which is worse. None of the ways to recolour a real
+switch work: it has no tint property, public or private; it draws through its
+own layers, so an overridden =draw(_:)= is never called; and a Core Image filter
+on its layer barely reaches it.
+
+*Fixed.* The menu draws its own switch, copied from the system one rather than
+imitated: its size is read from =NSSwitch= at runtime, and the knob's shape,
+inset and colours were measured from it. On is the accent colour.
+
+** Documentation that answers the repeated questions
+
+Three recurring threads, each closed in writing rather than in replies:
+
+- Every built-in preset has a one-line description, written from its curve and
+  shown when the pointer rests on it in the sidebar or the menu.
+- The README shows how to verify the no-driver claim independently, by listing
+  =/Library/Audio/Plug-Ins/HAL= before and after installing — a commenter
+  proposed it, and it is better proof than any wording.
+- The README states the deliberate limits: no volume control, not bit-perfect,
+  and one curve for every channel.
 
 * 1.8 — Make it work everywhere it claims to
 

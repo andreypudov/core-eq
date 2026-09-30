@@ -101,8 +101,11 @@ struct EqualizerSidebarView: View {
 
             bottomBar
         }
+        // Worded the way the system's own confirmations are, because a macOS
+        // alert has a fixed, narrow width: "the preset" is already said by the
+        // menu it came from, and the shorter title stops wrapping.
         .alert(
-            "Delete the preset “\(deletionCandidate ?? "")”?", isPresented: deletionAlertPresented
+            "Delete “\(deletionCandidate ?? "")”?", isPresented: deletionAlertPresented
         ) {
             Button("Delete", role: .destructive) {
                 if let name = deletionCandidate { profileManager.deleteProfile(named: name) }
@@ -110,7 +113,7 @@ struct EqualizerSidebarView: View {
             }
             Button("Cancel", role: .cancel) { deletionCandidate = nil }
         } message: {
-            Text("This preset will be removed permanently.")
+            Text("You can’t undo this action.")
         }
         .alert(
             "Import Failed",

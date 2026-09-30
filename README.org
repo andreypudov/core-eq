@@ -6,7 +6,7 @@ application is playing, with no virtual audio driver and no kernel extension.
 It runs on Apple's native Core Audio process-tap API, so there is nothing
 installed into the system and nothing left behind when CoreEQ is not running.
 
-[[./design/screenshots/core-eq-1.8.png]]
+[[./design/screenshots/core-eq-1.9.png]]
 
 * Features
 
@@ -197,18 +197,21 @@ controls, *Open Equalizer…*, *Settings…*, and *Quit*. CoreEQ has no menu bar
 its own, so this is where those live.
 
 *Settings* — a gear in the window's header, or *Settings…* in the menu. Three
-tabs: *General*, which holds *Open CoreEQ at login* and the status of the System
-Audio Recording permission; *Diagnostics*, a report of the audio setup to copy
-into a bug report; and *About*. Clicking the CoreEQ mark at the top of the
-sidebar opens About directly.
+tabs: *General*, which holds *Open CoreEQ at login*, *Release the audio device
+when nothing is playing*, *Pause while recording system audio*, and the status
+of the System Audio Recording permission; *Diagnostics*, a report of the audio
+setup to copy into a bug report; and *About*. Clicking the CoreEQ mark at the
+top of the sidebar opens About directly.
 
 *Window* — presets in the sidebar, with a search field and your own presets
-above the built-ins; the response graph, the *Graphic* / *Parametric* editors,
-and the preamp on the right. The output device sits in the centre of the header
-and names the preset playing on it underneath, with a dot when that preset has
-unsaved changes; where the machine has more than one output, that control is
-also how you choose between them. *Revert* sits beside it — next to the preset
-it would discard — and the gear and the master switch close the row.
+above the built-ins, and a bar beneath them: the =+= creates a preset or imports
+one, and *AutoEQ* explains how to get a correction for your headphones. Then the
+response graph, the *Graphic* / *Parametric* editors, and the preamp on the
+right. The output device sits in the centre of the header and names the preset
+playing on it underneath, with a dot when that preset has unsaved changes; where
+the machine has more than one output, that control is also how you choose
+between them. *Revert* sits beside it — next to the preset it would discard —
+and the gear and the master switch close the row.
 
 CoreEQ has no volume control. Its one level control is the *preamp*, which is
 the same thing a hardware equalizer calls Level: makeup gain for what the curve

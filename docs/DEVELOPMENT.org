@@ -217,9 +217,15 @@ stopped again at the end. Whatever was running beforehand is started again from
 the same bundle it came from, so an installed copy is not quietly replaced by a
 development build.
 
-*A run that could not start says so.* Missing BlackHole, missing permission or a
-silent baseline exit as =AUDIO TEST DID NOT RUN=, never as passed: nothing
-failed only because nothing ran, and that is not the same as working.
+*A run that could not start says so.* Missing BlackHole, missing permission, a
+silent baseline, or another app already playing exit as =AUDIO TEST DID NOT
+RUN=, never as passed: nothing failed only because nothing ran, and that is not
+the same as working. The last one is named — =Something else is playing audio:
+QuickTime Player= — because CoreEQ holds the device for as long as anything
+plays, and a player left running, inaudible once the output has moved to
+BlackHole, made the idle checks fail for a reason that was not CoreEQ's. If the
+device is still not released after a run has started, the failure names what
+was playing at that moment.
 
 *It is not CI.* It needs real hardware and real Core Audio; that is the point.
 Run it before a release, alongside the manual checks that only ears can make —
