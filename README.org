@@ -17,6 +17,17 @@ it, and plays it back through the current output device. No =/Library/Audio=
 component, no reboot, no per-application setup. Quit CoreEQ and system audio
 returns to its normal path immediately.
 
+You can check this yourself. Audio drivers live in one folder:
+
+#+begin_src sh
+ls /Library/Audio/Plug-Ins/HAL
+#+end_src
+
+List it before and after installing CoreEQ: nothing is added. Anything there
+was installed by other software, such as BlackHole. The device CoreEQ builds
+while it runs is private to the app, so it does not appear in Audio MIDI Setup
+either.
+
 ** One filter chain, two ways to edit it
 
 The *Graphic* editor is the professional ISO octave ladder — 32, 64, 125, 250,
@@ -50,7 +61,8 @@ shaping.
 Twenty-two built-in profiles — the classic set familiar from Apple Music and
 Spotify — plus your own, managed from the sidebar. Built-ins are immutable;
 your presets can be renamed, duplicated, edited, and deleted. Switching is
-instantaneous and glitch-free.
+instantaneous and glitch-free. Hover a built-in preset, in the sidebar or the
+menu, for a one-line description of what it is for.
 
 ** Import and export
 
@@ -214,6 +226,21 @@ into one of your own presets and *Revert* discards them. Your edits, the active
 preset, and the on/off state are restored on every launch, per output device.
 
 * Limitations
+
+What CoreEQ does not do, on purpose:
+
+- *No volume control.* macOS already has one, in the menu bar, on the keyboard,
+  and in Sound settings. CoreEQ's only level control is the preamp, which
+  makes up for what the curve takes away.
+- *Not bit-perfect.* CoreEQ works on the system mix, after macOS has mixed and
+  resampled every app's audio. At Flat the sound passes through unchanged, and
+  switched off CoreEQ leaves the audio path entirely, but it cannot give an app
+  exclusive access to the device.
+- *One curve for all channels.* On outputs with more than two channels (HDMI,
+  DisplayPort, USB interfaces) every channel is equalized, with the same curve.
+  There are no per-channel curves and no room correction.
+
+And what it cannot do yet:
 
 - Aggregate and Multi-Output Devices are not supported. Core Audio will not
   nest one aggregate device inside another, so CoreEQ refuses them and names the
