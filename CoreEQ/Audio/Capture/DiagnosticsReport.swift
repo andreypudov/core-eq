@@ -130,6 +130,9 @@ enum DiagnosticsReport {
         /// Seconds the current audio path has been up.
         var uptime: TimeInterval?
         var restarts = Restarts()
+        /// CoreEQ aggregate devices alive when the report was made, or nil when
+        /// not counted. See `AudioDevices.coreEQAggregateCount`.
+        var aggregatesAlive: Int?
         var level = Level()
         var idling = Idling()
     }
@@ -228,6 +231,13 @@ enum DiagnosticsReport {
                     "  restarts:        \(engine.restarts.count) (last: \(reason)\(ago))")
             } else {
                 lines.append("  restarts:        none")
+            }
+            if let alive = engine.aggregatesAlive {
+                lines.append("  audio paths:     \(alive) CoreEQ aggregate(s) alive")
+                if alive > 1 {
+                    lines.append(
+                        "                   NOTE: more than one — audio may be processed twice.")
+                }
             }
             lines.append(
                 String(

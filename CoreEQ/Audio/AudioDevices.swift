@@ -471,6 +471,16 @@ enum AudioDevices {
         return value
     }
 
+    /// CoreEQ's own aggregate devices that exist right now.
+    ///
+    /// One while the engine runs, none while it is stopped. More than one is a
+    /// leak: two paths rendering the same audio, which is one way an echo could
+    /// happen. Visible here because the aggregates are private to this process,
+    /// and this process is the one asking.
+    static func coreEQAggregateCount() -> Int {
+        allDeviceIDs().filter(isCoreEQAggregate).count
+    }
+
     private static func isCoreEQAggregate(_ deviceID: AudioDeviceID) -> Bool {
         guard let uid = persistentID(of: deviceID) else { return false }
         return uid.hasPrefix(coreEQAggregateUIDPrefix)

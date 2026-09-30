@@ -462,11 +462,12 @@ final class AudioEngine: ObservableObject {
     /// The taps this device needs, and the permission fact that follows.
     private func makeTaps(for device: OutputDevice) throws -> [AssembledTap] {
         // Tap every process except our own output, otherwise the equalized
-        // signal we play back would be captured again as a feedback loop.
-        var excluded: [AudioObjectID] = []
-        if let selfObject = try? processObjectID(for: getpid()) {
-            excluded.append(selfObject)
-        }
+        // signal we play back would be captured again as a feedback loop. No
+        // tap at all is better than one that hears itself: the start fails and
+        // is retried, and the Mac plays unprocessed in the meantime.
+        guard let selfObject = SelfExclusion.validated(try? processObjectID(for: getpid()))
+        else { throw SelfExclusionUnavailable() }
+        let excluded = [selfObject]
 
         let factory = LiveTapFactory(
             outputUID: device.uid, excluded: excluded,
@@ -1087,6 +1088,19 @@ final class AudioEngine: ObservableObject {
                     channels, so there is nowhere to send the equalized audio.
                     """
             }
+        }
+    }
+
+    /// CoreEQ's own audio process could not be identified, so no tap could
+    /// leave it out. See `SelfExclusion`. Not permanent: the lookup answers
+    /// once Core Audio knows the process, so the ordinary retries apply.
+    private struct SelfExclusionUnavailable: Error, LocalizedError {
+        var errorDescription: String? {
+            """
+            CoreEQ could not identify its own audio output, so it cannot leave \
+            itself out of what it captures. It is leaving your sound alone and \
+            will try again.
+            """
         }
     }
 
