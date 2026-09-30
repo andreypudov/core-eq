@@ -207,6 +207,15 @@ final class AudioEngine: ObservableObject {
 
     private var defaultDeviceListener: AudioObjectPropertyListenerBlock?
     private var sampleRateListener: AudioObjectPropertyListenerBlock?
+    /// The same property on the output device itself, and the device it is on.
+    private var deviceRateListener: AudioObjectPropertyListenerBlock?
+    private var deviceRateListenedID = AudioObjectID(kAudioObjectUnknown)
+    /// The rate the current audio path was built at. A different one reported
+    /// by either device means the path has to be built again. See
+    /// `rebuildIfRateMoved(to:)`.
+    private var pathSampleRate: Double = 0
+    /// The quiet period after a rate notification, restarted by each new one.
+    private var rateSettle: DispatchWorkItem?
     private var rateTraceDump: DispatchWorkItem?
 
     /// When the engine last came up, and what has made it come up again.
@@ -361,6 +370,8 @@ final class AudioEngine: ObservableObject {
     func stop() {
         pendingRestart?.cancel()
         pendingRestart = nil
+        rateSettle?.cancel()
+        rateSettle = nil
         idlePoll?.cancel()
         idlePoll = nil
         removeSystemObservers()
@@ -403,6 +414,7 @@ final class AudioEngine: ObservableObject {
         let rate = try nominalSampleRate(of: aggregateID)
         processor.setSampleRate(rate)
         sampleRate = rate
+        pathSampleRate = rate
 
         let layout = OutputPlan.layout(
             forTaps: taps,
@@ -417,6 +429,7 @@ final class AudioEngine: ObservableObject {
         // Only the two tied to this aggregate. The device and wake observers are
         // installed by `start()`, so that they exist even when this throws.
         installSampleRateListener()
+        installDeviceRateListener(on: device.id)
         installStreamConfigurationListener()
 
         diagnostics = DiagnosticsReport.Engine(
@@ -592,6 +605,14 @@ final class AudioEngine: ObservableObject {
             AudioObjectRemovePropertyListenerBlock(aggregateID, &addr, .main, sampleRateListener)
         }
         sampleRateListener = nil
+
+        if let deviceRateListener, deviceRateListenedID != kAudioObjectUnknown {
+            var addr = propertyAddress(kAudioDevicePropertyNominalSampleRate)
+            AudioObjectRemovePropertyListenerBlock(
+                deviceRateListenedID, &addr, .main, deviceRateListener)
+        }
+        deviceRateListener = nil
+        deviceRateListenedID = AudioObjectID(kAudioObjectUnknown)
 
         if let streamConfigListener, aggregateID != kAudioObjectUnknown {
             var addr = propertyAddress(
@@ -1055,6 +1076,7 @@ final class AudioEngine: ObservableObject {
                     self.processor.rateTrace.mark(.rateStaged, rate: rate)
                     self.sampleRate = rate
                     self.scheduleRateTraceDump()
+                    self.noteRateChange()
                 }
             }
         }
@@ -1063,6 +1085,91 @@ final class AudioEngine: ObservableObject {
             sampleRateListener = block
         } else {
             logger.error("Failed to install sample rate listener: \(status)")
+        }
+    }
+
+    /// Watches the output device's own rate, which another application can
+    /// change underneath the engine — a DAW opening a session, or a player
+    /// that switches the device to each track's rate (#27).
+    ///
+    /// Alongside the aggregate's listener rather than instead of it: on the
+    /// built-in speakers the aggregate followed the device and reported the new
+    /// rate, but a device that brings its inputs into the aggregate may not, and
+    /// this is the one that cannot miss.
+    private func installDeviceRateListener(on deviceID: AudioObjectID) {
+        var addr = propertyAddress(kAudioDevicePropertyNominalSampleRate)
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            Task { @MainActor in
+                guard let self, self.deviceRateListenedID == deviceID else { return }
+                self.noteRateChange()
+            }
+        }
+        if AudioObjectAddPropertyListenerBlock(deviceID, &addr, .main, block) == noErr {
+            deviceRateListener = block
+            deviceRateListenedID = deviceID
+        } else {
+            logger.error("Failed to observe the sample rate of \(deviceID)")
+        }
+    }
+
+    /// How long the rate must go without another notification before the
+    /// engine looks at it.
+    private static let rateSettleDelay: TimeInterval = 1.0
+
+    /// Starts, or restarts, the quiet period after a rate notification.
+    ///
+    /// A rate change is not one event. The device renegotiates, the aggregate
+    /// follows, and both notify, sometimes more than once. The first version of
+    /// this rebuilt 0.3 s after the first notification, tearing down and
+    /// creating devices while that was still under way, and the rate change it
+    /// was answering was followed by coreaudiod not answering for minutes —
+    /// with two engines running, so the cause is not proven, but a rebuild in
+    /// the middle of a renegotiation is the likeliest trigger and the one this
+    /// removes. The manual restart that fixed the sound in the report happened
+    /// long after the device had settled, and this waits for the same.
+    private func noteRateChange() {
+        rateSettle?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.rateSettle = nil
+            self.rebuildIfRateSettled()
+        }
+        rateSettle = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.rateSettleDelay, execute: work)
+    }
+
+    /// Rebuilds the audio path when the device has settled at a rate other
+    /// than the one the path was built at.
+    ///
+    /// Retuning the filters is not enough. Reproduced on a MacBook Pro's own
+    /// speakers: switched from 44.1 to 48 kHz under running audio, the
+    /// aggregate reported the new rate, the filters followed it — the rate
+    /// trace saw no disagreement — and the sound was chopped until CoreEQ was
+    /// restarted. Part of the path is fixed when it is built, and only building
+    /// it again brings it to the new rate, which is what a restart did.
+    ///
+    /// Read twice, a quarter of a second apart, and acted on only if the two
+    /// agree: a rate that is still moving is not one to build at. Cannot loop,
+    /// because the new path is built at the device's rate and the rates then
+    /// agree. Stands aside for a rebuild that is already scheduled.
+    private func rebuildIfRateSettled() {
+        let deviceID = deviceRateListenedID
+        guard pendingRestart == nil, deviceID != kAudioObjectUnknown,
+            let first = try? nominalSampleRate(of: deviceID)
+        else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.pendingRestart == nil, self.rateSettle == nil,
+                    self.deviceRateListenedID == deviceID,
+                    let second = try? self.nominalSampleRate(of: deviceID),
+                    second == first, second > 0, self.pathSampleRate > 0,
+                    second != self.pathSampleRate
+                else { return }
+                self.scheduleRestart(
+                    after: 0,
+                    reason:
+                        "sample rate changed from \(Int(self.pathSampleRate)) to \(Int(second)) Hz")
+            }
         }
     }
 

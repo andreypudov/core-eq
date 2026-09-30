@@ -265,6 +265,10 @@ extension AudioTest {
     static func measure(on device: AudioDeviceID, tone: URL) -> Measurement? {
         let channels = outputChannels(of: device)
         guard channels > 0 else { return nil }
+        // The rate the device is actually running at, which is not always
+        // `rate`: the sample rate check below changes it. The tone file stays at
+        // `rate` and the system resamples it, so its frequencies are unchanged.
+        let deviceRate = nominalRate(of: device)
 
         final class Accumulator: @unchecked Sendable {
             var leftReal: [Double]
@@ -307,8 +311,8 @@ extension AudioTest {
                 guard accumulator.accumulating else { continue }
                 for frame in 0..<frames {
                     let n = Double(accumulator.frames + frame)
-                    let leftPhase = -2 * Double.pi * leftHz * n / rate
-                    let rightPhase = -2 * Double.pi * rightHz * n / rate
+                    let leftPhase = -2 * Double.pi * leftHz * n / deviceRate
+                    let rightPhase = -2 * Double.pi * rightHz * n / deviceRate
                     for channel in 0..<bufferChannels {
                         let global = base + channel
                         guard global < accumulator.channels else { continue }
@@ -667,9 +671,68 @@ extension AudioTest {
         // measurement has returned the player has already exited.
         check("playing again takes the device back", tookDeviceBack(blackHole, tone: tone))
 
+        print("")
+        checkRateChange(blackHole: blackHole, tone: tone, processed: processed)
 
         print("")
         return failures > 0 ? 1 : 0
+    }
+
+    /// Another application changing the device's sample rate underneath the
+    /// engine, which is what a DAW or a bit-perfect player does (#27).
+    ///
+    /// Before 1.9 the engine retuned its filters and carried on, and the sound
+    /// was chopped until CoreEQ was restarted — reproduced on a MacBook Pro's
+    /// own speakers by switching them from 44.1 to 48 kHz. Since 1.9 the engine
+    /// rebuilds its path at the new rate instead.
+    ///
+    /// What this can and cannot see: BlackHole has no clock of its own, and on
+    /// it the old engine survived a rate change too — so this does not catch
+    /// that defect, which needs real hardware and ears. It guards the fix: a
+    /// rate change, and the rebuild it now causes, must leave the sound exactly
+    /// as it was. Chopped or missing audio loses energy at the test tones and
+    /// fails the same comparison an idle cycle has to pass.
+    ///
+    /// The change is made while a tone plays, as it is in the report: music
+    /// playing, and a DAW opening a session at another rate.
+    static func checkRateChange(blackHole: AudioDeviceID, tone: URL, processed: Measurement) {
+        print("Following a sample rate change")
+
+        let newRate = 44_100.0
+        let player = Process()
+        player.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
+        player.arguments = [tone.path]
+        try? player.run()
+        Thread.sleep(forTimeInterval: 0.6)
+        let changed = setNominalRate(newRate, on: blackHole)
+        player.waitUntilExit()
+        guard changed, nominalRate(of: blackHole) == newRate else {
+            skip(
+                "audio survives a sample rate change",
+                "\(name(of: blackHole)) did not accept \(Int(newRate)) Hz")
+            return
+        }
+        // Time for the engine to notice and rebuild, as it would for a device
+        // change.
+        Thread.sleep(forTimeInterval: 2)
+
+        guard let after = measure(on: blackHole, tone: tone) else {
+            check("audio survives a sample rate change", false, "could not capture")
+            return
+        }
+        check(
+            "audio survives a sample rate change",
+            after.decibels(after.atLeft[0]) > -60 && after.decibels(after.atRight[1]) > -60,
+            String(format: "ch0 %.1f dB, ch1 %.1f dB at %.0f Hz",
+                   after.decibels(after.atLeft[0]), after.decibels(after.atRight[1]), newRate))
+
+        let leftDrift = after.decibels(after.atLeft[0]) - processed.decibels(processed.atLeft[0])
+        let rightDrift =
+            after.decibels(after.atRight[1]) - processed.decibels(processed.atRight[1])
+        check(
+            "the sound is unchanged by a sample rate change",
+            abs(leftDrift) < 0.5 && abs(rightDrift) < 0.5,
+            String(format: "%+.2f dB / %+.2f dB", leftDrift, rightDrift))
     }
 }
 
