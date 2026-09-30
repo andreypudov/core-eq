@@ -1,0 +1,489 @@
+#+TITLE: CoreEQ — Internals
+#+SUBTITLE: How CoreEQ is put together
+#+OPTIONS: toc:2 num:nil
+
+How CoreEQ is put together: the audio path, the DSP, threading, resilience,
+persistence, and the traps that cost time to find. *Why* it is put together
+this way — one chain behind two editors, what a band is, what the graph is
+allowed to do — is [[file:ARCHITECTURE.org][ARCHITECTURE.org]]. Read that before changing anything about
+the relationship between the graphic and parametric editors. Building and
+testing are in [[file:DEVELOPMENT.org][DEVELOPMENT.org]].
+
+* Audio path: how CoreEQ attaches to system audio
+
+Implemented in =AudioEngine.swift=:
+
+1. *Process tap.* The engine creates Core Audio process taps
+   (=AudioHardwareCreateProcessTap=, macOS 14.2+) covering every process
+   except CoreEQ itself — excluding itself prevents a feedback loop. One tap
+   per output stream, because a tap binds to a single stream and takes its
+   format. Once capture is proven the taps use
+   =muteBehavior = .mutedWhenTapped=, so the tapped processes' original audio is
+   silenced at the hardware and the only signal reaching the speakers is what
+   CoreEQ writes back. Until then they are unmuted — see *Proving the tap*.
+2. *Private aggregate device.* The tap and the current default output device
+   are combined into a private (invisible) aggregate device with drift
+   compensation, so tap input and device output share one IO cycle.
+3. *IO proc.* An IO proc on the aggregate receives the tapped system mix each
+   cycle, runs it through =EQProcessor=, and writes it to the real device's
+   output buffers.
+
+** Releasing the device when nothing is playing
+
+A started aggregate makes =coreaudiod= hold a =PreventUserIdleSystemSleep=
+assertion for CoreEQ. Core Audio raises it on the first sound and never drops
+it, so a Mac that played anything once is held awake until CoreEQ quits.
+
+=IdlePolicy= decides when to let go; =AudioEngine= only carries it out. Every
+condition lives in the policy because it can be tested there against invented
+sequences, and the cost of a wrong condition is the failure this app has shipped
+three times — no sound, with every layer reporting success.
+
+Three things about it are load-bearing and should not be simplified away:
+
+- *Only the IO proc is stopped.* The tap and the aggregate stay alive, and this
+  is the rule most likely to be "improved" back into a bug. Tearing the path
+  down and rebuilding it on resume looks safer and is not: rebuilding creates a
+  new aggregate around the output device exactly as a player is opening it, so
+  the device is reconfigured — renegotiated, on Bluetooth — underneath the
+  client that just grabbed it. That shipped as far as manual testing and broke
+  playback outright: players failed to start and only succeeded after several
+  attempts, each attempt racing the rebuild.
+
+  The argument for tearing down was that a live =mutedWhenTapped= tap would
+  silence every other process with nothing running to write their audio back.
+  Measured, it does not: with the IO proc stopped and the tap alive, other
+  audio reaches the device at full level. The assumption was never tested, and
+  it cost a working feature.
+- *Silence and playback must both agree* before releasing. They come from
+  different places — the render path and the system — and a process may hold the
+  device open while sending zeros. Acting on either alone makes =goIdle= and
+  =resume= reachable from one state, and the path is rebuilt every thirty
+  seconds forever.
+- *A failed path is left to its own retry.* Otherwise a device the engine
+  refuses is retried at the poll interval rather than with the backoff and
+  ceiling that already exist.
+
+How the engine learns that audio is starting is itself measured, and the
+obvious answer is wrong. =kAudioProcessPropertyIsRunningOutput= sends *no
+notifications*: attached to every audio process, it never fired once. Sweeping
+those processes by hand answers the question but costs about 6 ms a pass, which
+rules out polling it quickly. =kAudioDevicePropertyDeviceIsRunningSomewhere= on
+the output device does notify, costs 0.05 ms to read, and reads false while
+CoreEQ is idle — so it says precisely "somebody else wants this device". A
+listener on the audio process list runs alongside it, because a process appears
+there about 80 ms before it plays, and the device needs about 90 ms to deliver
+its first buffer after being started. Acting on the announcement rather than on
+the audio is what closes the gap.
+
+Measured on a Bluetooth headset, resume went from 1.97 / 1.10 / 0.29 s of
+unequalized audio at a half-second poll to a consistent 40-48 ms.
+
+=Status= is deliberately unchanged while idle: nothing has changed for the user,
+and an idle engine reporting itself stopped would blink the menu bar icon off
+whenever a room went quiet. The diagnostics report carries the fact instead,
+because a released device and a broken engine look identical from outside.
+
+** Sample rate changes, and why there is no stale window
+
+Coefficients are a function of =2pi*f/fs=, so a device that changes rate while
+the filters are built for the old one puts every band in the wrong place — a
+Bluetooth headset moving to its call profile drops 44100 to 16000, which would
+put a 1 kHz bell at 363 Hz. CoreEQ learns of the change from a property
+listener, and a listener necessarily fires after the fact, so this looks like an
+unavoidable window.
+
+It is not, and the reason is worth knowing before anyone tries to close it:
+*Core Audio stops the device across a rate change*. Measured on a Jabra Evolve
+75, the new rate is staged within about two milliseconds of being reported and
+audio does not resume for another 120 to 330. The first buffer at the new rate
+lands on a render call that consumes the staged rate before filtering anything.
+
+=RateTrace= records the IO cadence — the frame count and host time of every
+cycle, four stores and no allocation — and =RateWindow= reads it afterwards, on
+the main thread, where the arithmetic is free. Frames divided by elapsed time
+*is* the device's real rate, which is the one thing nothing reports in time.
+Anything that disagrees with the configured rate by more than 10% is logged as a
+window, naming its width and where a 1 kHz band actually sat.
+
+The instrument ships rather than being deleted with the investigation. The
+guarantee above rests on a Core Audio behaviour rather than a documented
+promise, on one headset and one Mac; if it does not hold on someone else's
+hardware, this says so in a line of their log instead of being argued about from
+first principles.
+
+** Proving the tap
+
+A tap is created *unmuted*, and the render path writes nothing, until the engine
+has seen it deliver a non-zero sample. Only then does it rebuild with
+=.mutedWhenTapped= and start processing.
+
+This is not caution for its own sake. =AudioHardwareCreateProcessTap= returns
+success when the user has refused permission — measured, not assumed: with a
+refusal recorded, the engine reported =status: running=, a two channel
+device-bound tap, and not one sample. Muting on the strength of that gives a
+completely silent Mac with every layer of the app reporting that it works, which
+is the worst state this engine has.
+
+Unmuted, the same refusal costs only that the audio is not equalized. That is
+how an equalizer should fail, and it is why the order matters: prove, then mute.
+
+The proof is polled every 250 ms and never gives up on a clock. Silence proves
+nothing on its own — a quiet Mac is quiet — so the engine waits, indefinitely and
+harmlessly, because an unmuted tap writing nothing is CoreEQ not being there. It
+concludes only when audio is demonstrably flowing and none of it is arriving:
+two seconds of silence *while another process is playing output*
+(=kAudioProcessPropertyIsRunningOutput=, our own process excluded). Then it says
+it is not capturing and *leaves the audio alone*.
+
+It keeps watching after that. A verdict is a reading of the moment rather than a
+sentence, so allowing the permission in System Settings takes effect on the next
+sound, which proves the tap and clears the failure. Returning to the app also
+starts a fresh attempt — audio capture has no permission API to consult, so a
+sound arriving and the app being activated are the only two signals there are.
+
+=EQProcessor.hasReceivedAudio= is the observation, and it is reported in
+Settings ▸ Diagnostics alongside whether the tap is muting yet. The two have to
+be read together: not capturing *while muting* is a silent Mac; not capturing
+*while unmuted* is CoreEQ standing aside.
+
+Because the tap dies with the process, a crash or quit always returns the
+system to normal, unprocessed audio — there is no persistent driver state to
+clean up.
+
+* DSP
+
+=EQProcessor= is one flat cascade of RBJ audio-cookbook biquads (transposed
+direct form II, independent state per filter and channel; up to
+=EQProcessor.maxFilters= entries, stereo). It has no notion of bands, sliders,
+or lists: it is handed a chain and runs every entry the same way, which is what
+makes the graphic and parametric editors two views of one equalizer rather than
+two equalizers in series.
+
+Coefficients come from =Biquad=, the same type =FrequencyResponseView= draws
+its curve from. That sharing is deliberate and load-bearing — a second copy of
+the gain law or the Nyquist guard would let the plot quietly disagree with what
+is being heard.
+
+Custom biquads were chosen over wrapping Apple's EQ Audio Unit because they are
+trivially realtime-safe inside a HAL IO proc and have no format negotiation
+edge cases (the spec allows either).
+
+* A trap: NSToolbarDelegate's methods are required
+
+Swift presents all three =NSToolbarDelegate= methods as optional. =NSToolbar=
+does not: assign a delegate that omits
+=toolbar(_:itemForItemIdentifier:willBeInsertedIntoToolbar:)= and AppKit logs
+
+#+begin_example
+NERROR: invalid delegate <CoreEQ.AppDelegate: 0x…> (does not implement all
+required methods), and so can not be used!
+#+end_example
+
+and then *discards the delegate* — =toolbar.delegate= reads back nil. Measured,
+not inferred. The consequence is silent: the identifier methods are never called,
+no tracking separator is made, and the toolbar the sidebar's full-height layout
+is defined against sits empty.
+
+The item is built from the split view, and the toolbar is asked for its items
+while the window is still being assembled, so =AppDelegate= holds the
+=NSSplitViewController= rather than reaching for it through =mainWindow=, which is
+not assigned yet at that point.
+
+* A trap: a hand-made window does not update its Tab order
+
+=NSWindow.autorecalculatesKeyViewLoop= defaults to *false* for a window created
+in code, and to true only for one loaded from a nib. The main window is built by
+hand in =AppDelegate=, so with the default AppKit worked out the key-view loop
+once, at build time, and never revisited it. Any control added later — a
+parametric band, which is the whole point of that editor — had fields Tab had
+never heard of, so tabbing off the last row it knew about wrapped to the top.
+
+It presents as a bug about the *last* row, which sends you looking at the list
+and its separators. The give-away is that the same number of bands behaves
+differently depending on how you got there: adding a fourth leaves it broken,
+while adding a fifth and removing it again fixes it, because removing a view
+invalidates the loop and forces the rebuild that adding one does not. A symptom
+that depends on history rather than on state is a stale cache, not a layout
+mistake.
+
+Set it once, where the window is built.
+
+* A trap: publishing from inside a view update
+
+A segmented =Picker= synchronises its selection while SwiftUI is updating the
+view. Bind one to a =Binding= whose setter mutates an =ObservableObject= and the
+mutation happens *during* that update — SwiftUI reports “Publishing changes from
+within view updates is not allowed, this will cause undefined behavior”, and it
+means it.
+
+The A/B switcher hit this: its setter called =ProfileManager.setSlot=, which
+swaps five published properties at once. The fix is not to defer with
+=DispatchQueue.main.async=, which only moves the mutation somewhere unspecified —
+it is to bind the control to local =@State= and apply the change in
+=onChange=, which runs once the update has finished. A second =onChange= in the
+other direction keeps the control in step when the model changes on its own,
+which happens whenever the output device switches; =setSlot= ignores a request
+for the slot already live, so the two cannot chase each other.
+
+Two other =Picker=s exist. The editor tabs bind to =@AppStorage=, which is built
+for exactly this. The parametric type column uses =.menu= style, whose selection
+is written from a menu action rather than during layout. Neither has shown the
+warning, but a new segmented picker bound to the manager would.
+
+* A trap: an inner =[weak self]= that the outer closure defeats
+
+Core Audio listener blocks and =NotificationCenter= observers are stored back on
+the object that installs them, so they must not retain it. Six of them were
+written like this:
+
+#+begin_src swift
+let block: AudioObjectPropertyListenerBlock = { _, _ in
+    Task { @MainActor [weak self] in
+        guard let self else { return }
+        ...
+    }
+}
+streamConfigListener = block   // self -> block -> self
+#+end_src
+
+The outer closure has no capture list, and naming =self= in the *inner* one
+makes the outer capture it implicitly and *strongly*. The =[weak self]= is then
+decorative: the cycle is already closed by the time the inner closure is
+reached. The weak capture belongs on the closure that is actually stored:
+
+#+begin_src swift
+let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+    Task { @MainActor in
+        guard let self else { return }
+        ...
+    }
+}
+#+end_src
+
+=self= is then held only from the moment the block fires until the task
+finishes, which is the intent. Where the outer closure already captures
+something else, the weak capture joins it: =[weak self, processor]=.
+
+Swift 6.4 (Xcode 27) diagnoses this as =#ImplicitStrongCapture=, which, with
+=SWIFT_TREAT_WARNINGS_AS_ERRORS=, is a build failure rather than a warning —
+see [[https://github.com/andreypudov/core-eq/issues/21][issue #21]]. It is not a
+new mistake: v1.7 had eight instances of the same shape and v1.8 six. Older
+toolchains simply did not mention it.
+
+* Threading model
+
+- The IO proc runs on the Core Audio realtime thread and *never blocks*:
+  parameter changes (filters, preamp, bypass, sample rate) are staged behind an
+  =OSAllocatedUnfairLock= and consumed with =lockIfAvailable()= — under
+  contention the render path simply reuses the previous parameters for one
+  cycle.
+- It also never *allocates*. The staging chain is a fixed-length array of plain
+  values, written in place, so handing over a new chain neither allocates on the
+  main thread nor leaves the render thread holding the last reference to
+  something it would then have to free inside the IO callback.
+- Gain changes are smoothed over ~50 ms on the render thread, so profile
+  switches and slider drags are glitch-free.
+- Everything else (=AudioEngine=, =ProfileManager=, =SettingsStore=, UI) is
+  =@MainActor=. =AppDelegate= wires =ProfileManager.$currentFilters= to
+  =AudioEngine.apply(filters:)= via Combine, and =$currentPreamp= to
+  =apply(preamp:)=.
+
+* Resilience
+
+- *Default output device changes* — a system-object property listener
+  schedules a debounced engine rebuild on the new device.
+- *Sample rate changes* — a listener on the aggregate device updates the
+  filter coefficients (and resets filter state).
+- *Sleep/wake* — =NSWorkspace.didWakeNotification= triggers a rebuild.
+- *Startup failure* (typically missing permission) — up to three automatic
+  retries, with the error surfaced in the menu and the main window.
+- *Bypass* keeps the tap running and passes audio through untouched, so
+  toggling is instant and glitch-free.
+
+* Settings, About, and why they live in the status menu
+
+=LSUIElement= makes CoreEQ an *accessory* application: no Dock icon, and no menu
+bar of its own — not even while the main window is key. There is therefore no App
+menu, which is where About, Settings, and Quit normally live, so the status menu
+carries all three at its tail.
+
+Three consequences worth knowing:
+
+- *No ⌘,* — a status menu's key equivalents only fire while that menu is open, so
+  a shortcut there would be a promise the app cannot keep.
+- *Activate before showing anything.* An accessory app is not frontmost when its
+  status menu is clicked, so both =SettingsOpener.open()= and =showAbout()= call
+  =NSApp.activate(ignoringOtherApps:)= first or the window opens behind whatever
+  is in front.
+- *Opening the Settings scene needs SwiftUI.* =NSApp.sendAction(Selector(("showSettingsWindow:")))=
+  no longer opens it, and returns =true= while doing nothing — a silent failure.
+  =SettingsLink= and =EnvironmentValues.openSettings= are the supported routes and
+  both live inside SwiftUI, so =SettingsOpener= hosts a one-point transparent view
+  in the status item's button and keeps the action out of its environment.
+
+  About is a tab of that window rather than =orderFrontStandardAboutPanel=. The
+  panel is free and reads the name, version and copyright out of the bundle, so
+  giving it up means owning those — =AboutSettingsView= reads the same two
+  Info.plist keys for exactly that reason. What it buys is one surface instead of
+  two, which matters more than usual here because an accessory app has no App
+  menu and every surface needs its own way in.
+
+  Both tabs are pinned to one size. A =TabView= sizes itself to whichever pane is
+  showing, and a form and a short About block are nowhere near the same height, so
+  switching made the window jump — which in a window this small is the most
+  noticeable thing about it. Apple's own Settings windows do resize between panes,
+  but between panes of comparable weight.
+
+  The System Audio Recording row reports the *engine*, not a permission API,
+  because there isn't one: nothing answers "may I tap system audio", and the only
+  ground truth is whether the tap was created. That also lets it distinguish a
+  refusal from a stopped engine instead of blaming the user for the latter.
+  =EngineStatusBridge= carries that one fact across the scene boundary — the
+  window is built by SwiftUI on its own schedule and cannot be handed an engine
+  the app delegate creates lazily.
+
+  =SettingsOpener.shared= is that way in for all three callers: the header's
+  gear, the sidebar's app mark, and the menu row. A scene cannot be handed an
+  argument, so =SettingsRoute= holds the destination tab and is set immediately
+  before the window opens — deliberately not persisted, so the gear always means
+  General and the app mark always means About.
+
+  Two dead ends, both measured rather than assumed: a hosted =SettingsLink=
+  contains no =NSButton= to =performClick=, because SwiftUI draws its own
+  controls; and a hosting view belonging to no window never fires =onAppear=, so
+  the action is never captured. The host must be a view that is really on
+  screen — hence the status item's button rather than a window of our own.
+
+About is =orderFrontStandardAboutPanel=, which reads the name, version and build
+straight from the bundle — nothing to keep in step with the build.
+
+=LoginItem= wraps =SMAppService.mainApp=, which registers the application itself
+and so needs no helper bundle. It deliberately stores nothing: macOS owns the
+state, the user can revoke it in System Settings → General → Login Items while
+CoreEQ is not running, and a cached =Bool= would then be describing a world that
+no longer exists.
+
+* Why there is no volume control
+
+Twice now a volume slider has been added and removed, so the reasoning is here to
+stop it happening a third time.
+
+Every actual equalizer has exactly one level control and it is not a volume. A
+hardware graphic EQ — dbx 231, Klark Teknik DN360, Behringer Ultragraph — has its
+band faders and then a *Level* fader; parametric units (API 550, Pultec EQP-1A)
+have an output gain. Plugin EQs match: Pro-Q has Output Gain, Logic's Channel EQ
+has Global Gain. In-app equalizers match too: Apple Music and VLC have bands and a
+preamp. That control is makeup gain for what the curve took away, and CoreEQ has
+it — =EQProfile.preamp=.
+
+Listening volume lives downstream, in another box: the amplifier, the monitor
+controller, the master fader. The macOS apps that *do* ship a volume slider —
+eqMac, Boom, SoundSource — are audio control centres rather than equalizers, and
+their sliders are their own gain (often a boost past 100%), not a mirror of the
+system's.
+
+CoreEQ's would have been a mirror: a third copy of a control already on the menu
+bar, the keyboard, and in Sound settings, sitting next to a gain control that
+isn't the system's and looks identical. If a *boost* beyond the system maximum is
+ever wanted, that is a different feature, and it belongs in =EQProcessor= as gain
+rather than as a proxy for =kAudioDevicePropertyVolumeScalar=.
+
+* Persistence
+
+=SettingsStore= wraps =UserDefaults=. Two keys carry everything that matters:
+
+- =userProfiles= — the presets the user made, as JSON. Shared across devices: a
+  preset is a thing you own, not a property of a cable.
+- =deviceStates= — a =DeviceEQState= per output device, keyed by the device's
+  *persistent UID*. Which preset is playing, any unsaved edits to it, the
+  preamp, and the Quick EQ tone positions all follow the hardware, the way
+  volume does on macOS. =AudioDeviceID= is reassigned per boot and cannot key
+  anything that outlives a session, which is why the UID is used.
+
+=ProfileManager= is the only writer of =deviceStates=; every mutation funnels
+through =persistDeviceState()=, so a new control cannot change the sound without
+being remembered alongside the rest. The keys that predate the per-device model
+(=activeProfileName=, =workingFilters=, =workingPreamp=, =quickToneControls=,
+=customBandGains=) are read once at launch, migrated into the current device's
+slot, and cleared.
+
+* Design decisions
+
+- *Deployment target 14.2, not 13.0.* The process-tap API is the only way to
+  process all system audio without shipping a virtual audio driver; it was
+  introduced in macOS 14.2.
+- *Fixed band ladder, free filters on top.* Every profile carries the same
+  eleven centre frequencies (the ISO octave ladder 32 Hz – 16 kHz plus 20 kHz,
+  Q 1.41 ≈ one-octave bandwidth) as its first eleven entries, in slot order —
+  =ProfileManager.normalized= guarantees it, so the slider strip can index
+  straight into the chain. Anything after those eleven is a filter the user
+  added, with its own kind, frequency, and Q. The Nyquist guard in =Biquad= sits
+  at 0.47 × sample rate so the 20 kHz band stays active at a 44.1 kHz device
+  sample rate.
+- *The editor is a tab view, and its tabs live on its border.* A tab belongs on
+  its container's edge: in the window header the switcher sat a window's height
+  from the block it changed, and inside that block's heading row it was a control
+  replacing its own container while sitting in it, which reads as a filter over
+  the contents rather than a choice of them. On the border it is also the block's
+  title, which is why neither editor carries a heading of its own — "Graphic" and
+  "Band Levels" were two names for one thing. =View.borderLabel= mounts it, and
+  lives beside =WindowBackground= because its whole trick is carrying that same
+  material so it cuts the stroke instead of patching over it.
+
+- *Bypasses are power buttons, and there are two kinds left.* A switch is the
+  control for a preference; these take part of the chain out of the signal, which
+  is a bypass, and the power glyph is what every equalizer already uses for one.
+  =PowerToggleStyle= is a =ToggleStyle= rather than a =Button= on purpose — a
+  button that merely looks like a toggle loses the state VoiceOver announces, the
+  keyboard behaviour, and the traits. Two weights: the master carries a tinted
+  well because it is the way back on and must be findable when the rest of the
+  window is dimmed; a band's is a plain glyph, because a well on every table row
+  would be a column of boxes competing with the values.
+
+  The menu bar keeps a native =NSSwitch=. That surface is the system's, not
+  CoreEQ's — the header is modelled on the Wi‑Fi menu's title-plus-toggle row —
+  so the vocabulary there is the menu's rather than the equalizer's.
+
+- *The per-editor bypasses are gone.* They existed to hear one half of the chain
+  alone, which A/B now does better and at matched loudness. Their real cost was
+  what they said: the architecture's claim is that Graphic and Parametric are two
+  views of *one* chain, and a bypass per half states the opposite. They were also
+  a trap, because the flag is saved — a half switched off and forgotten leaves
+  sliders that move, redraw the curve, and change nothing audible.
+
+  =normalized= now forces =isEnabled= true on every ladder filter. Without it a
+  chain stored while the graphic half was bypassed would come back silent with no
+  control left that could explain it, and a rung at 0 dB is identity anyway, which
+  is what "off" meant for a band.
+
+- *Automatic gain is a mode of the trim, and it averages rather than peaks.*
+  =AutoGain.trim(for:)= samples the chain's response at 96 log-spaced points and
+  returns the negative of the mean: equal weight per octave, which is pink
+  weighting, which is roughly how music spends its energy. Peak-based trimming
+  was considered and rejected — the peak is never below the average, so using it
+  as a “ceiling” replaces the average in every case and leaves Bass Booster
+  audibly quieter than what it is being compared against. Clipping is therefore
+  not guaranteed away, and cannot be: CoreEQ sees the mix after every application
+  has set its own level, so the headroom is unknowable.
+
+  Every chain edit funnels through =ProfileManager.chainDidChange()=, which
+  recomputes the trim when the mode is on and then persists. One funnel rather
+  than a recomputation at each of the sixteen mutators, so a new way to edit the
+  chain cannot forget to keep the trim in step.
+
+- *A and B are two working states, not an undo.* Each holds a complete sound —
+  preset, chain, trim, tone — so switching compares rather than reverts, and both
+  belong to the output device like everything else unsaved. A slot reached for
+  the first time starts as a copy of the one it replaces: the first switch has to
+  be silent, or the control's opening move is to change the thing it exists to
+  compare. In =DeviceEQState= the live slot stays at the top level and the other
+  sits in =alternate=, which is what lets a state written before A/B decode
+  unchanged — no alternate, and A live.
+
+- *A band is moved into the parametric editor, never converted.* =Edit as
+  Filter…= lifts a slot's filter out unchanged and leaves the slot at 0 dB,
+  which is identity — the chain sums to exactly what it did before. The reverse
+  is not offered, because fitting an arbitrary filter back onto a fixed ladder
+  would be an approximation, and this application does not approximate what the
+  user asked for.
