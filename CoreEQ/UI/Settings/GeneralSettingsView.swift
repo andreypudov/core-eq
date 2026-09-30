@@ -73,6 +73,15 @@ struct GeneralSettingsView: View {
             }
 
             Section {
+                Toggle("Pause while recording system audio", isOn: recordingBinding)
+                    .help("Keeps screen recordings from capturing the sound twice")
+            } footer: {
+                Text(Theme.recordingPauseExplanation)
+                    .font(Theme.Font.label)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 // Laid out here rather than with `LabeledContent`, which places
                 // its value column on its own alignment and insets — that is
                 // what left the button at a different margin from every other
@@ -204,6 +213,14 @@ struct GeneralSettingsView: View {
         Binding(
             get: { SettingsStore().pausesWhenSilent },
             set: { SettingsStore().pausesWhenSilent = $0 }
+        )
+    }
+
+    /// Read by the engine on its next idle check, like `idleBinding`.
+    private var recordingBinding: Binding<Bool> {
+        Binding(
+            get: { SettingsStore().pausesWhileRecording },
+            set: { SettingsStore().pausesWhileRecording = $0 }
         )
     }
 

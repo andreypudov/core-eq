@@ -74,6 +74,9 @@ enum DiagnosticsReport {
     /// are the same report.
     struct Idling: Equatable {
         var isIdle = false
+        /// Idle because a recording is capturing system audio, rather than
+        /// because nothing is playing.
+        var isPausedForRecording = false
         /// Whether the behaviour is switched on at all.
         var isEnabled = true
         var releases = 0
@@ -213,7 +216,12 @@ enum DiagnosticsReport {
                 "  muting others:   "
                     + (engine.isMuting
                         ? "yes" : "no — not proven able to capture, so audio is left alone"))
-            if !engine.idling.isEnabled {
+            // The pause first: it has its own setting and applies even with
+            // idling switched off.
+            if engine.idling.isPausedForRecording {
+                lines.append(
+                    "  idling:          YES — paused while a recording captures system audio")
+            } else if !engine.idling.isEnabled {
                 lines.append("  idling:          off (releasing the device is disabled)")
             } else if engine.idling.isIdle {
                 lines.append(

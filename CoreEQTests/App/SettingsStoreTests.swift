@@ -135,4 +135,15 @@ import Testing
         #expect(SettingsStore(defaults: defaults).pausesWhenSilent == false)
     }
 
+    /// On unless the user says otherwise: a doubled recording is ruined, a
+    /// paused equalizer comes back by itself.
+    @Test func pausingForRecordingsIsOnByDefault() {
+        #expect(settings.pausesWhileRecording)
+    }
+
+    @Test func theRecordingSettingSurvivesARelaunch() {
+        settings.pausesWhileRecording = false
+        #expect(SettingsStore(defaults: defaults).pausesWhileRecording == false)
+    }
+
 }

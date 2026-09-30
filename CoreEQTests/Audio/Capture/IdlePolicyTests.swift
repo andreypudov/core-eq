@@ -17,13 +17,58 @@ struct IdlePolicyTests {
         isCaptureProven: Bool = true,
         pausesWhenSilent: Bool = true,
         isAudioStarting: Bool = false,
-        isRecovering: Bool = false
+        isRecovering: Bool = false,
+        stepsAsideForRecording: Bool = false
     ) -> IdlePolicy.Verdict {
         IdlePolicy.evaluate(
             isRunning: isRunning, silentSeconds: silentSeconds,
             isAnythingPlaying: isAnythingPlaying, isEnabled: isEnabled,
             isCaptureProven: isCaptureProven, pausesWhenSilent: pausesWhenSilent,
-            isAudioStarting: isAudioStarting, isRecovering: isRecovering)
+            isAudioStarting: isAudioStarting, isRecovering: isRecovering,
+            stepsAsideForRecording: stepsAsideForRecording)
+    }
+
+    // MARK: - Recording
+
+    /// Rendering while a recording captures system audio doubles every sound
+    /// in it, so the path goes even with audio playing.
+    @Test func aRecordingReleasesThePathWhileAudioPlays() {
+        #expect(
+            verdict(isAnythingPlaying: true, stepsAsideForRecording: true) == .goIdle)
+    }
+
+    /// Playback during the recording must not bring the path back.
+    @Test func playbackDoesNotResumeDuringARecording() {
+        #expect(
+            verdict(
+                isRunning: false, isAnythingPlaying: true, isAudioStarting: true,
+                stepsAsideForRecording: true) == .stayIdle)
+    }
+
+    /// The recording ending is what brings the equalizer back.
+    @Test func theEqualizerReturnsWhenTheRecordingEnds() {
+        #expect(verdict(isRunning: false, isAnythingPlaying: true) == .resume)
+    }
+
+    /// Its own setting, so switching idling off does not switch this off too.
+    @Test func aRecordingIsSteppedAsideForEvenWithIdlingOff() {
+        #expect(
+            verdict(isAnythingPlaying: true, pausesWhenSilent: false, stepsAsideForRecording: true)
+                == .goIdle)
+    }
+
+    /// An unproven tap is not muting, so there is no copy to remove — and the
+    /// path is needed to prove it.
+    @Test func anUnprovenTapIsKeptThroughARecording() {
+        #expect(
+            verdict(isCaptureProven: false, stepsAsideForRecording: true) == .keepRunning)
+    }
+
+    /// A path that failed stays with its retry, recording or not.
+    @Test func aFailedPathIsNotTouchedForARecording() {
+        #expect(
+            verdict(isRunning: false, isRecovering: true, stepsAsideForRecording: true)
+                == .stayIdle)
     }
 
     // MARK: - What must never happen

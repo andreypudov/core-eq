@@ -76,17 +76,32 @@ final class AudioEngine: ObservableObject {
     /// `isEnabled` off keeps the two apart where they do differ: the switch
     /// still holds what the user asked for, and asking for it back is still the
     /// way out.
-    var isProcessing: Bool { Self.isProcessing(status: status, isEnabled: isEnabled) }
+    var isProcessing: Bool {
+        Self.isProcessing(
+            status: status, isEnabled: isEnabled, isPausedForRecording: isPausedForRecording)
+    }
 
     /// The same question, asked of values rather than of the engine.
     ///
     /// `@Published` emits in `willSet`, so a subscriber reading these properties
     /// back is reading the value being replaced. Anything reacting to a change
     /// has to answer from what Combine handed it, and this is how.
-    nonisolated static func isProcessing(status: Status, isEnabled: Bool) -> Bool {
-        guard isEnabled, case .running = status else { return false }
+    nonisolated static func isProcessing(
+        status: Status, isEnabled: Bool, isPausedForRecording: Bool = false
+    ) -> Bool {
+        guard isEnabled, !isPausedForRecording, case .running = status else { return false }
         return true
     }
+
+    /// Whether CoreEQ has stepped aside because a recording is capturing system
+    /// audio. See `RecordingDetection`.
+    ///
+    /// Published, unlike `isIdle`, because this one the user has to be told
+    /// about. Idling is invisible — the next sound is equalized — but a pause
+    /// for a recording leaves the sound unequalized for as long as the
+    /// recording runs, and an equalizer that stops for no visible reason reads
+    /// as broken.
+    @Published private(set) var isPausedForRecording = false
 
     /// Whether asking for the equalizer to be on can achieve anything.
     ///
@@ -134,6 +149,7 @@ final class AudioEngine: ObservableObject {
     var idling: DiagnosticsReport.Idling {
         DiagnosticsReport.Idling(
             isIdle: isIdle,
+            isPausedForRecording: isPausedForRecording,
             isEnabled: settings.pausesWhenSilent,
             releases: idleCount,
             totalSeconds: totalIdle + (idleSince.map { -$0.timeIntervalSinceNow } ?? 0))
@@ -266,6 +282,15 @@ final class AudioEngine: ObservableObject {
     private var captureProven = false
     private var retryCount = 0
 
+    /// The last answer from `RecordingDetection`, and whether a sweep for the
+    /// next one is under way. The sweep costs 14 ms, up to 40, so it runs on its
+    /// own queue and the idle evaluation reads the last answer rather than
+    /// waiting for a new one.
+    private var isRecordingSystemAudio = false
+    private var isCheckingForRecording = false
+    private let recordingCheckQueue = DispatchQueue(
+        label: "com.andreypudov.coreeq.recording-check", qos: .utility)
+
     private static let maxRetries = 3
 
     init(settings: SettingsStore) {
@@ -308,6 +333,7 @@ final class AudioEngine: ObservableObject {
             try startEngine()
             retryCount = 0
             isIdle = false
+            isPausedForRecording = false
             scheduleIdleCheck()
         } catch {
             teardownEngine()
@@ -342,6 +368,7 @@ final class AudioEngine: ObservableObject {
         diagnostics = nil
         startedAt = nil
         isIdle = false
+        isPausedForRecording = false
         status = .stopped
     }
 
@@ -605,10 +632,14 @@ final class AudioEngine: ObservableObject {
     /// How long the tap may deliver nothing *while something else is playing*
     /// before the engine says it is not capturing.
     ///
-    /// Short, because the condition is specific: audio is demonstrably flowing
-    /// and none of it is reaching us. Long enough to cover a tap that takes a
-    /// moment to start after the aggregate does.
-    private static let silenceWhilePlayingLimit: TimeInterval = 2
+    /// Six seconds, not two. "Playing" means a process holds the output open,
+    /// not that sound is flowing, and a player can open the device well before
+    /// it sends anything: measured, sound arrived 1.3 s after a two-second limit
+    /// had already called the permission refused, and the window showed the
+    /// permission screen over an app that was working. A refused permission is
+    /// a lasting state, so waiting longer to say so costs nothing; saying it
+    /// wrongly sends someone to System Settings to fix what is not broken.
+    private static let silenceWhilePlayingLimit: TimeInterval = 6
 
     /// Waits for evidence that the tap is delivering, then mutes.
     ///
@@ -628,7 +659,7 @@ final class AudioEngine: ObservableObject {
             let (verdict, silent) = CaptureProof.evaluate(
                 hasReceivedAudio: self.processor.observed.hasReceivedAudio,
                 isAnythingPlaying: AudioDevices.isAnyProcessPlayingOutput(
-                    excluding: self.tapExcludedProcess),
+                    excluding: self.tapExcludedProcess, ignoringCapturing: true),
                 silentWhilePlaying: silentWhilePlaying,
                 interval: Self.capturePollInterval,
                 limit: Self.silenceWhilePlayingLimit)
@@ -714,6 +745,7 @@ final class AudioEngine: ObservableObject {
             isAnythingPlaying = false
         }
 
+        let stepsAside = settings.pausesWhileRecording && isRecordingSystemAudio
         let verdict = IdlePolicy.evaluate(
             isRunning: !isIdle && ioProcID != nil,
             silentSeconds: processor.observed.silentSeconds,
@@ -722,16 +754,63 @@ final class AudioEngine: ObservableObject {
             isCaptureProven: captureProven,
             pausesWhenSilent: settings.pausesWhenSilent,
             isAudioStarting: audioStarting,
-            isRecovering: status.summary != nil)
+            isRecovering: status.summary != nil,
+            stepsAsideForRecording: stepsAside)
         audioStarting = false
 
         switch verdict {
         case .keepRunning, .stayIdle:
-            return
+            break
         case .goIdle:
-            goIdle()
+            goIdle(
+                reason: stepsAside ? "a recording is capturing system audio" : "nothing is playing")
         case .resume:
             resumeFromIdle()
+        }
+
+        let paused = isIdle && stepsAside && isEnabled
+        if paused != isPausedForRecording { isPausedForRecording = paused }
+
+        checkForRecordingIfNeeded()
+    }
+
+    /// Looks for a recording in the background, and re-evaluates when the answer
+    /// changes.
+    ///
+    /// Only while it can matter: while CoreEQ is rendering, when a recording
+    /// would hear it twice, and while it has stepped aside, to see the recording
+    /// end. An idle CoreEQ is rendering nothing, and the sweep would be
+    /// battery spent on a question with no consequence. A resume re-evaluates
+    /// straight away, so a recording already running when playback starts is
+    /// found within one sweep rather than one poll interval.
+    ///
+    /// Polled because it has to be: Core Audio sends no notification when a
+    /// process starts capturing — measured, a listener on every process's
+    /// running-input flag never fired.
+    private func checkForRecordingIfNeeded() {
+        guard settings.pausesWhileRecording, isEnabled, captureProven,
+            !isIdle || isPausedForRecording, !isCheckingForRecording
+        else {
+            if !settings.pausesWhileRecording || !isEnabled { isRecordingSystemAudio = false }
+            return
+        }
+        isCheckingForRecording = true
+        let ownPID = getpid()
+        recordingCheckQueue.async { [weak self] in
+            let recording = RecordingDetection.isRecordingSystemAudio(
+                AudioDevices.recordingSnapshot(), excluding: ownPID)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.isCheckingForRecording = false
+                    guard recording != self.isRecordingSystemAudio else { return }
+                    self.isRecordingSystemAudio = recording
+                    self.logger.notice(
+                        "\(recording ? "A recording is capturing system audio" : "The recording stopped", privacy: .public)"
+                    )
+                    self.evaluateIdleState()
+                }
+            }
         }
     }
 
@@ -761,7 +840,7 @@ final class AudioEngine: ObservableObject {
     /// consuming it — both measured, the second because assuming it would was
     /// what made the destructive version look necessary. So while idle, audio
     /// plays normally and unprocessed, and resuming touches no topology at all.
-    private func goIdle() {
+    private func goIdle(reason: String) {
         guard !isIdle, let ioProcID, aggregateID != kAudioObjectUnknown else { return }
         AudioDeviceStop(aggregateID, ioProcID)
         isIdle = true
@@ -769,7 +848,7 @@ final class AudioEngine: ObservableObject {
         idleSince = Date()
         // `status` is deliberately untouched. Nothing has changed for the user:
         // CoreEQ is on, and the next sound will be equalized.
-        logger.info("Idle: stopped the IO proc, nothing is playing")
+        logger.info("Idle: stopped the IO proc, \(reason, privacy: .public)")
     }
 
     /// Starts the IO proc again because something wants to play.

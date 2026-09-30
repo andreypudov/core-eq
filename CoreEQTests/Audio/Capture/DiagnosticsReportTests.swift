@@ -312,6 +312,17 @@ struct DiagnosticsReportTests {
 
     /// One aggregate is the engine; a second is a path left behind, and two
     /// paths render the same audio twice — one way the echo could arise.
+    /// Said even with idling switched off, because the pause has its own
+    /// setting and happens regardless.
+    @Test func aPauseForARecordingIsNamed() {
+        var paused = engine()
+        paused.idling = DiagnosticsReport.Idling(
+            isIdle: true, isPausedForRecording: true, isEnabled: false)
+        #expect(
+            text(engine: paused).contains(
+                "idling:          YES — paused while a recording captures system audio"))
+    }
+
     @Test func aSecondAudioPathIsCalledOut() {
         var single = engine()
         single.aggregatesAlive = 1

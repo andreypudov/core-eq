@@ -21,6 +21,7 @@ final class SettingsStore {
         static let deviceStates = "deviceStates"
         static let lastOutputDeviceUID = "lastOutputDeviceUID"
         static let pausesWhenSilent = "pausesWhenSilent"
+        static let pausesWhileRecording = "pausesWhileRecording"
     }
 
     private let defaults: UserDefaults
@@ -61,6 +62,19 @@ final class SettingsStore {
     var pausesWhenSilent: Bool {
         get { defaults.object(forKey: Key.pausesWhenSilent) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Key.pausesWhenSilent) }
+    }
+
+    /// Whether CoreEQ steps aside while a recording captures system audio.
+    ///
+    /// On by default, because the two failures are not alike. With it off, a
+    /// screen recording comes out doubled — ruined, and nobody who hears it
+    /// knows why. With it on, the sound in the room is unequalized for as long
+    /// as the recording runs, and comes back by itself. Off exists for sharing a
+    /// screen with audio in a call, where someone may prefer their EQ to what
+    /// the other side hears. See `RecordingDetection`.
+    var pausesWhileRecording: Bool {
+        get { defaults.object(forKey: Key.pausesWhileRecording) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.pausesWhileRecording) }
     }
 
     /// Band gains dialed in on top of the active profile by CoreEQ 1.x.

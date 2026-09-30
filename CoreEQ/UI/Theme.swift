@@ -59,6 +59,14 @@ enum Theme {
         + "turn it off and on again — an update gives it a new signature and macOS keeps "
         + "the old entry. It starts equalizing as soon as you come back."
 
+    /// Why CoreEQ has stepped aside for a recording, where there is room to
+    /// say it: the main window, and the setting that controls it. The menu has
+    /// room for `recordingPauseTitle` alone.
+    static let recordingPauseTitle = "Paused while recording"
+    static let recordingPauseExplanation =
+        "Screen recordings capture both your apps’ sound and CoreEQ’s equalized copy, which "
+        + "sounds doubled. CoreEQ steps aside until the recording stops."
+
     /// Every size and weight the app is allowed to use.
     ///
     /// Before this there were eight hardcoded point sizes plus three of the
