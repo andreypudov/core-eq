@@ -534,7 +534,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         return profileManager.profiles
             .filter { $0.name != active }
             .map { profile in
-                MenuRowView(
+                let row = MenuRowView(
                     title: profile.name,
                     image: presetBadge(for: profile.filters, selected: false),
                     gutter: MenuListMetrics.badgeGutter,
@@ -543,6 +543,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                     self?.profileManager.setActiveProfile(name: profile.name)
                     self?.dismissMenu()
                 }
+                // Built-ins only: a preset the user made is described by its name.
+                if profile.isBuiltIn { row.toolTip = BuiltInProfiles.descriptions[profile.name] }
+                return row
             }
     }
 

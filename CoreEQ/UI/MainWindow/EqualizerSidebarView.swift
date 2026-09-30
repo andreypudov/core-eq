@@ -367,6 +367,12 @@ struct EqualizerSidebarView: View {
         .accessibilityLabel(profile.name)
         .accessibilityValue(isSelected && profileManager.isModified ? "Edited" : "")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
+        // What a built-in is for, on hover. A user's own preset has no line: its
+        // name is the only description it was given.
+        .help(profile.isBuiltIn ? BuiltInProfiles.descriptions[profile.name] ?? "" : "")
+        .accessibilityHint(
+            profile.isBuiltIn ? BuiltInProfiles.descriptions[profile.name] ?? "" : ""
+        )
         .contextMenu { presetActions(for: profile.name) }
     }
 

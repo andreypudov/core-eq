@@ -150,8 +150,23 @@ What is left:
   restarts a session has had, why the last one happened, and how long ago, and
   since <2026-09-30 Wed> how many CoreEQ aggregates are alive — more than one is
   two paths rendering the same audio. On the development machine it reads one,
-  including across the rebuild that follows proving the tap. The wake case
-  itself is still to be reproduced.
+  including across the rebuild that follows proving the tap.
+
+  *Not reproduced.* One sleep and wake on a MacBook Pro's built-in speakers,
+  macOS 27.0.1, at Flat — the preset where two copies would be loudest —
+  played clicks and music clean afterwards. The report agreed: one restart,
+  =system woke from sleep=, one aggregate alive, capturing and muting, peak in
+  equal to peak out. So neither suspect showed: no path survived the rebuild,
+  and the tap did not hear CoreEQ.
+
+  One clean cycle does not settle a report that says “sometimes”. Still worth
+  running: audio playing into the sleep, so playback resumes while the path is
+  rebuilt; a sleep of ten minutes or more, long enough for the hardware to be
+  powered down; and Bluetooth headphones, whose route is renegotiated on wake.
+  Until then, the next echo report settles it, as long as the diagnostics
+  report comes with it: =audio paths= above one is a leaked path, the
+  self-exclusion error is a tap that could not leave CoreEQ out, and an echo
+  with neither points somewhere not yet looked at.
 - Detect a recording in progress and say so plainly, rather than leaving the
   user to work out why their recording sounds doubled — or step aside for its
   duration.
