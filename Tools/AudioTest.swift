@@ -204,6 +204,56 @@ extension AudioTest {
             && value != 0
     }
 
+    /// The names of other processes playing audio right now — anything but this
+    /// test, the player it starts, and CoreEQ, which are expected to.
+    ///
+    /// The idle checks need this. CoreEQ releases the device only when its own
+    /// output has been silent *and* no other process is playing, so a music
+    /// player left running makes it keep the device — correctly — and the check
+    /// fails for a reason that has nothing to do with CoreEQ. The test moves the
+    /// Mac's output to BlackHole, so that player is not even audible.
+    static func otherProcessesPlaying() -> [String] {
+        var listAddress = address(kAudioHardwarePropertyProcessObjectList)
+        var size: UInt32 = 0
+        guard
+            AudioObjectGetPropertyDataSize(
+                AudioObjectID(kAudioObjectSystemObject), &listAddress, 0, nil, &size) == noErr,
+            size > 0
+        else { return [] }
+        var processes = [AudioObjectID](
+            repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject), &listAddress, 0, nil, &size, &processes)
+                == noErr
+        else { return [] }
+
+        let expected: Set<String> = ["CoreEQ", "afplay", "audio-test"]
+        var names: [String] = []
+        for process in processes {
+            var runningAddress = address(kAudioProcessPropertyIsRunningOutput)
+            var isRunning: UInt32 = 0
+            var valueSize = UInt32(MemoryLayout<UInt32>.size)
+            guard
+                AudioObjectGetPropertyData(
+                    process, &runningAddress, 0, nil, &valueSize, &isRunning) == noErr,
+                isRunning != 0
+            else { continue }
+
+            var pidAddress = address(kAudioProcessPropertyPID)
+            var pid: pid_t = 0
+            valueSize = UInt32(MemoryLayout<pid_t>.size)
+            AudioObjectGetPropertyData(process, &pidAddress, 0, nil, &valueSize, &pid)
+            guard pid != getpid() else { continue }
+
+            var buffer = [CChar](repeating: 0, count: 256)
+            proc_name(pid, &buffer, UInt32(buffer.count))
+            let name = String(cString: buffer)
+            if !expected.contains(name) { names.append(name.isEmpty ? "pid \(pid)" : name) }
+        }
+        return Array(Set(names)).sorted()
+    }
+
     @discardableResult
     static func shell(_ launchPath: String, _ arguments: [String]) -> String {
         let process = Process()
@@ -504,6 +554,20 @@ extension AudioTest {
         // Start from nothing, whatever was running before.
         quitApp()
 
+        // Checked before anything is measured rather than after something
+        // fails: a player left running makes CoreEQ hold the device, which is
+        // right, and the idle checks then fail for a reason that is not
+        // CoreEQ's. Measured — a QuickTime playing into BlackHole did exactly
+        // that, and the run read as a regression until it was stopped.
+        let playing = otherProcessesPlaying()
+        guard playing.isEmpty else {
+            print("  Something else is playing audio: \(playing.joined(separator: ", ")).")
+            print("  CoreEQ holds the audio device for as long as anything plays, so the")
+            print("  checks for releasing it would fail for a reason that is not CoreEQ's.")
+            print("  Stop or quit it, and run this again.")
+            return couldNotRun
+        }
+
         setNominalRate(rate, on: blackHole)
         setDefaultOutput(blackHole)
         Thread.sleep(forTimeInterval: 1)
@@ -628,10 +692,18 @@ extension AudioTest {
         print("Releasing the device when nothing is playing")
 
         let released = waitForIdle(blackHole, limit: 45)
+        // Asked now, while it is still true: whatever kept the device may stop
+        // before anyone reads the result.
+        let heldBy = released ? [] : otherProcessesPlaying()
         check(
             "the device is let go after silence",
             released,
-            released ? "" : "still in use after 45 s — the Mac will not sleep")
+            released
+                ? ""
+                : heldBy.isEmpty
+                    ? "still in use after 45 s, with nothing else playing — the Mac will not sleep"
+                    : "still in use after 45 s — \(heldBy.joined(separator: ", ")) "
+                        + (heldBy.count == 1 ? "is" : "are") + " playing")
 
         // The moment the whole feature is for: the machine is no longer being
         // held awake. Checked here rather than after the resume, because this
