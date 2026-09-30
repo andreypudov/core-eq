@@ -1,0 +1,127 @@
+#+TITLE: CoreEQ — Releasing
+#+OPTIONS: toc:2 num:nil
+
+How CoreEQ is checked on every change and how a release is cut. Building
+and testing locally are in [[file:DEVELOPMENT.org][DEVELOPMENT.org]].
+
+* Continuous integration
+
+
+Three workflows, deliberately on different schedules.
+
+- *=ci.yml=* — =make lint=, =make test=, =make build= on every push and pull
+  request. About 2.5 minutes.
+- *=release.yml=* — =make release= on a =v*= tag, with the linked-SDK assertion
+  described under [[*Cutting a release][Cutting a release]].
+- *=codeql.yml=* — split by language, because the two cost three orders of
+  magnitude apart. The =actions= analysis runs on every push and pull request:
+  40 seconds on ubuntu, and it is the one with something to find here — script
+  injection from untrusted event data, unpinned actions, over-broad token
+  permissions. The =swift= analysis runs *weekly and on =workflow_dispatch=
+  only*.
+
+Swift is off the per-commit path because it cannot be made cheap. It has no
+build-free extraction — =build-mode: none= is unsupported and =autobuild= only
+runs the same xcodebuild — so every analysis costs a full compile, and under
+CodeQL's tracing that compile took 17 minutes against 42 seconds for the
+identical =make build= in =ci.yml=. The extractor is the cost, not the project.
+Running it on =push= and =pull_request= analyzed every change twice and
+accounted for 90% of all CodeQL minutes the repository had ever spent.
+
+The yield did not justify that. CodeQL's Swift suite targets network, crypto,
+WebView and JavaScript, SQL, =NSPredicate=, XML, regex, and command or path
+injection; CoreEQ has none of that surface and no third-party dependencies. The
+weekly run still keeps the Security tab current and picks up new query packs.
+
+The job also builds *one* slice (=XCODE_FLAGS=ARCHS=arm64=): extraction is
+source-level, so the second architecture doubles the traced compile and adds
+nothing to the database. =ONLY_ACTIVE_ARCH=YES= does not work for this —
+with =-target= and no destination there is no active architecture to pick, and
+the build comes out universal regardless.
+
+
+* Cutting a release
+
+
+CoreEQ is distributed unsigned (ad-hoc signature, no Apple Developer
+account). The release pipeline is GitHub Actions
+(=.github/workflows/release.yml=): pushing a tag matching =v*= builds
+=make release= on a macOS runner and attaches the zip to a GitHub Release
+with generated notes.
+
+*The runner image is a user-visible choice.* AppKit decides which generation of
+the macOS design an app renders in from the SDK it was *linked against*, not
+from the macOS running it. Building 1.6 on the =macos-15= image (Xcode 16, SDK
+15.5) shipped a binary that drew as a pre-26 app on every current Mac, while
+local builds against the 26 SDK looked native — same commit, same version, two
+different-looking apps. All three macOS jobs therefore pin the *same* image, and
+the release job asserts the linked SDK out of =LC_BUILD_VERSION= before
+publishing. The deployment target (=MACOSX_DEPLOYMENT_TARGET= 14.2) is set in
+the project and is unaffected by any of this: a 27-SDK build still runs on macOS
+14.2.
+
+That image is =xcode-27=, not =macos-27=. There is no GA macOS 27 label —
+=macos-latest= still resolves to the macOS 26 image, whose default is Xcode 26.x
+— so =xcode-27= (macOS 27 base, Xcode 27 default) is the only hosted way to link
+against the 27 SDK. Three consequences worth knowing before a release:
+
+- It is a *preview* image. Its Xcode is not version-pinned, and capacity can be
+  tighter than the GA images. Move all three jobs together when it changes;
+  =ci.yml= and =codeql.yml= exist partly to find out before =release.yml= does.
+  As of image =20260912.0186.1= it carries Xcode *27.0 build 27A266a* — the same
+  build as a current local Xcode 27 — so the toolchain is not a beta despite the
+  label. That is not guaranteed to hold: the SDK assertion checks the
+  generation, not the build, so read the =Show toolchain= step before trusting a
+  tag.
+- The label is =xcode-27= because the image began life as “macOS 26 with Xcode
+  27” and was rebased onto macOS 27 in September 2026. Expect it to be renamed
+  =macos-27= at GA. On precedent that is a while off: =macos-26= shipped as a
+  public beta on 2025-09-11 and went GA on 2026-02-26, and =macos-15= took a
+  comparable six months, so a GA =macos-27= is likely *early-to-mid 2027*, with
+  =macos-latest= following months later. Switch the three jobs together then.
+- The linked-SDK assertion requires *27 or newer*, deliberately narrower than
+  the SDK actually in use. If the image ever hands back a 26 toolchain, the
+  release fails instead of silently shipping a binary of the wrong generation —
+  which is the whole failure this guard was written for.
+
+To cut a release:
+
+1. Bump =MARKETING_VERSION= (and =CURRENT_PROJECT_VERSION=) in the target
+   build settings.
+2. Commit, then tag and push:
+   #+begin_src sh
+   git tag v1.1
+   git push origin v1.1
+   #+end_src
+
+Notes on unsigned distribution:
+
+- Downloaded (quarantined) copies trigger Gatekeeper; users bypass it once
+  via System Settings → Privacy & Security → *Open Anyway* or by clearing
+  the quarantine attribute. Building from source avoids this entirely —
+  local builds are never quarantined. Both paths are documented for users
+  in [[file:../README.org][README.org]].
+- The System Audio Recording (TCC) permission is keyed to the code
+  signature; ad-hoc signatures have no stable identity, so each shipped
+  update re-prompts users for the permission.
+
+
+* If a Developer ID account becomes available
+
+
+Sign with hardened runtime and notarize; this removes the Gatekeeper
+warning and the per-update permission re-prompts:
+
+#+begin_src sh
+xcodebuild -project CoreEQ.xcodeproj -target CoreEQ -configuration Release build \
+  CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+  ENABLE_HARDENED_RUNTIME=YES
+
+ditto -c -k --keepParent build/Release/CoreEQ.app CoreEQ.zip
+xcrun notarytool submit CoreEQ.zip --keychain-profile <profile> --wait
+xcrun stapler staple build/Release/CoreEQ.app
+#+end_src
+
+The app is currently *unsandboxed*. App Store distribution would require
+enabling the sandbox and revisiting the audio entitlements; direct
+(Developer ID) distribution does not.

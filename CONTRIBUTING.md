@@ -6,15 +6,21 @@ requests.
 
 ## Documentation
 
-- [README.org](README.org): what CoreEQ does, installation, and usage.
+- [README.org](README.org): what CoreEQ does and how to install it.
+- [docs/USER_GUIDE.org](docs/USER_GUIDE.org): every feature, the limitations,
+  and troubleshooting.
 - [docs/DEVELOPMENT.org](docs/DEVELOPMENT.org): toolchain, building, running,
-  testing, and releases. Start here before making changes.
-- [docs/ARCHITECTURE.org](docs/ARCHITECTURE.org): how the app is put together.
+  and testing. Start here before making changes.
+- [docs/ARCHITECTURE.org](docs/ARCHITECTURE.org): why the equalizer is shaped
+  the way it is.
+- [docs/INTERNALS.org](docs/INTERNALS.org): how the app is put together.
+- [docs/RELEASING.org](docs/RELEASING.org): what CI runs, and cutting a release.
 - [docs/ROADMAP.org](docs/ROADMAP.org): planned work and known issues.
 - [docs/RELEASE_NOTES.org](docs/RELEASE_NOTES.org): what shipped in each release.
 - [SECURITY.md](SECURITY.md): how to report a vulnerability.
 
-Project documentation is written in Org format (`.org`).
+Project documentation is written in Org format (`.org`); the
+[documentation index](docs/README.org) says which to read first.
 
 ## Reporting bugs
 
@@ -51,6 +57,32 @@ improvements can go straight to a pull request.
   formatting rules.
 - Keep each pull request focused on one change.
 - Update the relevant documentation when behavior changes.
+
+## Signed commits
+
+The repository requires signed commits: a pull request with an unsigned commit
+cannot be merged. Sign with an SSH or GPG key that is added to your GitHub
+account as a **signing key**; GitHub then marks each commit as **Verified**.
+
+With an SSH key, for example:
+
+```
+git config --global gpg.format ssh
+git config --global user.signingkey ~/.ssh/id_ed25519.pub
+git config --global commit.gpgsign true
+```
+
+If commits on your branch are already unsigned, re-sign them and force-push the
+branch:
+
+```
+git rebase --exec 'git commit --amend --no-edit -S' origin/master
+git push --force-with-lease
+```
+
+GitHub's guide to
+[commit signature verification](https://docs.github.com/en/authentication/managing-commit-signature-verification)
+covers GPG keys and troubleshooting.
 
 ## Commit messages and pull request titles
 

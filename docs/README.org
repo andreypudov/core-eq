@@ -1,0 +1,37 @@
+#+TITLE: CoreEQ Documentation
+#+OPTIONS: toc:nil num:nil
+
+Everything about CoreEQ beyond the [[file:../README.org][README]], grouped by who it is for.
+
+* Using CoreEQ
+
+- [[file:USER_GUIDE.org][USER_GUIDE.org]] — every feature, the deliberate limits and the ones still
+  being worked on, and troubleshooting. Start here.
+
+* What changed, and what is next
+
+- [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]] — what shipped in each release. Each entry keeps the
+  diagnosis: what was measured, and what the first fix got wrong.
+- [[file:releases/][releases/]] — a short summary per release, the text that goes on the GitHub
+  release page.
+- [[file:ROADMAP.org][ROADMAP.org]] — what is still owed, and the order it comes in.
+
+* Working on CoreEQ
+
+Read these in order the first time.
+
+1. [[file:../CONTRIBUTING.md][CONTRIBUTING.md]] — how to report bugs, discuss changes, and format commits
+   and pull requests.
+2. [[file:DEVELOPMENT.org][DEVELOPMENT.org]] — the toolchain, building, running, and testing, including
+   =make audio-test= on real hardware; formatting, build settings, and the
+   project structure.
+3. [[file:ARCHITECTURE.org][ARCHITECTURE.org]] — why the equalizer is one filter chain behind two editors,
+   and what the graph is allowed to do. Read it before changing anything about
+   the graphic and parametric editors.
+4. [[file:INTERNALS.org][INTERNALS.org]] — how the app is put together: the audio path, idling,
+   sample rate changes, the DSP, threading, resilience, persistence, and the
+   traps that cost time to find.
+5. [[file:RELEASING.org][RELEASING.org]] — what CI runs and when, and how a release is cut.
+
+Documentation is written in Org, except =CONTRIBUTING.md= and =SECURITY.md=,
+which GitHub looks for by name.
