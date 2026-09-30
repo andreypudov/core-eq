@@ -146,4 +146,30 @@ struct BuiltInProfilesTests {
 extension Double {
     /// -1, 0, or +1 — for comparing which way two curves point.
     fileprivate var sign: Int { self == 0 ? 0 : (self < 0 ? -1 : 1) }
+
+    // MARK: - Descriptions
+
+    /// Every built-in carries its one line, so no tooltip is ever blank.
+    @Test func everyBuiltInHasADescription() {
+        for profile in BuiltInProfiles.all {
+            let line = BuiltInProfiles.descriptions[profile.name] ?? ""
+            #expect(!line.isEmpty, "\(profile.name) has no description")
+        }
+    }
+
+    /// A renamed or removed preset must not leave its line behind.
+    @Test func everyDescriptionNamesABuiltIn() {
+        let names = Set(BuiltInProfiles.all.map(\.name))
+        for name in BuiltInProfiles.descriptions.keys {
+            #expect(names.contains(name), "\(name) is described but not a built-in")
+        }
+    }
+
+    /// One line: a tooltip, not a paragraph.
+    @Test func descriptionsAreOneShortLine() {
+        for (name, line) in BuiltInProfiles.descriptions {
+            #expect(!line.contains("\n"), "\(name)")
+            #expect(line.count <= 110, "\(name) is \(line.count) characters")
+        }
+    }
 }

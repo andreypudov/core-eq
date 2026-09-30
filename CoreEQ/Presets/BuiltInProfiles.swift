@@ -143,6 +143,38 @@ enum BuiltInProfiles {
 
     static let defaultProfileName = "Flat"
 
+    /// What each built-in is for, in one line: the preset's tooltip in the
+    /// sidebar and the menu, so the list does not assume the reader already
+    /// knows what Acoustic or Spoken Word is for.
+    ///
+    /// Written from the curves above, not from the names. Changing a preset's
+    /// shape means reading its line again; `BuiltInProfilesTests` holds every
+    /// built-in to having exactly one.
+    static let descriptions: [String: String] = [
+        "Flat":           "No change: the sound exactly as it arrives.",
+        "Acoustic":       "Fuller low end and a brighter, more present top, for acoustic guitar and unplugged recordings.",
+        "Bass Booster":   "More weight below 250 Hz, held all the way down to 20 Hz. The rest is untouched.",
+        "Bass Reducer":   "Less weight below 500 Hz, for boomy rooms or bass-heavy headphones.",
+        "Classical":      "A gentle lift at both ends and a slightly recessed midrange, for orchestral and chamber music.",
+        "Dance":          "Strong low bass and forward upper mids, for club music.",
+        "Deep":           "More bass and lower midrange, softer treble: a darker, warmer sound.",
+        "Electronic":     "Deep bass, a dip around 500 Hz, and crisp highs, for synth-driven music.",
+        "Hip-Hop":        "A heavy low end with slightly pulled-back mids and a little air on top.",
+        "Jazz":           "Warm bass, slightly recessed mids, and an airy top, for small-group recordings.",
+        "Latin":          "Bass and treble up, mids back, so percussion and brass come forward.",
+        "Loudness":       "More deep bass and high treble, to keep music full at low volume.",
+        "Lounge":         "A softened bottom and a warm midrange, for relaxed background listening.",
+        "Piano":          "More body and a brighter, more present top, for solo piano.",
+        "Pop":            "Midrange forward, bass and treble lighter, so vocals lead.",
+        "R&B":            "Big, round low bass, a recessed lower midrange, and smooth highs.",
+        "Rock":           "Punchy low end, bright upper treble, and slightly scooped mids.",
+        "Small Speakers": "More bass and less treble, for laptop and small speakers that sound thin or harsh.",
+        "Spoken Word":    "Rumble cut and the speech range lifted, for podcasts and audiobooks.",
+        "Treble Booster": "More brightness above 1 kHz, most around 8 kHz.",
+        "Treble Reducer": "Everything above 1 kHz softened, for harsh or sibilant recordings.",
+        "Vocal Booster":  "Low bass trimmed and the voice range lifted, so singers and speakers stand out.",
+    ]
+
     /// A chain of eleven ladder filters at 0 dB — the shape every preset starts
     /// from, and what an untouched equalizer is.
     static func emptyBandChain() -> [EQFilter] {
