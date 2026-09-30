@@ -15,23 +15,35 @@ import Foundation
 enum ParametricEQParser {
     enum ParseError: Error, LocalizedError, Equatable {
         case emptyContent
-        case invalidFormat
         case noValidFiltersFound
         case unsupportedFilterDeclaration
+        /// Starts like a `.coreeq` file but does not decode as one.
+        case damagedCoreEQFile
+        case fileTooLarge
+        /// Bytes that are not text in any encoding a preset is written in.
+        case unreadableText
 
         var errorDescription: String? {
             switch self {
             case .emptyContent:
                 return "The preset content is empty."
-            case .invalidFormat:
-                return "The file is not a valid EqualizerAPO or CoreEQ preset."
             case .noValidFiltersFound:
                 return "No valid filters were found in the preset text."
             case .unsupportedFilterDeclaration:
                 return "The preset contains an unsupported filter declaration."
+            case .damagedCoreEQFile:
+                return "The CoreEQ preset is damaged and cannot be read."
+            case .fileTooLarge:
+                return "The file is too large to be a preset."
+            case .unreadableText:
+                return "The file is not a text preset."
             }
         }
     }
+
+    /// Larger than any preset — a full AutoEQ file is under a kilobyte — and
+    /// small enough that reading it on the main actor is not noticed.
+    static let maxFileSize = 1_000_000
 
     /// Result of parsing an EqualizerAPO / AutoEQ text representation.
     struct ParsedPreset: Equatable {
@@ -48,6 +60,31 @@ enum ParametricEQParser {
         /// declaration — for example `GraphicEQ:`, `Convolution:`, or `Channel:`.
         /// Kept for the caller to report; they are informational, never fatal.
         var unparsedLines: [String] = []
+
+        /// Values outside CoreEQ's ranges — gain and preamp ±12 dB, frequency
+        /// 20 Hz–20 kHz, Q 0.1–10 — that were clamped to fit. Counted over the
+        /// filters that were kept, so it never double-counts a dropped one.
+        var adjustedValueCount: Int = 0
+    }
+
+    /// Decodes a preset file's bytes.
+    ///
+    /// EqualizerAPO configs are edited in Notepad, so UTF-16 with a byte-order
+    /// mark and Windows-1252 turn up as often as UTF-8. A leading BOM is removed
+    /// whichever encoding carried it: left in, it sits in front of `Preamp:` and
+    /// the line no longer parses.
+    static func decodeText(_ data: Data) throws -> String {
+        let text: String?
+        if data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]) {
+            text = String(data: data, encoding: .utf16)
+        } else {
+            text =
+                String(data: data, encoding: .utf8)
+                ?? String(data: data, encoding: .windowsCP1252)
+        }
+        guard var text else { throw ParseError.unreadableText }
+        if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
+        return text
     }
 
     /// Parses text content in EqualizerAPO or `.coreeq` JSON format.
@@ -56,11 +93,16 @@ enum ParametricEQParser {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ParseError.emptyContent }
 
-        // First attempt JSON decoding in case it is a native .coreeq file.
-        if trimmed.starts(with: "{"),
-            let data = trimmed.data(using: .utf8),
-            let profile = try? JSONDecoder().decode(EQProfile.self, from: data)
-        {
+        // A native .coreeq file. Nothing EqualizerAPO writes starts with a
+        // brace, so one that fails to decode is a damaged file, and saying so
+        // beats handing it to the text parser to report "no valid filters".
+        if trimmed.starts(with: "{") {
+            let profile: EQProfile
+            do {
+                profile = try JSONDecoder().decode(EQProfile.self, from: Data(trimmed.utf8))
+            } catch {
+                throw ParseError.damagedCoreEQFile
+            }
             let (freeFilters, droppedFilterCount) = trimFreeFilters(
                 profile.filters.filter { !$0.isBand })
             let bands = profile.filters.filter { $0.isBand }
@@ -69,11 +111,13 @@ enum ParametricEQParser {
                 preamp: profile.preamp.clamped(to: BuiltInProfiles.preampRange),
                 autoGain: profile.autoGain,
                 filters: FilterChain.normalized(bands + freeFilters),
-                droppedFilterCount: droppedFilterCount
+                droppedFilterCount: droppedFilterCount,
+                adjustedValueCount: outOfRangeCount(bands + freeFilters, preamp: profile.preamp)
             )
         }
 
         var preamp: Double = 0
+        var sawPreampLine = false
         var rawFilters: [EQFilter] = []
         var unparsedLines: [String] = []
         var foundAnyDirective = false
@@ -89,6 +133,7 @@ enum ParametricEQParser {
 
             if let parsedPreamp = parsePreamp(from: lineTrimmed) {
                 preamp = parsedPreamp
+                sawPreampLine = true
                 foundAnyDirective = true
                 continue
             }
@@ -108,27 +153,44 @@ enum ParametricEQParser {
             }
         }
 
-        guard foundAnyDirective && !rawFilters.isEmpty else {
+        // A Preamp line alone is a valid config — it is what a flat preset
+        // exports as — so it is enough. Only text with neither is not a preset.
+        guard foundAnyDirective else {
             throw ParseError.noValidFiltersFound
         }
 
-        // Clamp preamp and normalize filters
-        let clampedPreamp = preamp.clamped(to: BuiltInProfiles.preampRange)
-
         let (freeFilters, droppedFilterCount) = trimFreeFilters(rawFilters.filter { !$0.isBand })
-
-        let combined = FilterChain.normalized(freeFilters)
 
         return ParsedPreset(
             name: defaultName,
-            preamp: clampedPreamp,
-            // Text presets carry their trim on the Preamp line (or 0 dB when the
-            // line is absent), so the computed trim starts off in both cases.
-            autoGain: false,
-            filters: combined,
+            preamp: preamp.clamped(to: BuiltInProfiles.preampRange),
+            // A Preamp line is the file choosing its own trim, so the computed
+            // one starts off. Without one the file has said nothing about
+            // headroom, and a boost-heavy correction would clip at 0 dB — so
+            // the trim is computed, as it is for every built-in.
+            autoGain: !sawPreampLine,
+            // Normalising is also what clamps every value into range.
+            filters: FilterChain.normalized(freeFilters),
             droppedFilterCount: droppedFilterCount,
-            unparsedLines: unparsedLines
+            unparsedLines: unparsedLines,
+            adjustedValueCount: outOfRangeCount(freeFilters, preamp: preamp)
         )
+    }
+
+    /// How many values `FilterChain.normalized` and the preamp clamp will
+    /// change. A band only carries a gain; its frequency and Q are the ladder's.
+    private static func outOfRangeCount(_ filters: [EQFilter], preamp: Double) -> Int {
+        func outside(_ value: Double, _ range: ClosedRange<Double>) -> Int {
+            range.contains(value) ? 0 : 1
+        }
+        let filterCount = filters.reduce(0) { count, filter in
+            let gain = outside(filter.gain, BuiltInProfiles.gainRange)
+            guard !filter.isBand else { return count + gain }
+            return count + gain
+                + outside(filter.frequency, BuiltInProfiles.filterFrequencyRange)
+                + outside(filter.q, BuiltInProfiles.filterQRange)
+        }
+        return filterCount + outside(preamp, BuiltInProfiles.preampRange)
     }
 
     /// Keeps pass filters first up to the hard cap, then fills the remaining
@@ -259,15 +321,13 @@ enum ParametricEQParser {
                 ? BuiltInProfiles.shelfQ : BuiltInProfiles.defaultQ
         }
 
-        let clampedFreq = frequency.clamped(to: BuiltInProfiles.filterFrequencyRange)
-        let clampedGain = gain.clamped(to: BuiltInProfiles.gainRange)
-        let clampedQ = q.clamped(to: BuiltInProfiles.filterQRange)
-
+        // Unclamped: `parse` counts what is out of range before
+        // `FilterChain.normalized` brings it in.
         return EQFilter(
             kind: kind,
-            frequency: clampedFreq,
-            gain: clampedGain,
-            q: clampedQ,
+            frequency: frequency,
+            gain: gain,
+            q: q,
             isEnabled: isEnabled,
             band: nil,
             colorIndex: colorIndex

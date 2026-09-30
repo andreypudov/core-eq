@@ -1,4 +1,3 @@
-import AppKit
 import Combine
 import Foundation
 
@@ -59,9 +58,9 @@ final class ProfileManager: ObservableObject {
     /// The preset the sidebar should be showing as an editable text field, or
     /// nil when no rename is in progress.
     ///
-    /// Lives here rather than in the sidebar's own `@State` because a preset can
-    /// be created from outside the sidebar — the window toolbar's + button — and
-    /// a freshly created preset should always land with its name selected. The
+    /// Lives here rather than in the sidebar's own `@State` because the request
+    /// comes from here — `addProfile` and `duplicateProfile` end in one — and a
+    /// freshly created preset should always land with its name selected. The
     /// sidebar is the only reader; everyone else just asks for a rename.
     @Published var profileAwaitingRename: String?
 
@@ -343,12 +342,37 @@ final class ProfileManager: ObservableObject {
         /// Lines the parser could not model (`GraphicEQ:`, `Convolution:`, …).
         /// Informational only — the import still succeeds.
         let unparsedLines: [String]
+        /// Values clamped into CoreEQ's ranges. Informational, like the above.
+        let adjustedValueCount: Int
+        /// Whether `name` is only the placeholder — text from the clipboard or a
+        /// drop has none of its own — so committing should ask for a real one.
+        let needsName: Bool
         fileprivate let parsed: ParametricEQParser.ParsedPreset
     }
 
-    func previewImport(from text: String, name: String? = nil) throws -> ImportPreview {
+    enum ExportError: LocalizedError, Equatable {
+        case presetNotFound(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .presetNotFound(let name):
+                return "The preset “\(name)” no longer exists."
+            }
+        }
+    }
+
+    /// What an import is called until the user names it.
+    static let untitledImportName = "Imported Preset"
+
+    /// Parses preset text — EqualizerAPO / AutoEQ or `.coreeq` — without
+    /// touching the library. Nothing is added until `commitImport`.
+    ///
+    /// `suggestedName` is the file's name when there is a file. Without one the
+    /// preset is named by its own content when it has a name (`.coreeq`), or
+    /// by the placeholder, which `commitImport` then puts up for rename.
+    func previewImport(text: String, suggestedName: String? = nil) throws -> ImportPreview {
         let parsed = try ParametricEQParser.parse(
-            text: text, defaultName: name ?? "Imported Preset")
+            text: text, defaultName: suggestedName ?? Self.untitledImportName)
         return ImportPreview(
             name: parsed.name,
             // `parsed.filters` always begins with the eleven ladder bands, so the
@@ -358,26 +382,41 @@ final class ProfileManager: ObservableObject {
             preamp: parsed.preamp,
             droppedFilterCount: parsed.droppedFilterCount,
             unparsedLines: parsed.unparsedLines,
+            adjustedValueCount: parsed.adjustedValueCount,
+            needsName: suggestedName == nil && parsed.name == Self.untitledImportName,
             parsed: parsed)
     }
 
-    @discardableResult
-    func commitImport(_ preview: ImportPreview) -> String {
-        let unique = library.uniqueName(from: preview.name)
-        let profile = EQProfile(
-            name: unique, filters: preview.parsed.filters, preamp: preview.parsed.preamp,
-            autoGain: preview.parsed.autoGain)
-        let stored = library.add(profile)
-        persistUserProfiles()
-        setActiveProfile(name: stored)
-        return stored
+    /// Reads a preset file and parses it, named after the file.
+    ///
+    /// The size is checked before anything is read: this runs on the main
+    /// actor, and a file someone chose by mistake can be any size at all.
+    func previewImport(fileAt url: URL) throws -> ImportPreview {
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= ParametricEQParser.maxFileSize else {
+            throw ParametricEQParser.ParseError.fileTooLarge
+        }
+        let text = try ParametricEQParser.decodeText(Data(contentsOf: url))
+        return try previewImport(
+            text: text,
+            suggestedName: Self.cleanPresetName(
+                from: url.deletingPathExtension().lastPathComponent))
     }
 
-    /// Imports an equalizer profile from EqualizerAPO / AutoEQ text or `.coreeq` JSON.
+    /// Adds a previewed preset to the library and makes it active. A preset
+    /// with only the placeholder name lands in inline rename, the way a new
+    /// preset does.
     @discardableResult
-    func importProfile(from text: String, name: String? = nil) throws -> String {
-        let defaultName = name ?? "Imported Preset"
-        return commitImport(try previewImport(from: text, name: defaultName))
+    func commitImport(_ preview: ImportPreview) -> String {
+        // `add` makes the name unique.
+        let stored = library.add(
+            EQProfile(
+                name: preview.name, filters: preview.parsed.filters,
+                preamp: preview.parsed.preamp, autoGain: preview.parsed.autoGain))
+        persistUserProfiles()
+        setActiveProfile(name: stored)
+        if preview.needsName { profileAwaitingRename = stored }
+        return stored
     }
 
     /// Cleans common AutoEQ and EqualizerAPO suffixes from imported file names.
@@ -395,50 +434,40 @@ final class ProfileManager: ObservableObject {
             }
         }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Imported Preset" : trimmed
-    }
-
-    /// Imports an equalizer profile from a local file URL.
-    @discardableResult
-    func importProfile(from url: URL) throws -> String {
-        let text = try String(contentsOf: url, encoding: .utf8)
-        let rawFilename = url.deletingPathExtension().lastPathComponent
-        let cleanedName = Self.cleanPresetName(from: rawFilename)
-        return try importProfile(from: text, name: cleanedName)
-    }
-
-    /// Checks whether the system clipboard contains valid EqualizerAPO or CoreEQ preset text.
-    func canPasteFromClipboard() -> Bool {
-        guard let string = NSPasteboard.general.string(forType: .string) else { return false }
-        return (try? ParametricEQParser.parse(text: string)) != nil
-    }
-
-    /// Imports and selects a preset from valid preset text currently on the clipboard.
-    @discardableResult
-    func pasteFromClipboard() -> String? {
-        guard let string = NSPasteboard.general.string(forType: .string),
-            let stored = try? importProfile(from: string, name: "Pasted Preset")
-        else {
-            return nil
-        }
-        profileAwaitingRename = stored
-        return stored
+        return trimmed.isEmpty ? untitledImportName : trimmed
     }
 
     /// Exports a profile to standard EqualizerAPO text representation.
     func exportProfileToEqualizerAPO(named name: String) throws -> String {
-        guard let profile = profile(named: name) else {
-            throw ParametricEQParser.ParseError.invalidFormat
+        guard let profile = exportedProfile(named: name) else {
+            throw ExportError.presetNotFound(name)
         }
         return ParametricEQSerializer.serializeToEqualizerAPO(profile)
     }
 
     /// Exports a profile to native `.coreeq` JSON representation.
     func exportProfileToJSON(named name: String) throws -> String {
-        guard let profile = profile(named: name) else {
-            throw ParametricEQParser.ParseError.invalidFormat
+        guard let profile = exportedProfile(named: name) else {
+            throw ExportError.presetNotFound(name)
         }
         return try ParametricEQSerializer.serializeToCoreEQJSON(profile)
+    }
+
+    /// What exporting `name` writes: for the active preset, the working state —
+    /// the sound being heard, unsaved edits and Quick EQ tone included — and for
+    /// any other preset, what is saved.
+    ///
+    /// The convention every Mac app's Export follows: an edited document exports
+    /// with its edits, and the saved version is one Revert away. Offering both
+    /// would ask a question almost nobody needs answered.
+    private func exportedProfile(named name: String) -> EQProfile? {
+        guard var profile = profile(named: name) else { return nil }
+        if profile.name == activeProfileName {
+            profile.filters = currentFilters
+            profile.preamp = currentPreamp
+            profile.autoGain = isAutoGain
+        }
+        return profile
     }
 
     // MARK: - Band editing

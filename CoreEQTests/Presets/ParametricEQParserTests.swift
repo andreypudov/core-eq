@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-@testable import CoreEQ
-
 struct ParametricEQParserTests {
     // MARK: - Parsing EqualizerAPO Format
 
@@ -19,6 +17,7 @@ struct ParametricEQParserTests {
         let result = try ParametricEQParser.parse(text: text, defaultName: "HD 650")
         #expect(result.name == "HD 650")
         #expect(result.preamp == -6.4)
+        // The file set its own trim.
         #expect(result.autoGain == false)
 
         // Free filters should contain the 5 parsed items
@@ -79,7 +78,7 @@ struct ParametricEQParserTests {
             Filter 2: ON PK Fc 30000 Hz Gain -30.0 dB Q 50.0
             """
         let result = try ParametricEQParser.parse(text: text)
-        #expect(result.preamp == -12.0)  // Clamped to gainRange
+        #expect(result.preamp == -12.0)  // Clamped to preampRange
 
         let freeFilters = result.filters.filter { !$0.isBand }
         #expect(freeFilters.count == 2)
@@ -90,6 +89,53 @@ struct ParametricEQParserTests {
         #expect(freeFilters[1].frequency == 20000.0)
         #expect(freeFilters[1].gain == -12.0)
         #expect(freeFilters[1].q == 10.0)
+
+        // The preamp, and all three values of each filter.
+        #expect(result.adjustedValueCount == 7)
+    }
+
+    @Test func droppedFiltersAreNotCountedAsAdjusted() throws {
+        // Sixteen in range, and one weak filter at 5 Hz: the weakest is the one
+        // trimmed, so its out-of-range frequency never reaches the preset.
+        var lines = (1...BuiltInProfiles.maxFreeFilters).map {
+            "Filter \($0): ON PK Fc \(100 * $0) Hz Gain 6.0 dB Q 1.00"
+        }
+        lines.append("Filter 17: ON PK Fc 5 Hz Gain 0.5 dB Q 1.00")
+
+        let result = try ParametricEQParser.parse(text: lines.joined(separator: "\n"))
+        #expect(result.droppedFilterCount == 1)
+        #expect(result.adjustedValueCount == 0)
+    }
+
+    @Test func coreEQBandCountsOnlyItsGain() throws {
+        // A ladder band's frequency and Q are the ladder's, whatever the file
+        // says, so only an out-of-range gain is a change the user would see.
+        let band = EQFilter(kind: .bell, frequency: 5, gain: 20, q: 50, band: 0)
+        let json = try ParametricEQSerializer.serializeToCoreEQJSON(
+            EQProfile(name: "Band", filters: [band]))
+
+        let result = try ParametricEQParser.parse(text: json)
+        #expect(result.adjustedValueCount == 1)
+        #expect(result.filters.first?.gain == BuiltInProfiles.gainRange.upperBound)
+    }
+
+    @Test func valuesInRangeAreNotReportedAsAdjusted() throws {
+        let result = try ParametricEQParser.parse(
+            text: "Preamp: -12.0 dB\nFilter 1: ON PK Fc 20 Hz Gain 12.0 dB Q 10.0")
+        #expect(result.adjustedValueCount == 0)
+    }
+
+    @Test func coreEQJSONOutOfRangeValuesAreClampedAndReported() throws {
+        let profile = EQProfile(
+            name: "Hand Edited",
+            filters: [EQFilter(kind: .bell, frequency: 1000, gain: 30, q: 1)],
+            preamp: -40)
+        let json = try ParametricEQSerializer.serializeToCoreEQJSON(profile)
+
+        let result = try ParametricEQParser.parse(text: json)
+        #expect(result.preamp == BuiltInProfiles.preampRange.lowerBound)
+        #expect(result.filters.filter { !$0.isBand }.first?.gain == 12)
+        #expect(result.adjustedValueCount == 2)
     }
 
     @Test func capsAtMaximumFreeFilters() throws {
@@ -175,7 +221,98 @@ struct ParametricEQParserTests {
         }
     }
 
+    @Test func textWithoutPreampLineComputesItsTrim() throws {
+        let result = try ParametricEQParser.parse(
+            text: "Filter 1: ON PK Fc 100 Hz Gain 9.0 dB Q 1.00")
+        #expect(result.preamp == 0)
+        #expect(result.autoGain == true)
+    }
+
+    @Test func preampLineAloneIsAFlatPreset() throws {
+        let result = try ParametricEQParser.parse(text: "Preamp: -3.0 dB")
+        #expect(result.preamp == -3.0)
+        #expect(result.autoGain == false)
+        #expect(result.filters.filter { !$0.isBand }.isEmpty)
+    }
+
+    @Test func damagedCoreEQFileReportsDamageNotMissingFilters() {
+        #expect(throws: ParametricEQParser.ParseError.damagedCoreEQFile) {
+            try ParametricEQParser.parse(text: #"{ "name": "Truncated", "filters": [ "#)
+        }
+    }
+
+    // MARK: - Text Encodings
+
+    private static let apoText = "Preamp: -2.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 3.0 dB Q 1.00\n"
+
+    @Test func decodesUTF16LittleEndianWithBOM() throws {
+        var data = Data([0xFF, 0xFE])
+        data.append(Self.apoText.data(using: .utf16LittleEndian)!)
+
+        let text = try ParametricEQParser.decodeText(data)
+        #expect(text == Self.apoText)
+        #expect(try ParametricEQParser.parse(text: text).preamp == -2.0)
+    }
+
+    @Test func decodesUTF16BigEndianWithBOM() throws {
+        var data = Data([0xFE, 0xFF])
+        data.append(Self.apoText.data(using: .utf16BigEndian)!)
+
+        #expect(try ParametricEQParser.decodeText(data) == Self.apoText)
+    }
+
+    @Test func rejectsBytesThatAreNotText() {
+        // 0x81 is neither valid UTF-8 nor defined in Windows-1252.
+        var data = Data("Preamp: -2.0 dB\n".utf8)
+        data.append(contentsOf: [0x81, 0x8D])
+
+        #expect(throws: ParametricEQParser.ParseError.unreadableText) {
+            try ParametricEQParser.decodeText(data)
+        }
+    }
+
+    @Test func decodesUTF8WithBOM() throws {
+        var data = Data([0xEF, 0xBB, 0xBF])
+        data.append(Data(Self.apoText.utf8))
+
+        let text = try ParametricEQParser.decodeText(data)
+        #expect(try ParametricEQParser.parse(text: text).preamp == -2.0)
+    }
+
+    @Test func decodesWindows1252() throws {
+        // "# Réglage" in Windows-1252: 0xE9 alone is not valid UTF-8.
+        var data = Data("# R".utf8)
+        data.append(0xE9)
+        data.append(Data("glage\n\(Self.apoText)".utf8))
+
+        let text = try ParametricEQParser.decodeText(data)
+        #expect(text.hasPrefix("# Réglage"))
+        #expect(try ParametricEQParser.parse(text: text).preamp == -2.0)
+    }
+
     // MARK: - Serialization and Round Trip
+
+    @Test func disabledFilterExportsAsOffAndReturnsDisabled() throws {
+        let profile = EQProfile(
+            name: "Bypassed",
+            filters: FilterChain.normalized([
+                EQFilter(kind: .bell, frequency: 1000, gain: 3, q: 1, isEnabled: false)
+            ]))
+        let text = ParametricEQSerializer.serializeToEqualizerAPO(profile)
+        #expect(text.contains("Filter 1: OFF PK Fc 1000.0 Hz"))
+
+        let parsed = try ParametricEQParser.parse(text: text)
+        #expect(parsed.filters.filter { !$0.isBand }.first?.isEnabled == false)
+    }
+
+    @Test func flatExportImportsAgain() throws {
+        let flat = EQProfile(name: "Flat", filters: BuiltInProfiles.emptyBandChain())
+        let text = ParametricEQSerializer.serializeToEqualizerAPO(flat)
+
+        let parsed = try ParametricEQParser.parse(text: text)
+        #expect(parsed.preamp == 0)
+        #expect(parsed.filters == flat.filters)
+    }
 
     @Test func serializationAndParsingRoundTrip() throws {
         let original = EQProfile(
@@ -191,9 +328,9 @@ struct ParametricEQParserTests {
 
         let apoText = ParametricEQSerializer.serializeToEqualizerAPO(original)
         #expect(apoText.contains("Preamp: -3.5 dB"))
-        #expect(apoText.contains("LSC Fc 100 Hz Gain 4.0 dB Q 0.70"))
-        #expect(apoText.contains("PK Fc 1250 Hz Gain -2.5 dB Q 2.00"))
-        #expect(apoText.contains("HSC Fc 9000 Hz Gain 3.0 dB Q 0.70"))
+        #expect(apoText.contains("LSC Fc 100.0 Hz Gain 4.0 dB Q 0.70"))
+        #expect(apoText.contains("PK Fc 1250.0 Hz Gain -2.5 dB Q 2.00"))
+        #expect(apoText.contains("HSC Fc 9000.0 Hz Gain 3.0 dB Q 0.70"))
 
         let parsed = try ParametricEQParser.parse(text: apoText, defaultName: "Custom Curve")
         #expect(parsed.name == original.name)
@@ -256,10 +393,10 @@ struct ParametricEQParserTests {
             EQProfile(name: "ARTTI T10", filters: parsed.filters, preamp: parsed.preamp)
         )
         #expect(serialized.contains("Preamp: -3.0 dB"))
-        #expect(serialized.contains("PK Fc 74 Hz Gain 1.2 dB Q 1.50"))
-        #expect(serialized.contains("PK Fc 1830 Hz Gain -3.6 dB Q 1.64"))
-        #expect(serialized.contains("PK Fc 5213 Hz Gain 1.2 dB Q 5.99"))
-        #expect(serialized.contains("HSC Fc 10000 Hz Gain -5.7 dB Q 0.70"))
+        #expect(serialized.contains("PK Fc 74.3 Hz Gain 1.2 dB Q 1.50"))
+        #expect(serialized.contains("PK Fc 1829.9 Hz Gain -3.6 dB Q 1.64"))
+        #expect(serialized.contains("PK Fc 5213.3 Hz Gain 1.2 dB Q 5.99"))
+        #expect(serialized.contains("HSC Fc 10000.0 Hz Gain -5.7 dB Q 0.70"))
     }
 
     @Test func rejectsUnsupportedFilterKinds() {

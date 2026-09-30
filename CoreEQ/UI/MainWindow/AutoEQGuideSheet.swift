@@ -1,19 +1,23 @@
 import AppKit
 import SwiftUI
 
-/// A guide sheet explaining how to configure, export, and ingest custom
-/// parametric EQ profiles from autoeq.app into CoreEQ.
+/// A guide sheet explaining how to bring a headphone correction from
+/// autoeq.app into CoreEQ.
+///
+/// Deliberately general about the site: autoeq.app is someone else's page and
+/// changes on its own schedule, so the steps name what to look for rather than
+/// quoting its labels, and make no claims about its catalogue.
 struct AutoEQGuideSheet: View {
-    @ObservedObject var profileManager: ProfileManager
-    @Environment(\.dismiss) private var dismiss
+    /// Pastes from the clipboard. The sidebar owns it: it closes this sheet and
+    /// shows the same import preview as every other way in.
+    let onPaste: () -> Void
 
-    @State private var pasteError: String?
-    @State private var pendingImport: ProfileManager.ImportPreview?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text("AutoEQ Web Optimizer")
+                Text("Import from AutoEQ")
                     .font(Theme.Font.heading)
                     .foregroundStyle(.primary)
 
@@ -24,7 +28,7 @@ struct AutoEQGuideSheet: View {
             }
 
             Text(
-                "AutoEq provides measured correction curves for over 5,000 headphones and earphones. You can use their web optimizer to tailor target curves and export them directly to CoreEQ."
+                "AutoEQ publishes correction curves for a large catalogue of headphones and earphones. Its web app can write a correction as an EqualizerAPO parametric EQ, which CoreEQ imports."
             )
             .font(Theme.Font.body)
             .foregroundStyle(.secondary)
@@ -41,37 +45,31 @@ struct AutoEQGuideSheet: View {
 
                 stepRow(
                     number: "2",
-                    title: "Choose Target Curve",
+                    title: "Choose a Target",
                     detail:
-                        "Select Harman Over-Ear / In-Ear, Diffuse Field, or customize your bass/treble tilt."
+                        "Pick the sound you want the correction to aim for, and adjust it if you like."
                 )
 
                 stepRow(
                     number: "3",
-                    title: "Select Equalizer App",
+                    title: "Choose EqualizerAPO",
                     detail:
-                        "In the dropdown, select “EqualizerAPO ParametricEQ” (or Custom Parametric EQ)."
+                        "Where the app asks which equalizer you use, choose EqualizerAPO's parametric EQ."
                 )
 
                 stepRow(
                     number: "4",
                     title: "Copy or Download",
                     detail:
-                        "Copy the generated filter text to your clipboard or download the .txt file."
+                        "Copy the generated filters to the clipboard, or download them as a .txt file."
                 )
 
                 stepRow(
                     number: "5",
                     title: "Import into CoreEQ",
                     detail:
-                        "Click “Paste from Clipboard” below, or drag and drop the .txt file onto CoreEQ."
+                        "Click “Paste from Clipboard” below, or drop the .txt file onto the preset list."
                 )
-            }
-
-            if let pasteError {
-                Text(pasteError)
-                    .font(Theme.Font.label)
-                    .foregroundStyle(.red)
             }
 
             Divider()
@@ -89,14 +87,7 @@ struct AutoEQGuideSheet: View {
                 Spacer()
 
                 Button {
-                    guard let text = NSPasteboard.general.string(forType: .string) else {
-                        pasteError = "No valid EqualizerAPO preset found on clipboard."
-                        return
-                    }
-                    do {
-                        pendingImport = try profileManager.previewImport(
-                            from: text, name: "Pasted Preset")
-                    } catch { pasteError = error.localizedDescription }
+                    onPaste()
                 } label: {
                     Label("Paste from Clipboard", systemImage: "doc.on.clipboard")
                 }
@@ -105,30 +96,12 @@ struct AutoEQGuideSheet: View {
         }
         .padding(20)
         .frame(width: 480)
-        .alert(
-            "Import Preset?",
-            isPresented: Binding(
-                get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } })
-        ) {
-            Button("Import") {
-                if let preview = pendingImport { _ = profileManager.commitImport(preview) }
-                pendingImport = nil
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) { pendingImport = nil }
-        } message: {
-            if let preview = pendingImport {
-                let preamp = String(
-                    format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), preview.preamp)
-                Text("\(preview.name)\n\(preview.filterCount) filters\nPreamp: \(preamp) dB")
-            }
-        }
     }
 
     private func stepRow(number: String, title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text(number)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .font(Theme.Font.valueEmphasized)
                 .foregroundStyle(.white)
                 .frame(width: 20, height: 20)
                 .background(Circle().fill(Color.accentColor))

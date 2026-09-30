@@ -52,6 +52,29 @@ Spotify — plus your own, managed from the sidebar. Built-ins are immutable;
 your presets can be renamed, duplicated, edited, and deleted. Switching is
 instantaneous and glitch-free.
 
+** Import and export
+
+Presets move in and out as EqualizerAPO text — the format AutoEQ writes its
+headphone corrections in — or as CoreEQ's own =.coreeq= files. Import from the
+=+= at the bottom of the sidebar, paste with =⌘V=, or drop a file onto the
+preset list; every import shows what it found before anything is added. The
+*AutoEQ* button beside the =+= walks through getting a correction from
+autoeq.app.
+
+From EqualizerAPO text, CoreEQ reads =Preamp:= and =PK=, =LSC=, =HSC=, =HP= and
+=LP= filters, with Q or bandwidth in octaves. It reads UTF-8, UTF-16 and
+Windows-1252 files. A preset holds up to sixteen filters, gain and preamp within
+±12 dB, frequency 20 Hz–20 kHz and Q 0.1–10. A longer file keeps its pass
+filters and its strongest bands, and values out of range are brought into it;
+the preview says when either happened. =GraphicEQ:=, =Channel:= and other
+EqualizerAPO commands are skipped and listed in the preview — so filters meant
+for one channel apply to both. A file without a =Preamp:= line gets the
+automatic trim.
+
+Export is on a preset's right-click menu, as EqualizerAPO text or =.coreeq=.
+Exporting the preset you are listening to writes what you hear, unsaved edits
+included.
+
 ** Automatic gain
 
 The preamp computes itself, and does so by default. Boosting makes a preset
@@ -161,9 +184,10 @@ Download the latest =CoreEQ-x.y.zip= from the *Releases* page, unzip, and move
 controls, *Open Equalizer…*, *Settings…*, and *Quit*. CoreEQ has no menu bar of
 its own, so this is where those live.
 
-*Settings* — a gear in the window's header, or *Settings…* in the menu. Two tabs:
-*General*, which holds *Open CoreEQ at login* and the status of the System Audio
-Recording permission, and *About*. Clicking the CoreEQ mark at the top of the
+*Settings* — a gear in the window's header, or *Settings…* in the menu. Three
+tabs: *General*, which holds *Open CoreEQ at login* and the status of the System
+Audio Recording permission; *Diagnostics*, a report of the audio setup to copy
+into a bug report; and *About*. Clicking the CoreEQ mark at the top of the
 sidebar opens About directly.
 
 *Window* — presets in the sidebar, with a search field and your own presets
@@ -179,8 +203,9 @@ the same thing a hardware equalizer calls Level: makeup gain for what the curve
 took away. Volume belongs to macOS, which offers it in the menu bar, on the
 keyboard, and in Sound settings.
 
-Right-click a preset for *New Preset*, *Rename*, *Duplicate*, *Save Changes*,
-*Reset to Preset*, and *Delete*. Right-click a band slider for *Edit as
+The =+= at the bottom of the sidebar creates a *New Preset* from the current
+sound, or imports one. Right-click a preset for *Rename*, *Duplicate*, *Save
+Changes*, *Reset to Preset*, *Export Preset*, and *Delete*. Right-click a band slider for *Edit as
 Filter…*, which moves that band into the parametric editor without changing the
 sound.
 

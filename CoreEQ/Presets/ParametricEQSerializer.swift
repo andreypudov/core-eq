@@ -8,8 +8,8 @@ enum ParametricEQSerializer {
     /// Example output:
     /// ```text
     /// Preamp: -2.5 dB
-    /// Filter 1: ON PK Fc 32 Hz Gain 2.0 dB Q 1.41
-    /// Filter 2: ON LSC Fc 90 Hz Gain 3.0 dB Q 0.70
+    /// Filter 1: ON PK Fc 32.0 Hz Gain 2.0 dB Q 1.41
+    /// Filter 2: ON LSC Fc 90.0 Hz Gain 3.0 dB Q 0.70
     /// ```
     static func serializeToEqualizerAPO(_ profile: EQProfile) -> String {
         var lines: [String] = []
@@ -21,7 +21,8 @@ enum ParametricEQSerializer {
 
         var index = 1
         for filter in profile.filters {
-            // Skip disabled or 0 dB identity band filters
+            // A ladder band at 0 dB is identity, so it is left out. Disabled
+            // filters are kept, written as OFF, so they come back disabled.
             if filter.isBand && abs(filter.gain) < 0.001 {
                 continue
             }
@@ -57,6 +58,8 @@ enum ParametricEQSerializer {
             index += 1
         }
 
+        // Flat still writes a line: an empty file is not a preset, and the
+        // parser takes a Preamp line alone as one.
         if lines.isEmpty {
             lines.append("Preamp: 0.0 dB")
         }
@@ -66,10 +69,11 @@ enum ParametricEQSerializer {
 
     // MARK: - Formatting Helpers
 
-    /// AutoEQ's canonical EqualizerAPO precision: frequency whole Hz, gain one
-    /// decimal, Q two decimals. These are presentation limits, not internal ones.
+    /// AutoEQ's canonical EqualizerAPO precision: frequency and gain one
+    /// decimal, Q two. One decimal of frequency is what AutoEQ itself writes,
+    /// and whole hertz turned an imported 74.3 Hz into 74 on the way back out.
     static func formatFrequency(_ freq: Double) -> String {
-        String(format: "%.0f", locale: Locale(identifier: "en_US_POSIX"), freq)
+        String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), freq)
     }
 
     /// Formats gain using AutoEQ's one decimal place.
@@ -86,10 +90,7 @@ enum ParametricEQSerializer {
     static func serializeToCoreEQJSON(_ profile: EQProfile) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(profile)
-        guard let string = String(data: data, encoding: .utf8) else {
-            throw ParametricEQParser.ParseError.invalidFormat
-        }
-        return string
+        // `JSONEncoder` writes UTF-8, so decoding it back cannot fail.
+        return String(decoding: try encoder.encode(profile), as: UTF8.self)
     }
 }
