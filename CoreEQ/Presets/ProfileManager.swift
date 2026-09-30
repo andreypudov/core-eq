@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -329,6 +330,115 @@ final class ProfileManager: ObservableObject {
 
     func canEditProfile(named name: String) -> Bool {
         library.isEditable(name)
+    }
+
+    // MARK: - Import and Export
+
+    struct ImportPreview: Equatable {
+        let name: String
+        let filterCount: Int
+        let preamp: Double
+        /// Free filters trimmed to fit `BuiltInProfiles.maxFreeFilters`.
+        let droppedFilterCount: Int
+        /// Lines the parser could not model (`GraphicEQ:`, `Convolution:`, …).
+        /// Informational only — the import still succeeds.
+        let unparsedLines: [String]
+        fileprivate let parsed: ParametricEQParser.ParsedPreset
+    }
+
+    func previewImport(from text: String, name: String? = nil) throws -> ImportPreview {
+        let parsed = try ParametricEQParser.parse(
+            text: text, defaultName: name ?? "Imported Preset")
+        return ImportPreview(
+            name: parsed.name,
+            // `parsed.filters` always begins with the eleven ladder bands, so the
+            // raw count would read "12 filters" for a single-filter import. Count
+            // what the user actually brought in.
+            filterCount: parsed.filters.filter { !$0.isBand }.count,
+            preamp: parsed.preamp,
+            droppedFilterCount: parsed.droppedFilterCount,
+            unparsedLines: parsed.unparsedLines,
+            parsed: parsed)
+    }
+
+    @discardableResult
+    func commitImport(_ preview: ImportPreview) -> String {
+        let unique = library.uniqueName(from: preview.name)
+        let profile = EQProfile(
+            name: unique, filters: preview.parsed.filters, preamp: preview.parsed.preamp,
+            autoGain: preview.parsed.autoGain)
+        let stored = library.add(profile)
+        persistUserProfiles()
+        setActiveProfile(name: stored)
+        return stored
+    }
+
+    /// Imports an equalizer profile from EqualizerAPO / AutoEQ text or `.coreeq` JSON.
+    @discardableResult
+    func importProfile(from text: String, name: String? = nil) throws -> String {
+        let defaultName = name ?? "Imported Preset"
+        return commitImport(try previewImport(from: text, name: defaultName))
+    }
+
+    /// Cleans common AutoEQ and EqualizerAPO suffixes from imported file names.
+    static func cleanPresetName(from filename: String) -> String {
+        var name = filename
+        let suffixes = [
+            " ParametricEq", " ParametricEQ", " parametric-eq", " parametriceq",
+            " EqualizerAPO", " EqualizerApo", " equalizer-apo", " equalizerapo",
+            " GraphicEq", " GraphicEQ", " graphic-eq", " graphiceq",
+            " Preset", " preset",
+        ]
+        for suffix in suffixes {
+            if name.hasSuffix(suffix) {
+                name = String(name.dropLast(suffix.count))
+            }
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Imported Preset" : trimmed
+    }
+
+    /// Imports an equalizer profile from a local file URL.
+    @discardableResult
+    func importProfile(from url: URL) throws -> String {
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let rawFilename = url.deletingPathExtension().lastPathComponent
+        let cleanedName = Self.cleanPresetName(from: rawFilename)
+        return try importProfile(from: text, name: cleanedName)
+    }
+
+    /// Checks whether the system clipboard contains valid EqualizerAPO or CoreEQ preset text.
+    func canPasteFromClipboard() -> Bool {
+        guard let string = NSPasteboard.general.string(forType: .string) else { return false }
+        return (try? ParametricEQParser.parse(text: string)) != nil
+    }
+
+    /// Imports and selects a preset from valid preset text currently on the clipboard.
+    @discardableResult
+    func pasteFromClipboard() -> String? {
+        guard let string = NSPasteboard.general.string(forType: .string),
+            let stored = try? importProfile(from: string, name: "Pasted Preset")
+        else {
+            return nil
+        }
+        profileAwaitingRename = stored
+        return stored
+    }
+
+    /// Exports a profile to standard EqualizerAPO text representation.
+    func exportProfileToEqualizerAPO(named name: String) throws -> String {
+        guard let profile = profile(named: name) else {
+            throw ParametricEQParser.ParseError.invalidFormat
+        }
+        return ParametricEQSerializer.serializeToEqualizerAPO(profile)
+    }
+
+    /// Exports a profile to native `.coreeq` JSON representation.
+    func exportProfileToJSON(named name: String) throws -> String {
+        guard let profile = profile(named: name) else {
+            throw ParametricEQParser.ParseError.invalidFormat
+        }
+        return try ParametricEQSerializer.serializeToCoreEQJSON(profile)
     }
 
     // MARK: - Band editing
