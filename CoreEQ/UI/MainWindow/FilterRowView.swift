@@ -132,8 +132,9 @@ struct FilterRowView: View {
             parameter: .frequency,
             unit: "Hz",
             // No thousands separator: this is a frequency, and "8,000 Hz" is
-            // not how anyone writes one.
-            format: .number.precision(.fractionLength(0)).grouping(.never),
+            // not how anyone writes one. One decimal when there is one, so an
+            // imported 70.8 Hz is shown as itself rather than as 71.
+            format: .number.precision(.fractionLength(0...1)).grouping(.never),
             label: "Band \(index) frequency",
             help: "Drag or scroll to set; double-click the knob to return to 1 kHz"
         )
