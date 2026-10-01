@@ -1,6 +1,6 @@
 #+TITLE: CoreEQ 1.9 — Open the preset format
 #+AUTHOR: Andrey Pudov
-#+DATE: <2026-09-30 Wed>
+#+DATE: <2026-10-01 Thu>
 #+OPTIONS: toc:nil num:nil
 
 The most requested feature, by a clear margin, was loading an AutoEQ or
@@ -35,6 +35,9 @@ left the sound chopped until CoreEQ was restarted.
 - *A sample rate change left the sound chopped* (#27). A DAW or a player such as
   Qobuz switching the output's rate left CoreEQ glitching until a restart. It
   now rebuilds its audio path once the new rate has settled.
+- *Tabbing through a filter changed it.* Moving through the parametric fields
+  rounded a value like 70.8 Hz to what the field showed, and marked the preset
+  Edited. Fields now change only when you type, and show the decimal they hold.
 - *The menu's switch looked the same on and off* (#26). It is now drawn in your
   accent colour when on.
 - *Starting during a recording could claim the permission was refused.* A

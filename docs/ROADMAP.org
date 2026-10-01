@@ -1,7 +1,7 @@
 #+TITLE: CoreEQ Roadmap
 #+SUBTITLE: Fix what is broken, then open the format, then open the scope
 #+AUTHOR: Andrey Pudov
-#+DATE: <2026-08-30 Sun>
+#+DATE: <2026-10-01 Thu>
 #+OPTIONS: toc:2 num:nil
 
 Where CoreEQ goes after 1.7, and why in this order. Everything here comes out
@@ -32,9 +32,10 @@ at the wrong sample rate — was measured and turned out not to happen; it is in
 the release notes with the numbers.
 
 1.8 shipped on <2026-09-20 Sun> with the five above settled and the rest of this
-section still open. 1.9 settled two more: screen recordings that captured the
-sound twice, and the documentation that answered the same questions one comment
-at a time. Both have moved to [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]].
+section still open. 1.9 shipped on <2026-10-01 Thu> and settled two more:
+screen recordings that captured the sound twice, and the documentation that
+answered the same questions one comment at a time. Both have moved to
+[[file:RELEASE_NOTES.org][RELEASE_NOTES.org]], with the preset format 1.9 was for.
 
 What is left here: an echo after waking that has not been reproduced, and a
 report of noise over Bluetooth. They affect people doing nothing unusual, so by
