@@ -31,7 +31,10 @@ struct ValueField: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            TextField("", value: $value, format: format)
+            // Written back only when the text was actually changed. See
+            // `FieldCommit`: a plain binding rounded the value to what the field
+            // shows every time focus left it.
+            TextField("", value: committed, format: format)
                 .textFieldStyle(.plain)
                 .multilineTextAlignment(.trailing)
                 .font(Theme.Font.value)
@@ -66,5 +69,16 @@ struct ValueField: View {
         .scrollAdjustable(isEnabled: isEnabled) { steps in
             value = scale.stepped(value, by: steps)
         }
+    }
+
+    private var committed: Binding<Double> {
+        Binding(
+            get: { value },
+            set: { parsed in
+                if let new = FieldCommit.value(parsed, replacing: value, shownAs: format) {
+                    value = new
+                }
+            }
+        )
     }
 }
