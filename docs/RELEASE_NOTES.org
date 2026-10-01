@@ -15,7 +15,7 @@ part worth having written down.
 
 * 1.9 — Open the preset format
 
-Not yet released.
+Released <2026-10-01 Thu>.
 
 The most requested feature by a clear margin, asked for from four directions —
 AutoEQ, EqualizerAPO, Wavelet, and “EQ txt files” — all of which describe the
@@ -184,6 +184,24 @@ rebuild about a second after the change and clean playback, a round trip
 through 44.1 kHz in 0.3 s gave none and stayed clean, and coreaudiod answered
 throughout. The diagnostics report names the change, as in =sample rate changed
 from 48000 to 44100 Hz=.
+
+** Tabbing through a filter changed it
+
+Found on release day, on an imported AutoEQ preset. Moving through the
+parametric editor with Tab, without typing anything, marked the preset Edited
+and lit Revert — but only on some rows.
+
+A SwiftUI number field parses what it *shows* and writes that back whenever it
+loses focus, edited or not. Frequencies were shown without decimals, so a filter
+at 70.8 Hz read as "71", and leaving the field stored 71 Hz. The rows that
+stayed clean were the ones whose values happened to fit their fields — 105 Hz,
+−1.7 dB, Q 0.70. Every imported AutoEQ profile has frequencies with a decimal,
+so anyone who tabbed through one changed it.
+
+*Fixed.* A field writes back only when its text was actually changed, so moving
+through it is never an edit, whatever the precision of what it holds — that also
+covers a built-in's 1.75 dB shown as "+1.8". The frequency field now shows the
+decimal when there is one, so an imported 70.8 Hz reads as itself.
 
 ** The menu's switch looked the same on and off
 
