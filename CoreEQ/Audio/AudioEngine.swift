@@ -816,10 +816,9 @@ final class AudioEngine: ObservableObject {
             return
         }
         isCheckingForRecording = true
-        let ownPID = getpid()
         recordingCheckQueue.async { [weak self] in
             let recording = RecordingDetection.isRecordingSystemAudio(
-                AudioDevices.recordingSnapshot(), excluding: ownPID)
+                AudioDevices.recordingSnapshot())
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self else { return }

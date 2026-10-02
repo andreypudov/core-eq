@@ -13,6 +13,35 @@ Mac with every layer of the app reporting that it worked. A fix is easy to
 summarise; how something managed to look healthy while producing no sound is the
 part worth having written down.
 
+* 1.9.1
+
+Not yet released.
+
+** Siri listening read as a recording
+
+Reported on a second Mac the day after 1.9 shipped: CoreEQ always said
+“Paused while recording” whenever anything played, with nothing recording.
+
+1.9 recognised a recording by how it looked: a process capturing audio from no
+input device was taken to be reading a tap, which is system audio. On that Mac,
+=corespeechd= matched — the service that listens to the microphone while
+“Listen for Siri” is on, and that also serves dictation and Live Captions. It
+captures continuously and reports no input device, exactly as a tap does. With
+*Pause while recording system audio* on by default, every Mac listening for Siri
+stopped equalizing the moment it played anything, and told its user the wrong
+reason. This Mac had Siri listening off, which is why it never showed here.
+
+The rule was a guess about appearance, and the one thing it had actually been
+measured against was =replayd=, the ScreenCaptureKit service that captures on
+behalf of every screen recorder and screen-sharing app. =replayd= captures for
+exactly as long as an audio recording runs, and not for a video-only one.
+
+*Fixed.* A recording is =replayd= capturing — who is capturing, not how the
+capture looks. The rule is shorter than the one it replaces, and no listening
+service macOS adds can trip it. What it no longer claims to see is a recorder
+that taps system audio directly rather than through ScreenCaptureKit, which
+the old rule was meant to catch and was never shown to.
+
 * 1.9 — Open the preset format
 
 Released <2026-10-01 Thu>.
