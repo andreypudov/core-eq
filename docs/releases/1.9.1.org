@@ -1,0 +1,26 @@
+#+TITLE: CoreEQ 1.9.1
+#+AUTHOR: Andrey Pudov
+#+DATE: <2026-10-02 Fri>
+#+OPTIONS: toc:nil num:nil
+
+A fix for Macs where CoreEQ 1.9 stopped equalizing whenever anything played,
+and said “Paused while recording” with nothing recording.
+
+* Fixed
+
+- *Siri listening was mistaken for a recording.* 1.9 pauses while a screen
+  recording captures system audio, so the recording does not come out with an
+  echo. It recognised a recording by how the capture looked — audio captured
+  from no input device — and the service that listens for “Hey Siri”, and also
+  serves dictation and Live Captions, looks the same. On Macs with *Listen for
+  Siri* turned on, CoreEQ paused as soon as anything played.
+
+  CoreEQ now recognises a recording by what is capturing: macOS's screen
+  capture service, which records on behalf of every screen recorder and every
+  app that shares a screen with sound. Siri, dictation, and apps using the
+  microphone no longer pause it. Screen recordings with audio still do.
+
+If you turned off *Pause while recording system audio* to work around this, it
+is safe to turn it back on in Settings → General.
+
+The full account is in [[file:../RELEASE_NOTES.org][RELEASE_NOTES.org]].
