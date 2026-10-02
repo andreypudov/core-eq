@@ -40,6 +40,20 @@ jobs:
             *) echo "::error::expected the macOS 27 SDK or newer, got $sdk"; exit 1 ;;
           esac
 
+      # The zip is named after the app's own version, not the tag, so a tag
+      # pushed before MARKETING_VERSION was bumped publishes the old version
+      # under the new tag. v1.9.1 shipped as CoreEQ-1.9.zip that way. Fail
+      # instead, before anything is published.
+      - name: Verify the tag matches the app version
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+                    build/Release/CoreEQ.app/Contents/Info.plist)
+          echo "tag $GITHUB_REF_NAME, app version $version"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the app version $version — bump MARKETING_VERSION before tagging"
+            exit 1
+          fi
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:

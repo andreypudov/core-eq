@@ -87,7 +87,9 @@ against the 27 SDK. Three consequences worth knowing before a release:
 To cut a release:
 
 1. Bump =MARKETING_VERSION= (and =CURRENT_PROJECT_VERSION=) in the target
-   build settings.
+   build settings. The release zip is named after this version, not the tag, so
+   =release.yml= refuses to publish when the two disagree — v1.9.1 was first
+   tagged before the bump and came out as =CoreEQ-1.9.zip=.
 2. Commit, then tag and push:
    #+begin_src sh
    git tag v1.1
