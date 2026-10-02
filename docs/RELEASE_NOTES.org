@@ -13,9 +13,13 @@ Mac with every layer of the app reporting that it worked. A fix is easy to
 summarise; how something managed to look healthy while producing no sound is the
 part worth having written down.
 
-* 1.9.1
+* 1.9.2
 
-Not yet released.
+Released <2026-10-02 Fri>.
+
+The fix below was first tagged as 1.9.1, before the project's version had been
+set, and that build named itself 1.9. Release immutability then reserved the
+tag, so it ships as 1.9.2 instead; there is no 1.9.1.
 
 ** Siri listening read as a recording
 

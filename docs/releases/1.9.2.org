@@ -1,4 +1,4 @@
-#+TITLE: CoreEQ 1.9.1
+#+TITLE: CoreEQ 1.9.2
 #+AUTHOR: Andrey Pudov
 #+DATE: <2026-10-02 Fri>
 #+OPTIONS: toc:nil num:nil
@@ -22,5 +22,8 @@ and said “Paused while recording” with nothing recording.
 
 If you turned off *Pause while recording system audio* to work around this, it
 is safe to turn it back on in Settings → General.
+
+There is no 1.9.1: it was tagged with the wrong version number, and this
+release replaces it.
 
 The full account is in [[file:../RELEASE_NOTES.org][RELEASE_NOTES.org]].
