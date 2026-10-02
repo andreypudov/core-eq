@@ -159,8 +159,14 @@ and CoreEQ's equalized copy 27 ms later, which sounds like an echo. So CoreEQ
 pauses itself while such a recording runs, and says so on the graph and in the
 menu; *Pause while recording system audio* in Settings → General turns this
 off. The first second or so of a recording can still be doubled — switch CoreEQ
-off before recording if the start matters. Recording from a microphone is left
-alone, because it hears CoreEQ only once, through the air.
+off before recording if the start matters.
+
+CoreEQ recognises recordings made through macOS's own screen capture, which is
+what screen recorders and screen sharing in calls and browsers use. Recording
+from a microphone is left alone, because it hears CoreEQ only once, through the
+air, and so are Siri, dictation, and other apps that listen to the microphone.
+A recorder that captures system audio another way — through a virtual device
+such as BlackHole — is not recognised; switch CoreEQ off while using one.
 
 Another tool that re-routes system audio, such as SoundSource, can double the
 sound the same way when both run at once.

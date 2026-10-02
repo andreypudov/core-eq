@@ -388,8 +388,8 @@ enum AudioDevices {
     /// Every audio process, as much as `RecordingDetection` needs to know.
     ///
     /// Measured at 14 ms a pass (40 ms at worst) across about 26 processes,
-    /// which is why the engine runs it off the main thread. The input device
-    /// list is read only for processes that are capturing, which is few.
+    /// which is why the engine runs it off the main thread. The bundle ID is
+    /// read only for processes that are capturing, which is few.
     static func recordingSnapshot() -> [RecordingDetection.Process] {
         var listAddress = address(kAudioHardwarePropertyProcessObjectList)
         var dataSize: UInt32 = 0
@@ -416,19 +416,14 @@ enum AudioDevices {
                     == noErr, isRunningInput != 0
             else { return nil }
 
-            var pidAddress = address(kAudioProcessPropertyPID)
-            var pid: Int32 = -1
-            size = UInt32(MemoryLayout<Int32>.size)
-            AudioObjectGetPropertyData(process, &pidAddress, 0, nil, &size, &pid)
-
-            var devicesAddress = address(
-                kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput)
-            var devicesSize: UInt32 = 0
-            AudioObjectGetPropertyDataSize(process, &devicesAddress, 0, nil, &devicesSize)
+            var bundleAddress = address(kAudioProcessPropertyBundleID)
+            var bundleID: Unmanaged<CFString>?
+            size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+            AudioObjectGetPropertyData(process, &bundleAddress, 0, nil, &size, &bundleID)
 
             return RecordingDetection.Process(
-                pid: pid, isRunningInput: true,
-                inputDeviceCount: Int(devicesSize) / MemoryLayout<AudioObjectID>.size)
+                bundleID: (bundleID?.takeRetainedValue() as String?) ?? "",
+                isRunningInput: true)
         }
     }
 

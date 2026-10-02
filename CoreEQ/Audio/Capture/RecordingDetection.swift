@@ -1,6 +1,6 @@
 import Foundation
 
-/// Whether another process is recording system audio — the case in which
+/// Whether a screen recording is capturing system audio — the case in which
 /// CoreEQ makes the recording sound doubled.
 ///
 /// A recorder captures each application's sound before CoreEQ's tap mutes it at
@@ -9,32 +9,36 @@ import Foundation
 /// third as loud on a headphone preset and nearly as loud at Flat, and the two
 /// together are heard as an echo. Switching CoreEQ off removes it.
 ///
-/// The rule: a process capturing input whose input devices include no real
-/// device is reading a tap, and a tap is system audio. Measured, a
-/// ScreenCaptureKit capture shows as `replayd` running input with no input
-/// device, from the moment it starts to the moment it stops. Audacity and
-/// QuickTime recording the microphone show as running input *from the
-/// microphone*, and are correctly left alone — a microphone recording hears
-/// CoreEQ's output only once, through the air.
+/// The rule: `replayd` is capturing. Screen recorders and screen sharing built
+/// on ScreenCaptureKit never capture system audio themselves — they ask macOS,
+/// and `replayd` does it for them. Measured, it captures from the moment an
+/// audio recording starts to the moment it stops, and not at all for a
+/// video-only recording or when nothing records.
 ///
-/// Not seen: a recorder that loops audio through a virtual device, such as
-/// BlackHole, which reads from a device like any microphone.
+/// Who is capturing, not how the capture looks. 1.9 used "capturing with no
+/// input device", reasoning that a process reading a tap reports none. So does
+/// `corespeechd`, which listens to the microphone continuously while "Listen
+/// for Siri" is on — on Macs with that enabled, CoreEQ paused whenever anything
+/// played, and said it was paused for a recording. A listening service is not
+/// a recording, and naming the one process that is cannot be fooled by the
+/// next one macOS adds.
+///
+/// Not seen: recorders that tap system audio directly rather than through
+/// ScreenCaptureKit, and recorders that loop audio through a virtual device
+/// such as BlackHole. Neither was ever measured.
 ///
 /// Pure, and its own type, because the engine cannot be reached by a test.
 enum RecordingDetection {
+    /// The ScreenCaptureKit service that captures on every recorder's behalf.
+    static let screenCaptureService = "com.apple.replayd"
+
     /// One audio process as Core Audio reports it.
     struct Process: Equatable {
-        let pid: Int32
+        let bundleID: String
         let isRunningInput: Bool
-        /// Devices the process is capturing from. Zero while capturing means a
-        /// tap.
-        let inputDeviceCount: Int
     }
 
-    static func isRecordingSystemAudio(_ processes: [Process], excluding ownPID: Int32) -> Bool {
-        processes.contains { process in
-            // CoreEQ's own capture is a tap too, and it is not a recording.
-            process.pid != ownPID && process.isRunningInput && process.inputDeviceCount == 0
-        }
+    static func isRecordingSystemAudio(_ processes: [Process]) -> Bool {
+        processes.contains { $0.isRunningInput && $0.bundleID == screenCaptureService }
     }
 }
