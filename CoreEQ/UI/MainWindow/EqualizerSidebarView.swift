@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Sidebar column of the main window: the app mark, the preset list, and the
-/// `+` menu and the AutoEQ guide in the bar along the bottom.
+/// `+` menu and the AutoEQ catalog button in the bar along the bottom.
 ///
 /// Hosted inside an `NSSplitViewItem(sidebarWithViewController:)`, which
 /// supplies the sidebar material and the full-height layout that runs it up
@@ -11,6 +11,16 @@ import UniformTypeIdentifiers
 /// window controls, so the view itself draws no background of its own.
 struct EqualizerSidebarView: View {
     @ObservedObject var profileManager: ProfileManager
+
+    /// Opens the AutoEQ catalog window, or brings the open one forward. The app
+    /// owns both the catalog store and the window, so this is the sidebar's only
+    /// part in it.
+    let openAutoEQBrowser: () -> Void
+
+    /// The catalog's request to show the by-hand guide here. The catalog closes
+    /// itself and taps this instead of presenting the guide, because the paste
+    /// it starts ends in a preset this list owns.
+    @ObservedObject private var guideRoute = AutoEQGuideRoute.shared
 
     /// Filters the list. Empty means everything, in sections.
     @State private var search = ""
@@ -27,6 +37,10 @@ struct EqualizerSidebarView: View {
 
     /// Whether the app mark is under the pointer — its only affordance.
     @State private var isHoveringAppMark = false
+
+    /// Whether the AutoEQ button is under the pointer — the same cue the `+`
+    /// gets from AppKit's borderless pop-up, drawn by hand here.
+    @State private var isHoveringAutoEQ = false
 
     /// Preset the pointer is over, for the row's hover wash.
     @State private var hoveredPreset: String?
@@ -166,6 +180,9 @@ struct EqualizerSidebarView: View {
                 showingAutoEQGuide = false
             }
         }
+        // The catalog's "Import by Hand…" closes that window and asks for the
+        // guide here, on the main window the paste will land in.
+        .onChange(of: guideRoute.request) { _, _ in showingAutoEQGuide = true }
         // A preset created outside the sidebar arrives as a rename request; seed
         // the field with the generated name so typing replaces it.
         .onChange(of: profileManager.profileAwaitingRename) { _, name in
@@ -182,7 +199,9 @@ struct EqualizerSidebarView: View {
     }
 
     /// True while a dialog or sheet is up, so ⌘V cannot open a second one behind
-    /// it.
+    /// it. The AutoEQ catalog is deliberately absent: it is a separate,
+    /// non-modal window, so pasting into the main window while it is open is
+    /// exactly what should happen.
     private var isPresentingModal: Bool {
         pendingImport != nil || deletionCandidate != nil || importErrorMessage != nil
             || exportErrorMessage != nil || showingAutoEQGuide
@@ -588,7 +607,7 @@ struct EqualizerSidebarView: View {
     /// A borderless pull-down, so it is a real `NSPopUpButton` drawn the way
     /// AppKit draws one in a sidebar: a plain glyph, no bezel, no chevron.
     /// Deleting stays on the row's context menu, where the confirmation names
-    /// the preset it removes. The AutoEQ guide sits at the other end.
+    /// the preset it removes. The AutoEQ catalog button sits at the other end.
     private var bottomBar: some View {
         HStack(spacing: 0) {
             Menu {
@@ -618,15 +637,28 @@ struct EqualizerSidebarView: View {
 
             Spacer(minLength: 0)
 
-            // Borderless like the `+`, so both read as the bar's chrome: the
-            // system draws the pair alike, and neither outshouts the list.
+            // The same kind of borderless control as the `+`, so both read as
+            // the bar's chrome and neither outshouts the list. A button rather
+            // than a menu: AutoEQ now has one way in — the catalog window —
+            // and the guide to autoeq.app's optimizer lives inside it.
             Button {
-                showingAutoEQGuide = true
+                openAutoEQBrowser()
             } label: {
-                Label("AutoEQ", systemImage: "waveform.badge.magnifyingglass")
+                Label("AutoEq", systemImage: "waveform.badge.magnifyingglass")
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
-            .help("Presets for your headphones from AutoEQ")
+            .buttonStyle(.plain)
+            // A borderless control says it is one by lighting up under the
+            // pointer; AppKit does that for the `+`, so it is drawn here.
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isHoveringAutoEQ ? Color.primary.opacity(0.07) : Color.clear)
+            )
+            .onHover { isHoveringAutoEQ = $0 }
+            .animation(.easeOut(duration: 0.12), value: isHoveringAutoEQ)
+            .fixedSize()
+            .accessibilityLabel("Browse AutoEq Catalog")
+            .help("Browse AutoEq headphone corrections")
         }
         .padding(.horizontal, 12)
         .frame(height: 28)

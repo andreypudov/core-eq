@@ -72,7 +72,7 @@ the output. The report carries both peaks, and says so when the material itself
 arrived hot.
 
 The second was whether to show it at all. Preventing this is the convention for
-consumer equalizers — AutoEQ ships a preamp with every profile for exactly this
+consumer equalizers — AutoEq ships a preamp with every profile for exactly this
 reason — and CoreEQ already prevents it with =AutoGain=, on by default. A clip
 light is the *professional* convention, and it belongs on an output meter, which
 this app does not have. It would be seen rarely, by users who had never seen it
@@ -249,28 +249,6 @@ elsewhere and offered to help.
 
 There is already an FFT feeding the spectrum analyser; a time-domain view is a
 second read of the same buffer, tied to the A/B toggle.
-
-** Loading presets from the AutoEQ database
-
-Requested, naming [[https://autoeq.app][autoeq.app]] as the source.
-
-The step past file import: search the community database by headphone model and
-apply it, the way Poweramp does. Open data, so the work is a network fetch plus
-the parser 1.9 added.
-
-*Automatic* is worth pinning down before any of this is built, because it reads
-two ways. Fetching a profile without the user downloading a file by hand is this
-item, and is well defined. Choosing a profile for whatever headphones happen to
-be connected is *Preset recommendation* below, and needs the app to identify the
-device rather than the user to name it — a different and much larger problem.
-
-The two readings also differ on privacy, which is the part that decides the
-shape. This would be CoreEQ's first outbound network connection, and "nothing is
-recorded, stored, or transmitted" is a claim worth keeping. A fetch the user
-asks for by searching a model name is compatible with that and can be stated
-plainly. A fetch that happens on its own — on launch, or whenever a device
-appears — is not, whatever it is fetching. So if this ships, it ships on explicit
-user action, and the wording in the app says so.
 
 ** Preset recommendation
 
