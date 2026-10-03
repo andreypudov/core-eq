@@ -17,7 +17,7 @@ the [[file:../README.org][README]].
 
 Presets in the sidebar, with a search field and your own presets above the
 built-ins, and a bar beneath them: the =+= creates a preset or imports one, and
-*AutoEQ* explains how to get a correction for your headphones. Then the response
+*AutoEq* opens the catalog or the guide to autoeq.app. Then the response
 graph, the *Graphic* / *Parametric* editors, and the preamp on the right. The
 output device sits in the centre of the header and names the preset playing on
 it underneath, with a dot when that preset has unsaved changes; where the
@@ -82,12 +82,12 @@ preset, and the on/off state are restored on every launch, per output device.
 
 * Import and export
 
-Presets move in and out as EqualizerAPO text — the format AutoEQ writes its
+Presets move in and out as EqualizerAPO text — the format AutoEq writes its
 headphone corrections in — or as CoreEQ's own =.coreeq= files. Import from the
 =+= at the bottom of the sidebar, paste with =⌘V=, or drop a file onto the
 preset list; every import shows what it found before anything is added. The
-*AutoEQ* button beside the =+= walks through getting a correction from
-autoeq.app.
+*AutoEq* button beside the =+= opens the catalog directly; for a correction from
+autoeq.app by hand, use *Import by Hand…* in the catalog window.
 
 From EqualizerAPO text, CoreEQ reads =Preamp:= and =PK=, =LSC=, =HSC=, =HP= and
 =LP= filters, with Q or bandwidth in octaves. It reads UTF-8, UTF-16 and
@@ -102,6 +102,43 @@ automatic trim.
 Export is on a preset's right-click menu, as EqualizerAPO text or =.coreeq=.
 Exporting the preset you are listening to writes what you hear, unsaved edits
 included.
+
+* The AutoEq catalog
+
+CoreEQ can fetch a headphone correction straight from [[https://autoeq.app][AutoEq]], without
+downloading a file by hand. The *AutoEq* button beside the =+= opens the catalog
+window directly. For corrections AutoEq computes for a target you choose there,
+use *Import by Hand…* in the catalog window's action row: it closes the catalog,
+opens the step-by-step guide on the main window, and the correction you paste
+lands in your preset list.
+
+The catalog is its own window, so it can stay open beside the equalizer while
+you listen. Type in the search field to find a model by name — the catalog holds
+thousands and matches as you type. A model measured more than once says how many
+measurements it has.
+
+Two menus decide which correction you get:
+
+- *Measurement source* is who measured the headphones and how — for example
+  Oratory1990, Crinacle, or Rtings. The same model measured on different rigs
+  gives different corrections, so this is a real choice rather than a detail.
+- *Target curve* is the sound the correction aims for — Harman over-ear 2018,
+  Harman in-ear 2019, AutoEq in-ear, and others. Only the targets that apply to
+  the chosen measurement are offered.
+
+*Audition* applies the correction to the sound immediately, without saving
+anything, so you can hear it against your own music; *Stop Auditioning*, or
+closing the window, puts the previous sound back. *Save to My Presets* converts
+the correction and keeps it as one of your own presets, named after the model,
+where it can be edited and exported like any other.
+
+The catalog is downloaded once and cached, so browsing stays instant and works
+offline; with no network and no cached copy, the window says so and offers to
+retry. A few measurements were taken without a known rig; for those CoreEQ uses
+AutoEq's own pre-computed correction and its default target, and says so.
+
+Correction data comes from AutoEq by Jaakko Pasanen, used under the MIT licence;
+each result names the measurement source it came from.
 
 * Automatic gain
 
