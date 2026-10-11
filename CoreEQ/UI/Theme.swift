@@ -47,18 +47,6 @@ enum Theme {
     /// at the left of the band slider row for its own scale.
     static let axisGutter: CGFloat = 52
 
-    /// What to do when macOS will not ask again.
-    ///
-    /// The permission dialog carries its own explanation — that is what
-    /// `NSAudioCaptureUsageDescription` is for, and the system shows it at
-    /// exactly the moment it matters. What the system cannot say is what to do
-    /// once it has an answer recorded and has stopped offering to ask, which is
-    /// the only part left for the app.
-    static let audioPermissionInstruction =
-        "Allow CoreEQ under Screen & System Audio Recording. If CoreEQ is already listed, "
-        + "turn it off and on again — an update gives it a new signature and macOS keeps "
-        + "the old entry. It starts equalizing as soon as you come back."
-
     /// Why CoreEQ has stepped aside for a recording, where there is room to
     /// say it: the main window, and the setting that controls it. The menu has
     /// room for `recordingPauseTitle` alone.

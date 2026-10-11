@@ -55,11 +55,9 @@ struct EqualizerDetailView: View {
                 // not being shaped — so it also carries the explanation.
                 .opacity(audioEngine.isProcessing ? 1.0 : 0.5)
                 .overlay {
-                    // A refused capture is a permission problem, not a
-                    // generic engine error, and wants the explanation and the
-                    // way to System Settings rather than a bare message. The
-                    // waiting state is gone by then — the explanation has been
-                    // given — so the refusal has to bring it back.
+                    // A permission that is missing is not a generic engine
+                    // error, and wants the explanation and the one button that
+                    // fixes it rather than a bare message.
                     if audioEngine.needsAudioPermission {
                         permissionOverlay
                     } else if let failure = engineFailure {
@@ -617,54 +615,59 @@ struct EqualizerDetailView: View {
         return message
     }
 
-    /// What the permission is for, said before macOS asks rather than after.
+    /// What the permission needs, said before macOS asks rather than after.
     ///
     /// "System Audio Recording" sounds far broader than what an equalizer does,
     /// and the one moment that matters is the moment the system asks. Creating
-    /// the tap is what raises that prompt, so the engine waits here until the
-    /// button below is pressed.
+    /// the tap is what raises that prompt, so the engine builds none until the
+    /// "Allow…" button below has been pressed.
+    ///
+    /// Each state says only what applies to it. Before CoreEQ could ask macOS,
+    /// "not asked" and "refused" looked the same and this card always carried
+    /// the instructions for both.
+    @ViewBuilder
     private var permissionOverlay: some View {
-        VStack(spacing: 10) {
-            Label("CoreEQ is not allowed to process audio", systemImage: "waveform")
-                .font(Theme.Font.heading)
-                .foregroundStyle(.primary)
+        if let prompt = PermissionPrompt(
+            access: audioEngine.tapAccess, canAskMacOS: AudioCapturePermission.isAvailable)
+        {
+            VStack(spacing: 10) {
+                Label(prompt.title, systemImage: "waveform")
+                    .font(Theme.Font.heading)
+                    .foregroundStyle(.primary)
 
-            Text(
-                "An equalizer has to reach the sound to change it. CoreEQ reads audio on its "
-                    + "way to your speakers, adjusts it, and plays it straight back. Nothing is "
-                    + "recorded, stored, or sent anywhere, and quitting CoreEQ hands the audio "
-                    + "back immediately."
-            )
-            .font(Theme.Font.label)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
+                Text(prompt.explanation)
+                    .font(Theme.Font.label)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            Button("Open System Settings…") { SystemSettingsLink.openAudioCapturePrivacy() }
-                .buttonStyle(.borderedProminent)
+                // Side by side, the default on the right, as in a macOS dialog
+                // and in the General settings row. Not a link: the accent colour
+                // marks controls that are on, and a blue line of text would make
+                // the lesser action the loudest thing on the card.
+                HStack(spacing: 8) {
+                    if let secondary = prompt.secondary {
+                        Button(secondary.title) { EngineStatusBridge.shared.perform(secondary) }
+                    }
+                    Button(prompt.primary.title) {
+                        EngineStatusBridge.shared.perform(prompt.primary)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                }
                 .controlSize(.large)
-                .keyboardShortcut(.defaultAction)
-
-            // Always shown, rather than swapped in once the app believes it has
-            // been refused. macOS cannot tell "denied" from "not asked" apart,
-            // so any app that tries ends up showing the wrong one sometimes;
-            // naming the fallback costs a line and is never wrong.
-            Text(Theme.audioPermissionInstruction)
-                .font(Theme.Font.secondary)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 18)
+            .frame(maxWidth: 380)
+            .background(RoundedRectangle(cornerRadius: 10).fill(.regularMaterial))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.12))
+            )
+            .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+            .accessibilityElement(children: .contain)
+            .transition(.opacity)
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 18)
-        .frame(maxWidth: 380)
-        .background(RoundedRectangle(cornerRadius: 10).fill(.regularMaterial))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.12))
-        )
-        .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
-        .accessibilityElement(children: .combine)
-        .transition(.opacity)
     }
 
     /// The failure, stated over the curve it invalidates.
@@ -758,6 +761,7 @@ struct EqualizerDetailView: View {
         switch audioEngine.status {
         case .running: return nil
         case .stopped: return "Audio engine stopped"
+        case .awaitingPermission: return "Waiting for audio permission"
         case .failed: return "Audio engine error"
         }
     }

@@ -49,6 +49,19 @@ final class EngineStatusBridge: ObservableObject {
     var level: DiagnosticsReport.Level { engine?.level ?? DiagnosticsReport.Level() }
     var idling: DiagnosticsReport.Idling { engine?.idling ?? DiagnosticsReport.Idling() }
 
+    /// Carries out a permission prompt's button, from whichever surface drew it.
+    ///
+    /// Here because the Settings scene has no engine to call, and one place for
+    /// it keeps the overlay and the settings row from doing different things
+    /// for the same button.
+    func perform(_ action: PermissionPrompt.Action) {
+        switch action {
+        case .allow: engine?.requestPermission()
+        case .openSystemSettings: SystemSettingsLink.openAudioCapturePrivacy()
+        case .relaunch: AppRelaunch.relaunch()
+        }
+    }
+
     func follow(_ engine: AudioEngine) {
         self.engine = engine
         engine.$status

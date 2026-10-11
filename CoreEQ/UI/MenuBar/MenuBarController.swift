@@ -288,8 +288,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func engineFailureItem() -> NSMenuItem? {
-        guard let summary = audioEngine.status.summary else { return nil }
-        let isPermission = audioEngine.needsAudioPermission
+        let permission = PermissionPrompt(
+            access: audioEngine.tapAccess, canAskMacOS: AudioCapturePermission.isAvailable)
+        guard let title = permission?.menuTitle ?? audioEngine.status.summary else { return nil }
+        let isPermission = permission != nil
 
         // Always General, whichever kind of warning this is. Someone clicking a
         // warning wants to know what is wrong and what to do; Diagnostics is a
@@ -297,7 +299,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // as a wall of text when it is not the one you are on. General states
         // the problem and offers Diagnostics as the next step.
         let item = NSMenuItem(
-            title: isPermission ? "Audio permission needed" : summary,
+            title: title,
             action: #selector(openPermission), keyEquivalent: "")
         item.target = self
         item.image = NSImage(

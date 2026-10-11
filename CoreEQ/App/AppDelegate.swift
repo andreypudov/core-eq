@@ -24,6 +24,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Before anything else exists: a second copy must not get as far as a
+        // menu bar icon, let alone a tap. See `SingleInstance`.
+        SingleInstance.ensure { [weak self] in self?.finishLaunching() }
+    }
+
+    private func finishLaunching() {
         menuBarController = MenuBarController(
             profileManager: profileManager,
             audioEngine: audioEngine,
@@ -57,6 +63,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProfileStatusBridge.shared.follow(profileManager)
 
         audioEngine.start()
+
+        // A menu bar app that is waiting for a permission it has not asked for
+        // looks like an app doing nothing. The window is where the explanation
+        // and the button are. Not after a refusal: someone who said no does not
+        // want a window forced on them at every login, and the menu bar row
+        // covers that case.
+        if audioEngine.tapAccess == .notDetermined {
+            showMainWindow()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

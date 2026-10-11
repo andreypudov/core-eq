@@ -7,10 +7,10 @@ the [[file:../README.org][README]].
 * Getting started
 
 1. Launch CoreEQ. A sliders icon appears in the menu bar; there is no Dock icon.
-2. Grant *System Audio Recording* when macOS asks — CoreEQ needs it to process
-   the sound you hear. Nothing is recorded, stored, or transmitted. The
-   permission can also be granted under System Settings → Privacy & Security →
-   Screen & System Audio Recording.
+2. Allow *System Audio Recording*. On first launch CoreEQ opens its window and
+   explains what the permission is for before macOS asks; press *Allow…* and
+   macOS shows its prompt. CoreEQ needs the permission to process the sound you
+   hear. Nothing is recorded, stored, or transmitted. See [[*The audio permission][The audio permission]].
 3. Choose a preset. The sound changes immediately.
 
 * The window
@@ -223,6 +223,23 @@ And what it cannot do yet:
 - Screen recordings can be doubled at their very start — see [[*Recordings and other audio tools][Recordings and
   other audio tools]].
 
+* The audio permission
+
+CoreEQ asks macOS whether it is allowed to process system audio, and says only
+what applies. The same card appears over the response graph, in Settings →
+General, and as a row in the menu bar.
+
+| What CoreEQ says                              | What it means                                         | The button                                                                                       |
+|-----------------------------------------------+-------------------------------------------------------+--------------------------------------------------------------------------------------------------|
+| CoreEQ needs to reach the sound to change it   | macOS has not asked yet, or CoreEQ was just updated   | *Allow…* shows the macOS prompt                                                                  |
+| CoreEQ is not allowed to process audio         | The permission was refused                            | *Open System Settings…*; turn CoreEQ on there, then choose *Quit & Reopen* (or *Relaunch CoreEQ*) |
+
+CoreEQ never builds its audio path before the answer is yes.
+
+macOS settles the permission when an app starts. Switching CoreEQ on or off in
+System Settings does nothing for the copy already running — macOS offers to
+quit and reopen it — so a change takes effect on the next launch.
+
 * Troubleshooting
 
 *The fastest route to an answer is the diagnostics report*, in Settings →
@@ -231,9 +248,12 @@ it, whether audio is reaching CoreEQ, how often the engine has restarted and
 why, and whether the output clipped. Attach it to any bug report.
 
 - *CoreEQ says it is not allowed to process audio.* Allow CoreEQ under Screen &
-  System Audio Recording in System Settings → Privacy & Security. If it is
-  already listed, turn it off and on again — an update gives it a new signature
-  and macOS keeps the old entry. It starts equalizing as soon as you come back.
+  System Audio Recording in System Settings → Privacy & Security, then choose
+  *Quit & Reopen* when macOS asks, or *Relaunch CoreEQ* on the card.
+- *The permission is on in System Settings and CoreEQ still hears nothing.*
+  Turn CoreEQ off and on again in System Settings and relaunch it, or clear its
+  entry from Terminal and relaunch it, which makes it ask again:
+  =tccutil reset AudioCapture com.andreypudov.coreeq=
 - *No sound, or something sounds wrong, and you want to rule CoreEQ out.* Switch
   it off, or quit it: system audio returns to its normal path immediately.
 - *A screen recording has an echo.* See [[*Recordings and other audio tools][Recordings and other audio tools]].

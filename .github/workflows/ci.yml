@@ -28,5 +28,16 @@ jobs:
       - name: Run unit tests
         run: make test
 
+      # The fallback for a macOS without TCC's private entry points. Nothing
+      # else compiles it, and the grep fails the job if the private names
+      # leak back into a build that promises not to contain them.
+      - name: Build without private TCC API
+        run: |
+          make build XCODE_FLAGS="ARCHS=arm64 COREEQ_TCC_SPI=NO"
+          if strings build/Release/CoreEQ.app/Contents/MacOS/CoreEQ | grep -q TCCAccess; then
+            echo "::error::private TCC names found in a COREEQ_TCC_SPI=NO build"
+            exit 1
+          fi
+
       - name: Build release configuration
         run: make build
