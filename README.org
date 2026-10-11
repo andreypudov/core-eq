@@ -48,7 +48,9 @@ brew install --cask core-eq
 
 Upgrade later with =brew update && brew upgrade --cask core-eq=.
 
-CoreEQ is currently unsigned and unnotarized, so macOS may block first launch.
+CoreEQ is signed with its own certificate, which keeps the audio permission
+across updates, but it is not notarized by Apple, so macOS may block first
+launch.
 Allow it in System Settings → Privacy & Security, or clear the quarantine flag:
 
 #+begin_src sh

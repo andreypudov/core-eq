@@ -3,6 +3,11 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # A rehearsal: everything a release does except checking the tag and
+  # publishing. The signed zip is kept as a workflow artifact instead, so the
+  # signing secrets — and the permission surviving an update — can be checked
+  # before a real tag depends on them.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,14 +23,63 @@ jobs:
     # macOS 26 image. The deployment target (14.2) is set in the project and is
     # unaffected by this.
     runs-on: xcode-27
+    env:
+      # The certificate releases must be signed with, by SHA-1 fingerprint. Not a
+      # secret: it is printed in every release's signature. Pinned so that a
+      # replaced certificate fails the release instead of quietly giving CoreEQ a
+      # new identity, which would make macOS ask every user for the audio
+      # permission again. Change it only on purpose, with a release note.
+      SIGNING_CERT_SHA1: DE1D551EEE962BC3E08C8AFA51F126E0E83CA016
     steps:
       - uses: actions/checkout@v5
 
       - name: Show toolchain
         run: xcodebuild -version && xcrun --show-sdk-version
 
-      - name: Build and package
-        run: make release
+      # Into a keychain of its own, created for this job and deleted after it,
+      # so the private key never lands in the runner's login keychain. The
+      # partition list lets codesign use the key without a dialog nobody is
+      # there to answer.
+      - name: Import the signing certificate
+        env:
+          SIGNING_CERT_P12: ${{ secrets.SIGNING_CERT_P12 }}
+          SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: |
+          if [ -z "$SIGNING_CERT_P12" ] || [ -z "$SIGNING_CERT_PASSWORD" ]; then
+            echo "::error::SIGNING_CERT_P12 and SIGNING_CERT_PASSWORD must be set — see docs/RELEASING.org"
+            exit 1
+          fi
+          keychain_password=$(openssl rand -base64 32)
+          security create-keychain -p "$keychain_password" "$RUNNER_TEMP/signing.keychain-db"
+          security set-keychain-settings -lut 3600 "$RUNNER_TEMP/signing.keychain-db"
+          security unlock-keychain -p "$keychain_password" "$RUNNER_TEMP/signing.keychain-db"
+          certificate="$RUNNER_TEMP/signing.p12"
+          printf '%s' "$SIGNING_CERT_P12" | base64 --decode > "$certificate"
+          security import "$certificate" -k "$RUNNER_TEMP/signing.keychain-db" \
+            -P "$SIGNING_CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$certificate"
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$keychain_password" "$RUNNER_TEMP/signing.keychain-db" > /dev/null
+          security list-keychains -d user -s "$RUNNER_TEMP/signing.keychain-db" \
+            $(security list-keychains -d user | tr -d '"')
+          security find-identity -p codesigning "$RUNNER_TEMP/signing.keychain-db"
+
+      # Signed by fingerprint rather than by name, so it can only be the pinned
+      # certificate. `make release` fails if the signature does not name one.
+      - name: Build, sign and package
+        run: make release SIGN_IDENTITY="$SIGNING_CERT_SHA1"
+
+      # The failure this guards against is silent: an ad-hoc or wrongly signed
+      # release works, and asks every user for the permission again.
+      - name: Verify the release is signed with the pinned certificate
+        run: |
+          requirement=$(codesign -d -r - build/Release/CoreEQ.app 2>&1 | grep '^designated')
+          echo "$requirement"
+          expected=$(printf '%s' "$SIGNING_CERT_SHA1" | tr 'A-F' 'a-f')
+          case "$requirement" in
+            *"certificate root = H\"$expected\""*|*"certificate leaf = H\"$expected\""*) ;;
+            *) echo "::error::the release is not signed with certificate $SIGNING_CERT_SHA1"; exit 1 ;;
+          esac
 
       # The failure this guards against is silent: a runner image whose default
       # Xcode has moved produces a working, correctly versioned app that simply
@@ -45,6 +99,7 @@ jobs:
       # under the new tag. v1.9.1 shipped as CoreEQ-1.9.zip that way. Fail
       # instead, before anything is published.
       - name: Verify the tag matches the app version
+        if: github.event_name == 'push'
         run: |
           version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
                     build/Release/CoreEQ.app/Contents/Info.plist)
@@ -54,8 +109,22 @@ jobs:
             exit 1
           fi
 
+      - name: Keep the signed build of a rehearsal
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreEQ-signed-rehearsal
+          path: dist/*.zip
+          retention-days: 7
+          if-no-files-found: error
+
       - name: Publish GitHub release
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.zip
           generate_release_notes: true
+
+      - name: Remove the signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
