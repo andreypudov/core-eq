@@ -3,6 +3,11 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # A rehearsal: everything a release does except checking the tag and
+  # publishing. The signed zip is kept as a workflow artifact instead, so the
+  # signing secrets — and the permission surviving an update — can be checked
+  # before a real tag depends on them.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -94,6 +99,7 @@ jobs:
       # under the new tag. v1.9.1 shipped as CoreEQ-1.9.zip that way. Fail
       # instead, before anything is published.
       - name: Verify the tag matches the app version
+        if: github.event_name == 'push'
         run: |
           version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
                     build/Release/CoreEQ.app/Contents/Info.plist)
@@ -103,7 +109,17 @@ jobs:
             exit 1
           fi
 
+      - name: Keep the signed build of a rehearsal
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreEQ-signed-rehearsal
+          path: dist/*.zip
+          retention-days: 7
+          if-no-files-found: error
+
       - name: Publish GitHub release
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.zip

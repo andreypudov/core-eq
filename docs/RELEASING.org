@@ -91,7 +91,14 @@ To cut a release:
    build settings. The release zip is named after this version, not the tag, so
    =release.yml= refuses to publish when the two disagree — v1.9.1 was first
    tagged before the bump and came out as =CoreEQ-1.9.zip=.
-2. Commit, then tag and push:
+2. Commit and push.
+3. Rehearse: run the *Release* workflow by hand (Actions → Release → Run
+   workflow, or =gh workflow run release.yml=). It does everything except check
+   the tag and publish: it imports the certificate, signs, and runs every check,
+   then keeps the signed zip as the =CoreEQ-signed-rehearsal= artifact for a week.
+   A failure here costs nothing. A manual run is only offered once the workflow,
+   trigger included, is on the default branch.
+4. Tag and push:
    #+begin_src sh
    git tag v1.1
    git push origin v1.1
