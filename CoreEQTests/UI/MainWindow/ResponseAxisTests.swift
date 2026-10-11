@@ -98,6 +98,53 @@ struct ResponseAxisTests {
         #expect(axis.plotWidth == 1)
         #expect(axis.x(1_000).isFinite)
     }
+
+    // MARK: - Sampling the curve
+
+    /// Every filter's centre is sampled, so a narrow bell's peak is drawn at its
+    /// full height instead of falling between two evenly spaced points.
+    @Test func filterCentresAreSampled() {
+        let axis = axis()
+        let centres = [2_850.0, 7_000]
+        let fractions = axis.sampleFractions(count: 160, centres: centres)
+
+        for centre in centres {
+            #expect(
+                fractions.contains { $0 == axis.fraction(of: centre) },
+                "\(centre) Hz is not on the curve")
+        }
+        #expect(fractions.count == 162)
+        #expect(fractions == fractions.sorted())
+        #expect(fractions.first == 0)
+        #expect(fractions.last == 1)
+    }
+
+    /// The case that needs it: a Q 16 bell centred halfway between two of the
+    /// even points, which is narrower than their spacing. Drawn from the even
+    /// points alone its 12 dB peak comes out well short.
+    @Test func aNarrowBellIsDrawnAtItsFullHeight() {
+        let axis = axis()
+        let centre = axis.frequency(atFraction: 120.5 / 159)
+        let bell = Biquad(
+            filter: EQFilter(kind: .bell, frequency: centre, gain: 12, q: 16),
+            sampleRate: 48_000)
+        func peak(_ fractions: [Double]) -> Double {
+            fractions.map {
+                bell.magnitudeDB(at: axis.frequency(atFraction: $0), sampleRate: 48_000)
+            }.max() ?? 0
+        }
+        let even = axis.sampleFractions(count: 160, centres: [])
+        let withCentre = axis.sampleFractions(count: 160, centres: [centre])
+
+        #expect(peak(even) < 11.5, "the even grid alone was expected to miss this peak")
+        #expect(peak(withCentre).isClose(to: 12, within: 0.01))
+    }
+
+    /// A filter off either end of the plot adds nothing to draw.
+    @Test func centresOffThePlotAreIgnored() {
+        let fractions = axis().sampleFractions(count: 160, centres: [1, 100_000])
+        #expect(fractions.count == 160)
+    }
 }
 
 struct ResponseGainAxisTests {
@@ -126,4 +173,5 @@ struct ResponseGainAxisTests {
         #expect(ResponseGainAxis.limit(for: [EQFilter.band(slot: 0, gain: 12)]) == 14)
         #expect(KnobScale.filterGain.range == BuiltInProfiles.filterGainRange)
     }
+
 }

@@ -141,4 +141,13 @@ struct KnobScaleTests {
             #expect(scale.fraction(of: scale.range.upperBound).isClose(to: 1, within: 1e-9))
         }
     }
+
+    /// A bell's knob reaches Q 16; every other kind's stops at 10, matching
+    /// what the model will accept.
+    @Test func theQKnobFollowsTheFiltersKind() {
+        #expect(KnobScale.filterQ(for: .bell).range == BuiltInProfiles.bellQRange)
+        for kind in EQFilter.Kind.allCases where kind != .bell {
+            #expect(KnobScale.filterQ(for: kind).range == BuiltInProfiles.filterQRange)
+        }
+    }
 }

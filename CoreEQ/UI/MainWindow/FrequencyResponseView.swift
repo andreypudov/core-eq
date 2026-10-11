@@ -446,8 +446,9 @@ struct FrequencyResponseView: View {
         let axis = axis(size)
 
         var response = Path()
-        for step in 0..<Self.curvePointCount {
-            let fraction = Double(step) / Double(Self.curvePointCount - 1)
+        let fractions = axis.sampleFractions(
+            count: Self.curvePointCount, centres: [source.frequency])
+        for (step, fraction) in fractions.enumerated() {
             let dB = biquad.magnitudeDB(
                 at: axis.frequency(atFraction: fraction), sampleRate: sampleRate)
             let point = CGPoint(
@@ -639,8 +640,9 @@ struct FrequencyResponseView: View {
         let biquads = filters.map { Biquad(filter: $0, sampleRate: sampleRate) }
         let axis = axis(size)
 
-        return (0..<Self.curvePointCount).map { index in
-            let fraction = Double(index) / Double(Self.curvePointCount - 1)
+        let fractions = axis.sampleFractions(
+            count: Self.curvePointCount, centres: filters.map(\.frequency))
+        return fractions.map { fraction in
             let frequency = axis.frequency(atFraction: fraction)
             let dB = biquads.reduce(preamp) {
                 $0 + $1.magnitudeDB(at: frequency, sampleRate: sampleRate)

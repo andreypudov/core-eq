@@ -167,7 +167,7 @@ struct FilterRowView: View {
     private var qCell: some View {
         parameterCell(
             width: Theme.FilterRow.Column.q,
-            scale: .filterQ,
+            scale: .filterQ(for: filter.kind),
             parameter: .q,
             unit: nil,
             format: .number.precision(.fractionLength(2)),

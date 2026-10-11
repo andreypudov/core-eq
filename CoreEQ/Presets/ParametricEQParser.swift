@@ -62,7 +62,7 @@ enum ParametricEQParser {
         var unparsedLines: [String] = []
 
         /// Values outside CoreEQ's ranges — free gain ±20 dB, band gain and preamp ±12 dB, frequency
-        /// 20 Hz–20 kHz, Q 0.1–10 — that were clamped to fit. Counted over the
+        /// 20 Hz–20 kHz, Q 0.1–16 for a bell and 0.1–10 otherwise — that were clamped to fit. Counted over the
         /// filters that were kept, so it never double-counts a dropped one.
         var adjustedValueCount: Int = 0
 
@@ -402,12 +402,13 @@ enum ParametricEQParser {
                             adjusted: filter.gain.clamped(to: BuiltInProfiles.filterGainRange),
                             limit: "±20 dB"))
                 }
-                if !BuiltInProfiles.filterQRange.contains(filter.q) {
+                let qRange = BuiltInProfiles.qRange(for: filter.kind)
+                if !qRange.contains(filter.q) {
                     adjustments.append(
                         ImportAdjustment(
                             kind: .q, filter: identity, original: filter.q,
-                            adjusted: filter.q.clamped(to: BuiltInProfiles.filterQRange),
-                            limit: "0.1–10"))
+                            adjusted: filter.q.clamped(to: qRange),
+                            limit: String(format: "%g–%g", qRange.lowerBound, qRange.upperBound)))
                 }
                 if !BuiltInProfiles.filterFrequencyRange.contains(filter.frequency) {
                     adjustments.append(

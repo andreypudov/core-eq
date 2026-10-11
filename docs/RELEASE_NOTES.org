@@ -61,6 +61,20 @@ muted the other's equalized output and nothing reached the speakers. A copy that
 finds another already running now asks which one to quit before it builds
 anything.
 
+** Narrower bells
+
+Asked for in #41. A parametric bell's Q now goes to 16, about a twelfth of an
+octave, up from 10: narrow enough for the sharp resonances in-ear headphones are
+corrected with, or a single whine. Shelves and pass filters stay at 10, because
+past that a shelf overshoots and a pass filter resonates instead of narrowing.
+
+Not further, deliberately. A narrow boost rings, sounding for about Q / (π f)
+after the music stops: 51 ms at 100 Hz at the new ceiling, against 32 ms at the
+old one. Studio EQs reach 40 or 100; a listening EQ has no use for that. AutoEq's
+published corrections stay below 6 and are unaffected. Imported bells up to 16
+now arrive exactly, and the graph samples every filter's centre, so a bell
+narrower than its point spacing is drawn at the height it is heard.
+
 * 1.9.2
 
 Released <2026-10-02 Fri>.

@@ -59,6 +59,20 @@ struct ResponseAxis: Equatable {
     func x(_ frequency: Double) -> CGFloat {
         gutter + CGFloat(min(max(fraction(of: frequency), 0), 1)) * plotWidth
     }
+
+    /// Where a response curve is sampled: `count` evenly spaced points across
+    /// the plot, plus the centre of every filter in `centres` that lands on it,
+    /// in order.
+    ///
+    /// The even points alone are about a sixteenth of an octave apart. A bell at
+    /// Q 16 is narrower than that, so its peak could fall between two of them
+    /// and be drawn short of what is heard — the one thing this graph must not
+    /// do. Sampling each centre puts every peak and notch on the curve exactly.
+    func sampleFractions(count: Int, centres: [Double]) -> [Double] {
+        let even = (0..<count).map { Double($0) / Double(max(count - 1, 1)) }
+        let peaks = centres.map(fraction(of:)).filter { $0 > 0 && $0 < 1 }
+        return Array(Set(even + peaks)).sorted()
+    }
 }
 
 /// The analyzer backdrop, on its own layer.

@@ -22,7 +22,7 @@ struct BuiltInProfilesTests {
             "\(profile.name) is not the ladder followed by its filters")
         for filter in profile.freeFilters {
             #expect(BuiltInProfiles.filterFrequencyRange.contains(filter.frequency))
-            #expect(BuiltInProfiles.filterQRange.contains(filter.q))
+            #expect(BuiltInProfiles.qRange(for: filter.kind).contains(filter.q))
             #expect(BuiltInProfiles.filterGainRange.contains(filter.gain))
         }
     }
@@ -170,6 +170,18 @@ extension Double {
         for (name, line) in BuiltInProfiles.descriptions {
             #expect(!line.contains("\n"), "\(name)")
             #expect(line.count <= 110, "\(name) is \(line.count) characters")
+        }
+    }
+
+    // MARK: - Q
+
+    /// Issue #41: a bell can go narrower, to about a twelfth of an octave. The
+    /// other kinds keep the old ceiling, because a higher Q does not narrow
+    /// them — it makes a shelf overshoot and a pass filter resonate.
+    @Test func onlyABellReachesQSixteen() {
+        #expect(BuiltInProfiles.qRange(for: .bell) == 0.1...16)
+        for kind in EQFilter.Kind.allCases where kind != .bell {
+            #expect(BuiltInProfiles.qRange(for: kind) == 0.1...10, "\(kind.title)")
         }
     }
 }

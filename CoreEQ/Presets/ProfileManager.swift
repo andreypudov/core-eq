@@ -650,7 +650,7 @@ final class ProfileManager: ObservableObject {
             kind: kind,
             frequency: frequency.clamped(to: BuiltInProfiles.filterFrequencyRange),
             gain: gain.clamped(to: BuiltInProfiles.filterGainRange),
-            q: q.clamped(to: BuiltInProfiles.filterQRange),
+            q: q.clamped(to: BuiltInProfiles.qRange(for: kind)),
             colorIndex: nextColorIndex
         )
         currentFilters.append(filter)
@@ -664,8 +664,13 @@ final class ProfileManager: ObservableObject {
         chainDidChange()
     }
 
+    /// A bell's Q can be narrower than any other kind's, so changing kind
+    /// brings it back within the new kind's range.
     func setFilterKind(_ kind: EQFilter.Kind, id: UUID) {
-        updateFreeFilter(id: id) { $0.kind = kind }
+        updateFreeFilter(id: id) {
+            $0.kind = kind
+            $0.q = $0.q.clamped(to: BuiltInProfiles.qRange(for: kind))
+        }
     }
 
     func setFilterFrequency(_ frequency: Double, id: UUID) {
@@ -679,7 +684,7 @@ final class ProfileManager: ObservableObject {
     }
 
     func setFilterQ(_ q: Double, id: UUID) {
-        updateFreeFilter(id: id) { $0.q = q.clamped(to: BuiltInProfiles.filterQRange) }
+        updateFreeFilter(id: id) { $0.q = q.clamped(to: BuiltInProfiles.qRange(for: $0.kind)) }
     }
 
     func setFilterEnabled(_ isEnabled: Bool, id: UUID) {
