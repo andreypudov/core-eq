@@ -32,12 +32,25 @@ the first time. A refusal shows the way to System Settings and says what macOS
 does not: the change only reaches CoreEQ after it is reopened. The card offers
 *Relaunch CoreEQ* for anyone who dismissed macOS's own Quit & Reopen.
 
-Updates no longer break the permission silently. Releases are ad-hoc signed, so
-macOS treats each one as a new app; it now arrives as the *Allow…* card and one
+Updates no longer break the permission silently. When macOS does ask again — as
+it will once on this update, see below — it arrives as the *Allow…* card and one
 prompt, instead of a switch in System Settings that is on and does nothing.
 
 If the private TCC entry point is ever missing, CoreEQ falls back to the old
 inference, and the diagnostics report says the answer was inferred.
+
+** Updates keep the audio permission
+
+Releases were ad-hoc signed, and macOS records an ad-hoc permission against the
+exact binary, so every update was a new app and asked again. From 1.10 releases
+are signed with CoreEQ's own certificate, and the permission is recorded against
+that instead, so it carries over to every later release. Measured with a
+different binary under the same certificate: no prompt, and audio at once.
+
+*You will be asked once more, on this update*, because the signature changes
+kind. After that, updates keep the permission. Gatekeeper is unchanged: the
+certificate is not Apple's, so the first launch of a download still needs
+*Open Anyway* or the =xattr= step in the README.
 
 ** Two copies no longer silence the Mac
 

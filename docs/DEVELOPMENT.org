@@ -41,8 +41,10 @@ xcodebuild -project CoreEQ.xcodeproj -target CoreEQ -configuration Debug build
 is listed below).
 
 The app lands in =build/Debug/CoreEQ.app=. The build is ad-hoc signed
-(=CODE_SIGN_IDENTITY=-=) with the hardened runtime disabled — fine for local
-development, revisit for distribution (see [[file:RELEASING.org][RELEASING.org]]).
+(=CODE_SIGN_IDENTITY=-=) with the hardened runtime disabled. Releases are
+re-signed with CoreEQ's certificate; with that certificate in your keychain,
+=make install SIGN_IDENTITY="CoreEQ Release"= does the same locally (see
+“Signing” in [[file:RELEASING.org][RELEASING.org]]).
 
 ** Makefile targets
 
@@ -53,8 +55,9 @@ toolchain if =xcode-select= points at the Command Line Tools):
 | =make test=    | Run the =CoreEQTests= unit suite                       |
 | =make format=  | Apply the house style to every Swift file              |
 | =make lint=    | Report style violations without changing anything      |
-| =make install= | Build and install to =/Applications=                   |
-| =make release= | Build and zip to =dist/CoreEQ-<version>.zip= (=ditto=) |
+| =make sign=    | Build, then re-sign with =SIGN_IDENTITY= when it is set |
+| =make install= | Sign and install to =/Applications=                    |
+| =make release= | Sign and zip to =dist/CoreEQ-<version>.zip= (=ditto=)  |
 | =make clean=   | Remove =build/= and =dist/=                            |
 
 =make build= takes extra xcodebuild settings through =XCODE_FLAGS=, e.g.
@@ -81,7 +84,7 @@ open build/Debug/CoreEQ.app
   “Proving the tap” in [[file:INTERNALS.org][INTERNALS.org]] for what the engine does about it.
 - TCC ties the permission to the code signature, and an ad-hoc signature pins
   the exact build. After a rebuild with a code change CoreEQ opens on the
-  *Allow…* card again. Switching the permission in System Settings takes effect
+  *Allow…* card again; a build signed with =SIGN_IDENTITY= keeps it. Switching the permission in System Settings takes effect
   only after a relaunch. To start from a clean slate:
   =tccutil reset AudioCapture com.andreypudov.coreeq= (no =sudo= needed, and
   only CoreEQ's entry is touched).

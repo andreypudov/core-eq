@@ -9,13 +9,21 @@ DIST_DIR   := dist
 # `release` is universal unless someone overrides this deliberately.
 XCODE_FLAGS ?=
 
+# A code-signing identity to re-sign the app with, e.g.
+# `make install SIGN_IDENTITY="CoreEQ Release"`. Empty by default, which keeps
+# Xcode's ad-hoc signature. The difference is the System Audio Recording
+# permission: macOS records an ad-hoc grant against that exact binary, so every
+# rebuild is a stranger and is asked again, while a grant made to a certificate
+# covers every build signed with it. Releases are signed this way from CI.
+SIGN_IDENTITY ?=
+
 # Use the full Xcode toolchain even when xcode-select points at the
 # Command Line Tools.
 ifneq (,$(findstring CommandLineTools,$(shell xcode-select -p)))
 export DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 endif
 
-.PHONY: build test audio-test format lint install release icons clean
+.PHONY: build sign test audio-test format lint install release icons clean
 
 build:
 	xcodebuild -project $(APP).xcodeproj -target $(APP) -configuration $(CONFIG) $(XCODE_FLAGS) build
@@ -54,12 +62,31 @@ audio-test: build
 	@xcrun swiftc -O -parse-as-library -o build/audio-test Tools/AudioTest.swift
 	@./build/audio-test
 
-install: build
+# Re-signs the whole bundle with SIGN_IDENTITY, then refuses to continue if the
+# result would still be pinned to this one binary. The identifier is passed
+# explicitly: without it codesign can derive one that changes between builds,
+# and a permission granted to one identifier does not cover another. No
+# timestamp, because a self-signed certificate has no timestamp authority to
+# vouch for it. Nothing is nested inside the app, so one signature covers it.
+sign: build
+ifneq ($(strip $(SIGN_IDENTITY)),)
+	@bundle_id=$$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" $(APP_BUNDLE)/Contents/Info.plist); \
+	codesign --force --sign "$(SIGN_IDENTITY)" --identifier "$$bundle_id" --timestamp=none $(APP_BUNDLE)
+	codesign --verify --strict $(APP_BUNDLE)
+	@requirement=$$(codesign -d -r - $(APP_BUNDLE) 2>&1 | grep '^designated'); \
+	echo "$$requirement"; \
+	case "$$requirement" in \
+	  *"certificate "*) ;; \
+	  *) echo "error: the signature still names this exact build, not a certificate"; exit 1 ;; \
+	esac
+endif
+
+install: sign
 	rm -rf /Applications/$(APP).app
 	ditto $(APP_BUNDLE) /Applications/$(APP).app
 	@echo "Installed /Applications/$(APP).app"
 
-release: build
+release: sign
 	mkdir -p $(DIST_DIR)
 	@version=$$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" $(APP_BUNDLE)/Contents/Info.plist); \
 	ditto -c -k --keepParent $(APP_BUNDLE) $(DIST_DIR)/$(APP)-$$version.zip; \

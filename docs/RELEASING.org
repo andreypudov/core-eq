@@ -43,8 +43,9 @@ the build comes out universal regardless.
 * Cutting a release
 
 
-CoreEQ is distributed unsigned (ad-hoc signature, no Apple Developer
-account). The release pipeline is GitHub Actions
+CoreEQ is signed with its own self-signed certificate and is not notarized (no
+Apple Developer account); see “Signing” below. The release pipeline is GitHub
+Actions
 (=.github/workflows/release.yml=): pushing a tag matching =v*= builds
 =make release= on a macOS runner and attaches the zip to a GitHub Release
 with generated notes.
@@ -96,23 +97,80 @@ To cut a release:
    git push origin v1.1
    #+end_src
 
-Notes on unsigned distribution:
+* Signing
 
-- Downloaded (quarantined) copies trigger Gatekeeper; users bypass it once
-  via System Settings → Privacy & Security → *Open Anyway* or by clearing
-  the quarantine attribute. Building from source avoids this entirely —
-  local builds are never quarantined. Both paths are documented for users
-  in [[file:../README.org][README.org]].
-- The System Audio Recording (TCC) permission is keyed to the code
-  signature; ad-hoc signatures have no stable identity, so each shipped
-  update re-prompts users for the permission.
+*Why.* macOS records the System Audio Recording permission against the app's
+designated requirement. Ad-hoc signed, that requirement is the exact binary
+(=cdhash=), so every release was a new app to macOS and every update asked for
+the permission again. Signed with a certificate it is
+
+#+begin_example
+identifier "com.andreypudov.coreeq" and certificate root = H"de1d551e…"
+#+end_example
+
+and every release signed with the same certificate is covered by one grant.
+Measured on macOS 27 with a different binary under the same certificate: no
+prompt, and the tap delivered audio at once. The first signed release (1.10)
+still asks everyone once, because the requirement changes from a =cdhash= to a
+certificate.
+
+*The certificate* is self-signed, made in Keychain Access (Certificate
+Assistant → Create a Certificate…, Identity Type *Self-Signed Root*,
+Certificate Type *Code Signing*, validity 20 years):
+
+| Name                  | =CoreEQ Release=                            |
+| SHA-1 fingerprint     | =DE1D551EEE962BC3E08C8AFA51F126E0E83CA016=  |
+| Valid until           | 2046-06-28                                  |
+
+macOS lists it as not trusted; that does not stop signing, and the permission is
+keyed to the certificate's hash, not to its trust.
+
+*CI* (=release.yml=) imports it from two repository secrets into a keychain
+created for the job and deleted after it, signs by fingerprint through
+=make release SIGN_IDENTITY=…=, and fails unless the signature names the
+pinned fingerprint:
+
+| =SIGNING_CERT_P12=      | the exported =.p12=, base64-encoded                       |
+| =SIGNING_CERT_PASSWORD= | its export password                                       |
+
+To put the =.p12= on the clipboard for the first one:
+
+#+begin_src sh
+base64 -i CoreEQ.p12 | pbcopy
+#+end_src
+
+*Keep the =.p12= and its password backed up outside GitHub.* Secrets cannot be
+read back. Losing the certificate means a new one, and a new certificate means
+every user is asked for the permission once more. A leaked one is worse: anything
+signed with it is CoreEQ as far as the permission is concerned. Rotating it is
+deliberate: replace the secrets, change =SIGNING_CERT_SHA1= in =release.yml=,
+update this section and =SECURITY.md=, and say in the release notes that users
+will be asked once more.
+
+*Locally*, builds stay ad-hoc unless asked otherwise:
+
+#+begin_src sh
+make install SIGN_IDENTITY="CoreEQ Release"
+#+end_src
+
+signs the installed copy with the certificate, so it keeps its permission
+across rebuilds like a release does. =make sign= refuses to finish when the
+result is still pinned to the binary.
+
+*What signing does not do.* Gatekeeper still blocks downloaded (quarantined)
+copies on first launch, because the certificate is not Apple's; users bypass it
+once via System Settings → Privacy & Security → *Open Anyway* or by clearing the
+quarantine attribute, as [[file:../README.org][README.org]] describes. Building from source avoids it —
+local builds are never quarantined. Only a Developer ID and notarization remove
+it.
 
 
 * If a Developer ID account becomes available
 
 
-Sign with hardened runtime and notarize; this removes the Gatekeeper
-warning and the per-update permission re-prompts:
+Sign with hardened runtime and notarize; this removes the Gatekeeper warning.
+Switching certificates changes the designated requirement, so that release asks
+every user for the permission once more:
 
 #+begin_src sh
 xcodebuild -project CoreEQ.xcodeproj -target CoreEQ -configuration Release build \

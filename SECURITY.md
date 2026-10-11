@@ -59,9 +59,24 @@ In scope:
   for the audio-capture service only, and never changes any other app's
   permission. Builds made with `COREEQ_TCC_SPI=NO` contain neither.
 
+Releases from 1.10 on are signed with CoreEQ's own self-signed certificate,
+“CoreEQ Release”, SHA-1 fingerprint
+`DE1D551EEE962BC3E08C8AFA51F126E0E83CA016`. macOS grants the audio permission to
+whatever carries that signature, so a build signed with it that is not from this
+repository's releases — or any sign that the certificate's private key has
+leaked — is in scope. Check a copy with:
+
+```sh
+codesign -dvvv --verbose=4 /Applications/CoreEQ.app 2>&1 | grep -E 'Authority|Identifier'
+codesign -d -r - /Applications/CoreEQ.app
+```
+
+The first should name `CoreEQ Release`; the second should end in
+`certificate root = H"de1d551eee962bc3e08c8afa51f126e0e83ca016"`.
+
 Out of scope:
 
-- The fact that release builds are **unsigned and unnotarized**, and the
+- The fact that release builds are **self-signed and unnotarized**, and the
   `xattr -dr com.apple.quarantine` step documented in the README. This is a
   known property of the current distribution, not a vulnerability report;
   building from source avoids it.
