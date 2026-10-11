@@ -22,6 +22,10 @@ final class AudioEngine: ObservableObject {
     enum Status: Equatable {
         case stopped
         case running(deviceName: String)
+        /// Not started, because the permission has not been given. Not a
+        /// failure: it does not count against the retries, and the surfaces
+        /// show the permission prompt rather than an error.
+        case awaitingPermission
         /// `summary` is a few words, for surfaces that cannot afford a sentence
         /// — a menu is as wide as its widest item. `message` says what to
         /// change, and is what every surface with room for it shows.
@@ -33,6 +37,8 @@ final class AudioEngine: ObservableObject {
                 return "Audio engine stopped."
             case .running(let deviceName):
                 return "Processing system audio on “\(deviceName)”."
+            case .awaitingPermission:
+                return "Waiting for permission to process system audio."
             case .failed(_, let message):
                 return "Audio engine error: \(message)"
             }
@@ -41,7 +47,7 @@ final class AudioEngine: ObservableObject {
         /// A few words for surfaces that cannot afford a sentence.
         var summary: String? {
             switch self {
-            case .stopped, .running: return nil
+            case .stopped, .running, .awaitingPermission: return nil
             case .failed(let summary, _): return summary
             }
         }
@@ -164,16 +170,17 @@ final class AudioEngine: ObservableObject {
     /// Whether what stands between the user and their equalizer is the
     /// permission, rather than anything about their device.
     ///
-    /// True when capturing was refused. Declining otherwise leaves the app
-    /// running with an error saying the audio was not allowed — accurate, and
-    /// useless. This is what swaps that for a screen saying where to allow it.
-    var needsAudioPermission: Bool { tapAccess == .denied }
+    /// True when the permission has not been asked for, was refused, or is an
+    /// entry an update left behind. Declining otherwise leaves the app running
+    /// with an error saying the audio was not allowed — accurate, and useless.
+    /// This is what swaps that for a screen saying what to do.
+    var needsAudioPermission: Bool { tapAccess.needsAction }
 
     /// As `canProcess`, from a status rather than from the engine. See
     /// `isProcessing(status:isEnabled:)`.
     nonisolated static func canProcess(status: Status) -> Bool {
         switch status {
-        case .failed: return false
+        case .failed, .awaitingPermission: return false
         case .stopped, .running: return true
         }
     }
@@ -291,6 +298,10 @@ final class AudioEngine: ObservableObject {
     private var captureProven = false
     private var retryCount = 0
 
+    /// What TCC said at the last start, so that the answer to CoreEQ's own
+    /// request can be told apart from no change at all.
+    private var lastTCCAnswer: AudioCapturePermission.Answer?
+
     /// The last answer from `RecordingDetection`, and whether a sweep for the
     /// next one is under way. The sweep costs 14 ms, up to 40, so it runs on its
     /// own queue and the idle evaluation reads the last answer rather than
@@ -322,10 +333,16 @@ final class AudioEngine: ObservableObject {
     func start() {
         pendingRestart?.cancel()
         pendingRestart = nil
-        // The verdict belongs to the attempt that produced it. Carrying it into
-        // the next one would leave the app reporting a refusal it is in the
-        // middle of retrying.
-        if tapAccess == .denied { tapAccess = .unknown }
+        let tcc = AudioCapturePermission.preflight()
+        lastTCCAnswer = tcc
+        if tcc == nil {
+            // Without TCC to ask, the verdict belongs to the attempt that
+            // produced it. Carrying it into the next one would leave the app
+            // reporting a refusal it is in the middle of retrying.
+            if tapAccess == .denied { tapAccess = .unknown }
+        } else {
+            tapAccess = TapAccess.resolve(tcc: tcc, proof: nil)
+        }
         // Before the attempt, not after it. These two outlive any single
         // aggregate device — that is the point of them — and installing them at
         // the end of `startEngine` meant a start that threw never installed
@@ -338,6 +355,13 @@ final class AudioEngine: ObservableObject {
         installPlaybackListenersIfNeeded()
         installWakeObserverIfNeeded()
         installActivationObserverIfNeeded()
+        // No tap until the answer is yes. Creating one is what raises the macOS
+        // prompt, and raising it at launch asks before CoreEQ has said what the
+        // permission is for; after a refusal a tap only delivers silence.
+        if tcc == .notDetermined || tcc == .denied {
+            awaitPermission()
+            return
+        }
         do {
             try startEngine()
             retryCount = 0
@@ -350,7 +374,12 @@ final class AudioEngine: ObservableObject {
                 (error as? CoreAudioError)?.localizedDescription ?? error.localizedDescription
             logger.error("Engine start failed: \(message, privacy: .public)")
             diagnostics = nil
-            if error is TapUnavailable { tapAccess = .denied }
+            // Only a signal when TCC cannot be asked. Measured, a refusal does
+            // not make tap creation fail, so with TCC's answer in hand an error
+            // here is some other fault and must not be called a refusal.
+            if error is TapUnavailable, !AudioCapturePermission.isAvailable {
+                tapAccess = .denied
+            }
             status = .failed(summary: Self.summary(for: error), message: message)
             let isPermanent = (error as? UnusableOutputDevice)?.isPermanent ?? false
             if !isPermanent, retryCount < Self.maxRetries {
@@ -513,10 +542,11 @@ final class AudioEngine: ObservableObject {
             outputUID: device.uid, excluded: excluded,
             muteBehavior: captureProven ? .mutedWhenTapped : .unmuted)
         defer {
-            // Whether a tap was ever created is the only ground truth about the
-            // permission, and it is true whether or not the engine went on to
-            // start.
-            if factory.didCreateATap { tapAccess = .granted }
+            // Without TCC to ask, whether a tap was ever created is the only
+            // evidence about the permission, and it is true whether or not the
+            // engine went on to start. With TCC it is no evidence at all: a tap
+            // is created just the same after a refusal.
+            if factory.didCreateATap, !AudioCapturePermission.isAvailable { tapAccess = .granted }
         }
 
         let taps = try TapAssembly.taps(
@@ -692,18 +722,22 @@ final class AudioEngine: ObservableObject {
                 return
             }
 
-            if verdict == .notCapturing, self.tapAccess != .denied {
+            // Once per attempt: the status leaves `.running` when this fires, and
+            // only a fresh start puts it back.
+            if verdict == .notCapturing, case .running = self.status {
                 // Audio is playing and none of it is reaching the tap. Say so,
                 // and leave the sound alone — the tap is unmuted, so the only
                 // thing wrong is that CoreEQ is not equalizing.
                 self.logger.error("Audio is playing but the tap is silent; leaving it unmuted")
-                self.tapAccess = .denied
+                // A refusal only when TCC cannot be asked. When it can and said
+                // yes, silence is not blamed on the permission: see `TapAccess`.
+                self.tapAccess = TapAccess.resolve(tcc: self.lastTCCAnswer, proof: .notCapturing)
+                let isRefusal = self.tapAccess == .denied
                 self.status = .failed(
                     summary: "Not capturing audio",
-                    message:
-                        "CoreEQ is not receiving any audio, so it is leaving your sound alone "
-                        + "rather than replacing it. This is what a refused permission looks "
-                        + "like.")
+                    message: "CoreEQ is not receiving any audio, so it is leaving your sound "
+                        + "alone rather than replacing it."
+                        + (isRefusal ? " This is what a refused permission looks like." : ""))
             }
             // Kept watching either way. A verdict here is a reading of the
             // moment, not a sentence: allow the permission and the next sound
@@ -1211,6 +1245,13 @@ final class AudioEngine: ObservableObject {
     ///
     /// Guarded on the refusal so this is not a restart on every activation: a
     /// working engine is left alone.
+    ///
+    /// Only for when TCC cannot be asked. When it can, a running CoreEQ learns
+    /// nothing by trying again: measured on macOS 27, the permission is settled
+    /// once per process, in both directions. Switched on in System Settings, the
+    /// running app goes on reading a refusal and macOS offers to quit and reopen
+    /// it; switched off, the running tap goes on capturing until relaunch. A
+    /// once-a-second poll of the preflight was tried and never saw a change.
     private func installActivationObserverIfNeeded() {
         guard activationObserver == nil else { return }
         activationObserver = NotificationCenter.default.addObserver(
@@ -1221,8 +1262,59 @@ final class AudioEngine: ObservableObject {
     }
 
     private func retryAfterRefusal() {
+        // With TCC to ask there is nothing to gain. macOS settles the
+        // permission once per process, so a change made in System Settings is
+        // not visible here until CoreEQ is relaunched; the prompt says so.
+        guard !AudioCapturePermission.isAvailable else { return }
         guard tapAccess == .denied else { return }
         logger.info("Returned to the foreground after a refusal; trying to capture again")
+        start()
+    }
+
+    // MARK: - Permission
+
+    /// Shows the macOS prompt, from a button CoreEQ has explained. Starts the
+    /// engine when the answer is yes.
+    ///
+    /// Without TCC to ask, starting is the only way to ask: creating the tap
+    /// raises the same prompt as a side effect, which is how it worked before.
+    func requestPermission() {
+        guard AudioCapturePermission.isAvailable else {
+            start()
+            return
+        }
+        AudioCapturePermission.request { [weak self] granted in
+            guard let self else { return }
+            self.logger.notice("Permission request answered: \(granted, privacy: .public)")
+            self.checkPermission()
+        }
+    }
+
+    /// Holds the engine down until the permission is given.
+    ///
+    /// Torn down rather than left as it was, so that whatever path an earlier
+    /// attempt built — possibly a muted tap — cannot outlive the answer. A
+    /// permission switched off while running does not arrive here: macOS keeps
+    /// the running process's answer until it is relaunched.
+    private func awaitPermission() {
+        teardownEngine()
+        idlePoll?.cancel()
+        idlePoll = nil
+        diagnostics = nil
+        startedAt = nil
+        isIdle = false
+        isPausedForRecording = false
+        status = .awaitingPermission
+        logger.notice(
+            "Waiting for the audio permission: \(String(describing: self.tapAccess), privacy: .public)"
+        )
+    }
+
+    /// One reading of TCC, acted on only when it changed. `start()` does the
+    /// rest: it builds on a yes and holds back on anything else.
+    private func checkPermission() {
+        guard let tcc = AudioCapturePermission.preflight(), tcc != lastTCCAnswer else { return }
+        logger.notice("Audio permission is now \(String(describing: tcc), privacy: .public)")
         start()
     }
 

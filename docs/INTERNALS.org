@@ -139,8 +139,7 @@ it is not capturing and *leaves the audio alone*.
 It keeps watching after that. A verdict is a reading of the moment rather than a
 sentence, so allowing the permission in System Settings takes effect on the next
 sound, which proves the tap and clears the failure. Returning to the app also
-starts a fresh attempt — audio capture has no permission API to consult, so a
-sound arriving and the app being activated are the only two signals there are.
+starts a fresh attempt when macOS cannot be asked directly (see below).
 
 =EQProcessor.hasReceivedAudio= is the observation, and it is reported in
 Settings ▸ Diagnostics alongside whether the tap is muting yet. The two have to
@@ -150,6 +149,63 @@ be read together: not capturing *while muting* is a silent Mac; not capturing
 Because the tap dies with the process, a crash or quit always returns the
 system to normal, unprocessed audio — there is no persistent driver state to
 clean up.
+
+
+** Asking for the permission
+
+There is no public API that answers “may I capture system audio”, and creating a
+tap does not tell either: it succeeds when refused. So CoreEQ asks TCC directly
+through its private entry points, =TCCAccessPreflight= and =TCCAccessRequest=
+for =kTCCServiceAudioCapture= (=AudioCapturePermission=). They are looked up at
+runtime with =dlopen= / =dlsym=, so a macOS that removes them degrades to the
+inference described above instead of crashing. CoreEQ is not distributed through
+the App Store, which is the one place that would refuse this. The diagnostics
+report marks an answer as “inferred” when TCC could not be asked, so a breakage
+shows up in bug reports.
+
+When TCC can be asked, its answer decides; the capture proof decides only when
+it cannot. =TapAccess.resolve(tcc:proof:)=:
+
+| TCC says        | Capture proof    | CoreEQ believes   |
+|-----------------+------------------+-------------------|
+| granted         | any              | granted           |
+| denied          | any              | denied            |
+| not determined  | any              | not determined    |
+| (cannot ask)    | proven           | granted           |
+| (cannot ask)    | not capturing    | denied            |
+| (cannot ask)    | waiting / none   | unknown           |
+
+A yes is believed even when the tap then proves silent. A “stale entry” state
+was built for that — an update leaving CoreEQ allowed in System Settings while
+the grant covers the previous build — and removed, because it was measured not
+to happen: an ad-hoc signature pins the exact build (cdhash), and on macOS 27 a
+rebuild with a code change makes the preflight say “not determined”, so an
+update arrives as the ordinary *Allow…* card and one prompt. Silence under a yes
+is reported as an engine problem (“not receiving any audio”), not as a refusal:
+a player holding the device open while sending nothing looks the same.
+
+The proof still guards the muting. A preflight yes never sets =captureProven=:
+the tap stays unmuted until it has delivered a sample, exactly as above. Prove,
+then mute, still holds.
+
+The engine builds no tap while the answer is “not determined” or “denied”. It
+sits in =Status.awaitingPermission=, which is not a failure and does not count
+against the retries. Creating a tap is what raises the macOS prompt, and doing
+that at launch asks before CoreEQ has said what the permission is for, so the
+main window opens on the explanation instead and *Allow…* calls
+=TCCAccessRequest=. After a refusal no window is forced open; the menu bar row
+covers it.
+
+*A change in System Settings reaches CoreEQ only on its next launch.* Measured
+on macOS 27, in both directions: switched on, the running app's preflight goes
+on saying “denied” and macOS offers to quit and reopen it; switched off, the
+running tap goes on capturing until relaunch. A first version polled the
+preflight once a second while the user had something to fix, and never saw a
+change, so it was removed. The refusal card says to choose *Quit & Reopen* and
+offers *Relaunch CoreEQ* (=AppRelaunch=), which waits for this process to exit
+before opening the bundle again, so two copies never tap the same audio. The
+answer to CoreEQ's own =TCCAccessRequest= is the exception: it is visible at
+once, so *Allow…* starts the engine without a relaunch.
 
 * DSP
 
@@ -296,8 +352,12 @@ toolchains simply did not mention it.
 - *Sample rate changes* — a listener on the aggregate device updates the
   filter coefficients (and resets filter state).
 - *Sleep/wake* — =NSWorkspace.didWakeNotification= triggers a rebuild.
-- *Startup failure* (typically missing permission) — up to three automatic
-  retries, with the error surfaced in the menu and the main window.
+- *A second copy* — two running copies each mute the other's output, which is a
+  silent Mac. =SingleInstance= runs before anything is built and asks which copy
+  to quit.
+- *Startup failure* — up to three automatic retries, with the error surfaced
+  in the menu and the main window. A missing permission is not a failure: the
+  engine waits for it (see “Asking for the permission”).
 - *Bypass* keeps the tap running and passes audio through untouched, so
   toggling is instant and glitch-free.
 
@@ -335,10 +395,10 @@ Three consequences worth knowing:
   noticeable thing about it. Apple's own Settings windows do resize between panes,
   but between panes of comparable weight.
 
-  The System Audio Recording row reports the *engine*, not a permission API,
-  because there isn't one: nothing answers "may I tap system audio", and the only
-  ground truth is whether the tap was created. That also lets it distinguish a
-  refusal from a stopped engine instead of blaming the user for the latter.
+  The System Audio Recording row reports the engine's =TapAccess=, which asks
+  TCC where it can and falls back to what the tap showed, not whether the
+  engine is running. That lets it distinguish a refusal from a stopped engine
+  instead of blaming the user for the latter.
   =EngineStatusBridge= carries that one fact across the scene boundary — the
   window is built by SwiftUI on its own schedule and cannot be handed an engine
   the app delegate creates lazily.

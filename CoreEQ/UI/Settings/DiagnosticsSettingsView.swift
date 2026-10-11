@@ -74,6 +74,7 @@ struct DiagnosticsSettingsView: View {
             appVersion: Self.appVersion,
             systemVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             permission: bridge.tapAccess,
+            canAskMacOS: AudioCapturePermission.isAvailable,
             devices: AudioDevices.deviceReports(),
             engine: Self.liveEngine(bridge.diagnostics),
             profiles: Self.profiles(live: profiles)

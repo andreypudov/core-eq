@@ -144,6 +144,26 @@ struct DiagnosticsReportTests {
         #expect(text(permission: .denied).contains("System audio permission: REFUSED"))
     }
 
+    /// Never asked is not a refusal, and a report that called it one would send
+    /// whoever reads it looking for a problem that is not there.
+    @Test func aPermissionNotAskedYetIsReported() {
+        let report = text(permission: .notDetermined)
+
+        #expect(report.contains("System audio permission: not asked yet"))
+        #expect(!report.contains("REFUSED"))
+    }
+
+    /// The private entry point can vanish in a macOS update. When it has, the
+    /// report says the answer was inferred, so the breakage shows up in issues.
+    @Test func anInferredAnswerIsMarked() {
+        let report = DiagnosticsReport.text(
+            appVersion: "1.8 (1)", systemVersion: "Version 15.0", permission: .granted,
+            canAskMacOS: false, devices: [], engine: nil)
+
+        #expect(report.contains("System audio permission: granted (inferred"))
+        #expect(!text(permission: .granted).contains("inferred"))
+    }
+
     /// The engine can fail before it ever attempts a tap — refusing an
     /// unsupported output device does exactly that — and the report must not
     /// then imply the permission was refused.

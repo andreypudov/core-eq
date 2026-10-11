@@ -54,7 +54,10 @@ In scope:
   (audio data, preset values, device properties).
 - Misuse of the *System Audio Recording* permission — CoreEQ requests it to
   process what you hear, and captured audio must never be written to disk or
-  leave the machine.
+  leave the machine. CoreEQ reads its own status for that permission through
+  TCC's private `TCCAccessPreflight` and asks for it with `TCCAccessRequest`,
+  for the audio-capture service only, and never changes any other app's
+  permission. Builds made with `COREEQ_TCC_SPI=NO` contain neither.
 
 Out of scope:
 

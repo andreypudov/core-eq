@@ -70,16 +70,36 @@ open build/Debug/CoreEQ.app
 
 - CoreEQ is a menu bar app (=LSUIElement=): no Dock icon, look for the sliders
   icon in the menu bar.
-- First launch triggers the macOS *System Audio Recording* permission dialog.
-  The explanation shown in it is the usage string in =Config/Info.plist=
-  (=NSAudioCaptureUsageDescription=), which is macOS's own mechanism for saying
-  what a permission is for at the moment it is asked for.
+- First launch opens the main window on CoreEQ's own explanation; *Allow…*
+  then raises the macOS *System Audio Recording* dialog (=TCCAccessRequest=).
+  The explanation shown in that dialog is the usage string in
+  =Config/Info.plist= (=NSAudioCaptureUsageDescription=). No tap is created
+  until the answer is yes. See “Asking for the permission” in [[file:INTERNALS.org][INTERNALS.org]].
 - Refusing does *not* fail loudly. =AudioHardwareCreateProcessTap= returns
   success even when the permission was refused: the tap reports a plausible
   format, the aggregate runs, the IO proc fires, and every sample is zero. See
   “Proving the tap” in [[file:INTERNALS.org][INTERNALS.org]] for what the engine does about it.
-- Note that TCC ties the permission to the code signature; rebuilding with a
-  different signature may re-prompt.
+- TCC ties the permission to the code signature, and an ad-hoc signature pins
+  the exact build. After a rebuild with a code change CoreEQ opens on the
+  *Allow…* card again. Switching the permission in System Settings takes effect
+  only after a relaunch. To start from a clean slate:
+  =tccutil reset AudioCapture com.andreypudov.coreeq= (no =sudo= needed, and
+  only CoreEQ's entry is touched).
+
+CoreEQ asks TCC for the permission through private entry points
+(=TCCAccessPreflight=, =TCCAccessRequest=), compiled in under the
+=COREEQ_TCC_SPI= condition, on by default. To build without them — to try the
+fallback a macOS without them would get, or for a distributor that scans for
+private API — turn it off:
+
+#+begin_src sh
+make build XCODE_FLAGS=COREEQ_TCC_SPI=NO
+#+end_src
+
+The app then creates the tap at launch (which raises the macOS prompt), cannot
+tell “not asked” from “refused”, and concludes a refusal from silence while
+audio plays, as 1.9 did. CI builds this way too, and fails if the private names
+appear in that binary.
 
 Engine activity is logged through =os.Logger= (subsystem
 =com.andreypudov.coreeq=). Follow it live with:
@@ -450,6 +470,8 @@ CoreEQ/
     AppActivation.swift     Bringing an accessory app's windows to the front
     OutputDeviceFollower.swift Keeping the EQ on the device the system is using
     SettingsStore.swift     UserDefaults wrapper
+    AppRelaunch.swift       Quit and reopen, for a permission switched on in Settings
+    SingleInstance.swift    Never two copies at once: they silence each other
     LoginItem.swift         Open-at-login, via SMAppService
     SystemSettingsLink.swift The Privacy pane that can undo a refusal
     EngineStatusBridge.swift Engine status, for the Settings scene
@@ -462,7 +484,8 @@ CoreEQ/
       OutputPlan.swift      Which device channel each tap channel is written to
       TapAssembly.swift     How many taps a device needs, and over which streams
       CaptureProof.swift    Whether a tap is capturing, silent, or refused
-      TapAccess.swift       What was observed about the audio-capture permission
+      TapAccess.swift       What CoreEQ believes about the audio-capture permission
+      AudioCapturePermission.swift  TCC preflight/request (private SPI)
       DiagnosticsReport.swift The report a user copies out of Settings
     Spectrum/
       SpectrumAnalyzer.swift  Windowed FFT driving the response backdrop

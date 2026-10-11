@@ -174,6 +174,7 @@ enum DiagnosticsReport {
         appVersion: String,
         systemVersion: String,
         permission: TapAccess,
+        canAskMacOS: Bool = true,
         devices: [Device],
         engine: Engine?,
         profiles: Profiles? = nil
@@ -182,7 +183,12 @@ enum DiagnosticsReport {
         lines.append("CoreEQ \(appVersion) on macOS \(systemVersion)")
         // Above the engine section, because it is the first question any audio
         // problem raises and it is true whether or not the engine is running.
-        lines.append("System audio permission: \(permission.reportDescription)")
+        // Where the answer came from, because the private entry point CoreEQ
+        // asks can disappear in a macOS update. When it does, this line is how
+        // that shows up in a bug report rather than as a vague regression.
+        lines.append(
+            "System audio permission: \(permission.reportDescription)"
+                + (canAskMacOS ? "" : " (inferred: macOS could not be asked)"))
         lines.append("")
 
         lines.append("Engine")

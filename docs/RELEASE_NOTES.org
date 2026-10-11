@@ -13,6 +13,41 @@ Mac with every layer of the app reporting that it worked. A fix is easy to
 summarise; how something managed to look healthy while producing no sound is the
 part worth having written down.
 
+* 1.10
+
+Not tagged yet.
+
+** Asking for the audio permission, and knowing the answer
+
+CoreEQ could not ask macOS whether it was allowed to capture system audio, so
+it inferred the answer: a refusal was concluded only after six seconds of audio
+playing with nothing arriving, and on a quiet Mac never. “Not asked yet” and
+“refused” looked the same, so every screen carried the instructions for both.
+And creating the tap at launch raised the macOS prompt before CoreEQ had said
+what the permission was for.
+
+CoreEQ now asks TCC directly (=TCCAccessPreflight=), builds no tap until the
+answer is yes, and opens its window on an explanation with an *Allow…* button
+the first time. A refusal shows the way to System Settings and says what macOS
+does not: the change only reaches CoreEQ after it is reopened. The card offers
+*Relaunch CoreEQ* for anyone who dismissed macOS's own Quit & Reopen.
+
+Updates no longer break the permission silently. Releases are ad-hoc signed, so
+macOS treats each one as a new app; it now arrives as the *Allow…* card and one
+prompt, instead of a switch in System Settings that is on and does nothing.
+
+If the private TCC entry point is ever missing, CoreEQ falls back to the old
+inference, and the diagnostics report says the answer was inferred.
+
+** Two copies no longer silence the Mac
+
+Found while testing the above. macOS's Quit & Reopen reopens CoreEQ by bundle
+identifier, and it reopened the installed copy while a development build was
+being started by hand. Each copy's tap leaves out only its own process, so each
+muted the other's equalized output and nothing reached the speakers. A copy that
+finds another already running now asks which one to quit before it builds
+anything.
+
 * 1.9.2
 
 Released <2026-10-02 Fri>.

@@ -100,22 +100,24 @@ struct GeneralSettingsView: View {
                                 ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
 
                     // Only when there is genuinely something to do. "Not
-                    // determined" is not a problem, and offering to fix it is
-                    // the same mistake as calling it refused: it sends someone
-                    // to correct something that is not wrong.
+                    // determined this session" is not a problem, and offering to
+                    // fix it is the same mistake as calling it refused: it sends
+                    // someone to correct something that is not wrong.
                     //
                     // Prominent because arriving here from the menu bar means
                     // having been sent to do something, and the something has to
-                    // be obvious at a glance.
-                    if permission.needsAction {
-                        Button("Open System Settings…") {
-                            SystemSettingsLink.openAudioCapturePrivacy()
-                        }
-                        .buttonStyle(.borderedProminent)
+                    // be obvious at a glance. The same button as the main
+                    // window's, from the same `PermissionPrompt`.
+                    if let action = prompt?.secondary {
+                        Button(action.title) { engine.perform(action) }
+                    }
+                    if let action = prompt?.primary {
+                        Button(action.title) { engine.perform(action) }
+                            .buttonStyle(.borderedProminent)
                     }
                 }
             } footer: {
-                Text(permission.explanation)
+                Text(permissionExplanation)
                     .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
             }
@@ -134,23 +136,30 @@ struct GeneralSettingsView: View {
 
     /// What CoreEQ can honestly say about the permission.
     ///
-    /// There is no API that answers "may I tap system audio". The only ground
-    /// truth is whether a tap was created, so this reports what the engine
-    /// actually observed.
-    ///
-    /// Notably *not* derived from the engine failing. The engine has failures
-    /// that happen before a tap is ever attempted — refusing an unsupported
-    /// output device is one — and reading those as a refusal tells the user
-    /// their permission is missing when it is granted, sending them to System
+    /// Read from the engine's `TapAccess`, which asks macOS where it can and
+    /// otherwise reports only what a tap showed. Notably *not* derived from the
+    /// engine failing: it has failures that happen before a tap is ever
+    /// attempted, and reading those as a refusal sends someone to System
     /// Settings to fix something that is not broken.
     private enum Permission {
         case granted
+        case notAsked
         case refused
         case notRunning
+
+        init(_ access: TapAccess) {
+            switch access {
+            case .granted: self = .granted
+            case .notDetermined: self = .notAsked
+            case .denied: self = .refused
+            case .unknown: self = .notRunning
+            }
+        }
 
         var title: String {
             switch self {
             case .granted: return "Granted"
+            case .notAsked: return "Not asked yet"
             case .refused: return "Not granted"
             case .notRunning: return "Not running"
             }
@@ -159,47 +168,31 @@ struct GeneralSettingsView: View {
         var symbol: String {
             switch self {
             case .granted: return "checkmark.circle"
+            case .notAsked: return "questionmark.circle"
             case .refused: return "exclamationmark.triangle"
             case .notRunning: return "pause.circle"
             }
         }
 
         var isGranted: Bool { self == .granted }
-
-        /// Whether there is anything for the user to do here.
-        ///
-        /// Both "never asked" and "refused" get the same button. macOS cannot
-        /// distinguish them for us, and an app that guesses shows the wrong one
-        /// sometimes; the fallback named in the footer covers the case where the
-        /// button cannot help.
-        var needsAction: Bool {
-            switch self {
-            case .refused: return true
-            case .granted, .notRunning: return false
-            }
-        }
-
-        var explanation: String {
-            switch self {
-            case .granted:
-                return
-                    "CoreEQ processes the sound you hear. Nothing is recorded, stored, or transmitted."
-            case .refused:
-                return
-                    "Without it CoreEQ cannot process system audio.\n\n"
-                    + Theme.audioPermissionInstruction
-            case .notRunning:
-                return
-                    "CoreEQ has not needed the permission yet, so there is nothing to report."
-            }
-        }
     }
 
-    private var permission: Permission {
-        switch engine.tapAccess {
-        case .granted: return .granted
-        case .denied: return .refused
-        case .unknown: return .notRunning
+    private var permission: Permission { Permission(engine.tapAccess) }
+
+    /// The button and the words for a state that needs the user, shared with
+    /// the main window so the two never disagree.
+    private var prompt: PermissionPrompt? {
+        PermissionPrompt(access: engine.tapAccess, canAskMacOS: AudioCapturePermission.isAvailable)
+    }
+
+    private var permissionExplanation: String {
+        if let prompt { return prompt.explanation }
+        switch permission {
+        case .granted:
+            return
+                "CoreEQ processes the sound you hear. Nothing is recorded, stored, or transmitted."
+        default:
+            return "CoreEQ has not needed the permission yet, so there is nothing to report."
         }
     }
 

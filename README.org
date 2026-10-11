@@ -34,7 +34,7 @@ Every feature is described in the [[file:docs/USER_GUIDE.org][user guide]].
 * Requirements
 
 - macOS *14.2* or later
-- Permission to record system audio, requested on first launch
+- Permission to process system audio. CoreEQ explains what it is for, then asks
 
 * Installation
 
