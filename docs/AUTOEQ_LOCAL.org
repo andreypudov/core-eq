@@ -1,0 +1,161 @@
+#+TITLE: Local AutoEq corrections
+
+The catalog uses AutoEq's published ParametricEQ.txt correction by default.
+Choose a compatible alternative target to compute a correction locally. The
+by-hand import can also bring in a correction created on autoeq.app.
+
+* Coverage and provenance
+
+The catalog and published corrections come from the AutoEq GitHub repository
+at the catalog's 40-character commit revision. AutoEq's README identifies
+measurements from independent providers. The browser credits AutoEq and Jaakko
+Pasanen and names the selected measurement source. The catalog downloads target
+curves and selected response CSVs to compute and cache corrections locally.
+The copyright-notice question raised in
+[[https://github.com/jaakkopasanen/AutoEq/issues/790][upstream issue 790]]
+was discussed there and concluded not to be an issue. Crinacle paths remain
+excluded when parsing the catalog and at download boundaries. The application
+bundles no measurement data. AutoEq's MIT license is included in
+Resources/AutoEq-LICENSE.txt.
+
+An alternative target must match the measurement's source, rig and form
+metadata. A missing rig in target metadata means any rig for that source and
+form. Incompatible targets are omitted. Published corrections remain available
+if optional target metadata cannot be downloaded. Downloaded published
+corrections are cached locally by upstream revision and result path.
+
+* Algorithm and limits
+
+This is a native approximate response fitter, not a bit-identical port of AutoEq's
+SciPy optimization. Measurement and target are interpolated on a logarithmic
+frequency grid. The target's bassBoost shelf is included before alignment.
+As in AutoEq's published batch processing, the correction is centered by its
+mean over 100 Hz–10 kHz, rather than by a single 1 kHz value. This prevents
+local notches or peaks near 1 kHz from shifting the entire correction.
+
+Correction error is resampled at a 1.01 frequency ratio and smoothed with
+quadratic Savitzky-Golay filters: a 1/12-octave window and a two-octave treble
+window, sigmoid-blended between 6 and 8 kHz. This smoothing attenuates, but does
+not eliminate, narrow mid-band nulls. Full-window polynomial evaluation at the
+edges matches SciPy's interp boundary mode. Broad treble corrections are retained
+after smoothing instead of being tapered to zero. Desired positive correction is
+capped at +6 dB; cuts can combine across multiple filters.
+
+The fitter uses two shelves and eight peaking filters with CoreEQ's RBJ biquads
+at 44.1 kHz. Shelf frequencies are fixed at 105 Hz and 10 kHz with Q 0.7, approximating
+AutoEq's published eight-peaks-with-shelves layout. Peaks can move between
+20 Hz and 10 kHz, with Q 0.1–10. Individual gains are bounded by CoreEQ's
+-12 through +12 dB range. Coordinate descent provides an initial fit, then
+bounded, damped least-squares refinement adjusts all filters together. The
+refinement uses numerical response derivatives and a pivoted linear solve;
+only proposals that lower squared response error are accepted. It has bounded
+iterations and checks cancellation throughout. It runs on the existing detached
+worker, with no Python runtime in the app.
+
+AutoEq's slope limiting and SciPy optimizer are not reproduced. Sharp nulls,
+very irregular measurements and treble corrections can still differ. The
+solver keeps its existing individual ±12 dB fitting bounds. Published corrections
+can use CoreEQ's wider ±20 dB free-filter range without clamping. Graphic bands
+remain at ±12 dB; an imported filter matching a ladder frequency but exceeding
+that range stays a free filter. Editing, persistence and export retain its gain.
+Catalog profiles are imported through the same disclosure as any other import: a
+representable correction is not refused, and any value CoreEQ would change is
+listed before it commits — the filter, its original and new value, and the limit
+responsible — together with the measured response impact (RMS and maximum dB
+across 20 Hz–20 kHz). The correction is imported keep-exact by default, and a
+bell above the ±12 dB graphic range may instead be clipped back onto its slider.
+Only a profile that cannot be read as a correction at all — an error page, or one
+carrying no gain-bearing filter — is refused.
+Cache version 3 invalidates earlier computed profiles; published profiles and input downloads remain reusable.
+
+Preamp is computed from the peak of the combined, serialized filter response,
+using 4,097 log-spaced samples from 1 Hz to just below Nyquist at 44.1, 48,
+88.2, 96, 176.4 and 192 kHz. It adds 0.2 dB of headroom and rounds attenuation
+up to the next 0.1 dB. There is no summed-positive-gain constraint on fitting.
+If the final peak exceeds 11.8 dB, filter gains are scaled down after fitting
+until the required preamp fits CoreEQ's -12 dB limit. This can alter an extreme
+fit; it avoids an importer clamp silently removing required headroom. The peak
+is a dense-grid estimate, not an analytic bound for every possible sample rate.
+The browser identifies alternative-target results as computed by CoreEQ and
+published corrections as authored by AutoEq.
+
+Input caches use the upstream revision and path. Computed cache keys include
+revision, exact response bytes, encoded target, result path and solver version.
+The application uses no shared backend or Python runtime.
+
+* Numerical validation
+
+Solver tests use generated response curves and include no provider measurements
+or captured backend requests. They check fit error, invariance to independent
+measurement/target level offsets, protection against 1 kHz alignment bias,
+retained broad treble correction, the quadratic smoothing kernel and edge
+behavior, treble ripple suppression, combined response peaks, imported preamp
+headroom, cancellation and malformed input. Tests do not send network requests.
+
+The development-only benchmark compiles the production Swift solver, biquads
+and profile importer; Python's standard library only orchestrates downloads and
+reports. It downloads INDEX.md, each selected response CSV and ParametricEQ.txt
+from an explicit upstream commit, caching outside the repository by default.
+The CSV's target column includes the published default target and bass boost,
+so it can benchmark that target without captured backend data. Its parametric_eq
+column supplies the original upstream response. Published ParametricEQ.txt is also imported. The report compares its imported
+response with the original text using the same raw filter parser and RBJ engine,
+separating actual import distortion from upstream CSV-to-text serialization
+rounding. Neither defines a different solver reference. Crinacle sources
+are excluded. No downloaded data is committed or bundled with the application.
+
+Run from the repository root (requires Xcode and Python 3):
+
+#+begin_src sh
+python3 Tools/autoeq_compare.py --revision <40-character AutoEq commit SHA> --spread --limit 20 --output /tmp/autoeq-report.csv
+python3 Tools/autoeq_compare.py --revision <40-character AutoEq commit SHA> --model 'Sennheiser HD 600' --limit 0
+python3 Tools/autoeq_compare.py --revision <40-character AutoEq commit SHA> --limit 0 --output /tmp/autoeq-catalog.csv
+python3 Tools/autoeq_compare.py --cases Tools/AutoEQRegressionCases.json --output /tmp/autoeq-regressions.csv
+#+end_src
+
+=--limit 0= processes the entire supported catalog; =--model= and =--source=
+restrict it. =--spread= samples evenly across matching catalog entries rather
+than taking the first entries. A full catalog run downloads thousands of files and may take hours.
+Failures are included in the report and produce a nonzero exit status.
+Reports contain response RMS at 20 Hz–6 kHz and 20 Hz–20 kHz, maximum absolute
+response difference, 1 kHz-centered RMS, local and imported published preamps,
+combined peak, summed positive gain, headroom, solve time, source path, revision
+and solver version. They also report error against the upstream equalization
+curve, error against the imported published preset, and distortion introduced
+by importing that preset. Response errors exclude preamp. The local result
+passes through CoreEQ's importer, so it measures the correction CoreEQ will play.
+
+=--max-import-distortion <dB>= independently fails a run if a supported published
+text correction or its preamp changes on import. A value of =0.000001= tests
+preservation to numerical precision. A correction that exceeds CoreEQ's ranges is
+imported adjusted and appears here as import distortion.
+
+=--max-rms <dB>= fails a run when any case exceeds the specified 20 Hz–6 kHz
+RMS tolerance. It also checks -12–0 dB preamp, at least 0.19 dB sampled headroom,
+and individual filter gains within ±12 dB. =--cases= uses the pinned regression
+manifest instead of catalog sampling. The manifest contains only source paths,
+revision and tolerances, with no provider measurements or backend captures.
+Its ordinary headphone cases use 1.0 dB RMS limits; harder cases use 1.5 or
+1.75 dB, explicitly per case. Failures remain in the CSV and return nonzero.
+These are regression thresholds, not an accuracy guarantee across the catalog.
+
+A development run at AutoEq revision
+=7ae0f56d53074872b028649617a22bbb4232feb7= with solver version 3 sampled
+100 evenly spaced catalog variants. All downloads and solves succeeded:
+20 Hz–6 kHz RMS median 0.36 dB, 95th percentile 0.79 dB, maximum 1.48 dB.
+Median native solve time was 0.060 seconds; maximum 0.093 seconds on the
+development machine with an optimized Swift build. On the earlier 20-case
+sample, median error against the original upstream response fell from 1.50 dB
+(version 2) to 0.31 dB (version 3). The earlier reported 5.94 dB result for
+écoute Audio TH1 included distortion from importing its -20 dB published
+filter into CoreEQ's ±12 dB range. Its original-upstream response error was
+1.77 dB with version 2 and is 0.51 dB with version 3.
+
+A full catalog run and alternative-target upstream-reference validation remain
+open. Default-target comparisons do not prove equivalence for alternative targets.
+
+The import-preservation follow-up checked 100 evenly spaced published presets
+at the same pinned revision with =--max-import-distortion 0.000001=. All passed
+with zero RMS distortion against the original ParametricEQ.txt response and
+zero preamp change. CSV-to-text rounding is reported separately. This checks
+those 100 profiles, not every supported catalog entry.

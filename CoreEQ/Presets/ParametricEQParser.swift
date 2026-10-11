@@ -61,10 +61,14 @@ enum ParametricEQParser {
         /// Kept for the caller to report; they are informational, never fatal.
         var unparsedLines: [String] = []
 
-        /// Values outside CoreEQ's ranges — gain and preamp ±12 dB, frequency
+        /// Values outside CoreEQ's ranges — free gain ±20 dB, band gain and preamp ±12 dB, frequency
         /// 20 Hz–20 kHz, Q 0.1–10 — that were clamped to fit. Counted over the
         /// filters that were kept, so it never double-counts a dropped one.
         var adjustedValueCount: Int = 0
+
+        /// The chains this preset could become — exact or clipped — and the
+        /// disclosure of what each choice changes.
+        var candidates: ImportCandidates
     }
 
     /// Decodes a preset file's bytes.
@@ -88,8 +92,14 @@ enum ParametricEQParser {
     }
 
     /// Parses text content in EqualizerAPO or `.coreeq` JSON format.
-    static func parse(text: String, defaultName: String = "Imported Preset") throws -> ParsedPreset
-    {
+    ///
+    /// `sampleRate` is the rate the impact of any adjustment is measured at, so
+    /// the disclosure reflects the device the preset would play through.
+    static func parse(
+        text: String,
+        defaultName: String = "Imported Preset",
+        sampleRate: Double = 44_100
+    ) throws -> ParsedPreset {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ParseError.emptyContent }
 
@@ -103,17 +113,29 @@ enum ParametricEQParser {
             } catch {
                 throw ParseError.damagedCoreEQFile
             }
-            let (freeFilters, droppedFilterCount) = trimFreeFilters(
-                profile.filters.filter { !$0.isBand })
-            let bands = profile.filters.filter { $0.isBand }
+            // Rebuild every stored band as a rung bell — a band's frequency and
+            // Q are the ladder's, whatever the file says — so the same placement
+            // logic covers native and text presets alike.
+            let raw = profile.filters.map { filter -> EQFilter in
+                if let slot = filter.band, BuiltInProfiles.frequencies.indices.contains(slot) {
+                    return EQFilter.band(slot: slot, gain: filter.gain)
+                }
+                return filter.unbound()
+            }
+            let name = profile.name.isEmpty ? defaultName : profile.name
+            let assembly = assemble(
+                raw: raw, placements: placements(in: raw), rawPreamp: profile.preamp,
+                name: name, autoGain: profile.autoGain, sampleRate: sampleRate)
             return ParsedPreset(
-                name: profile.name.isEmpty ? defaultName : profile.name,
+                name: name,
                 preamp: profile.preamp.clamped(to: BuiltInProfiles.preampRange),
                 autoGain: profile.autoGain,
-                filters: FilterChain.normalized(bands + freeFilters),
-                droppedFilterCount: droppedFilterCount,
-                adjustedValueCount: outOfRangeCount(bands + freeFilters, preamp: profile.preamp)
-            )
+                filters: assembly.exact.filters,
+                droppedFilterCount: assembly.dropped.count,
+                adjustedValueCount: assembly.adjustedValueCount,
+                candidates: ImportCandidates(
+                    exact: assembly.exact, clipped: assembly.clipped,
+                    disclosure: assembly.disclosure))
         }
 
         var preamp: Double = 0
@@ -159,14 +181,9 @@ enum ParametricEQParser {
             throw ParseError.noValidFiltersFound
         }
 
-        let (bands, loose) = ladderBands(in: rawFilters)
-        let (kept, droppedFilterCount) = trimFreeFilters(loose)
-        // Colours in order again, now that the bands have left gaps.
-        let freeFilters = kept.enumerated().map { index, filter in
-            var recoloured = filter
-            recoloured.colorIndex = index % EQFilter.colorCount
-            return recoloured
-        }
+        let assembly = assemble(
+            raw: rawFilters, placements: placements(in: rawFilters), rawPreamp: preamp,
+            name: defaultName, autoGain: !sawPreampLine, sampleRate: sampleRate)
 
         return ParsedPreset(
             name: defaultName,
@@ -177,86 +194,283 @@ enum ParametricEQParser {
             // the trim is computed, as it is for every built-in.
             autoGain: !sawPreampLine,
             // Normalising is also what clamps every value into range.
-            filters: FilterChain.normalized(bands + freeFilters),
-            droppedFilterCount: droppedFilterCount,
+            filters: assembly.exact.filters,
+            droppedFilterCount: assembly.dropped.count,
             unparsedLines: unparsedLines,
-            adjustedValueCount: outOfRangeCount(bands + freeFilters, preamp: preamp)
+            adjustedValueCount: assembly.adjustedValueCount,
+            candidates: ImportCandidates(
+                exact: assembly.exact, clipped: assembly.clipped,
+                disclosure: assembly.disclosure)
         )
     }
 
-    /// Separates the filters that are ladder bands from the ones that are not.
+    /// Where a filter belongs: on a rung, held beyond a rung's range, or free.
+    private enum Placement: Equatable {
+        case band(slot: Int)
+        case beyondBand(slot: Int)
+        case free
+    }
+
+    /// Classifies every filter as a ladder band, a beyond-band bell, or a free
+    /// filter.
     ///
     /// EqualizerAPO text has no notion of a ladder, so CoreEQ writes each band
     /// as a peaking filter at the rung's frequency with the ladder's Q — and
-    /// read back, those used to arrive as free filters. A preset with six
-    /// edited bands and twelve filters exported eighteen lines, lost two of
-    /// them to the sixteen-filter cap on the way back in, and came back with
-    /// its sliders flat.
-    ///
-    /// So a filter that is exactly a rung — a bell, enabled, on a ladder
-    /// frequency, at `BuiltInProfiles.defaultQ` — goes back into that slot.
-    /// The first one per slot does; a second on the same rung stays a filter.
-    /// A disabled one stays a filter too, because a band cannot be switched
-    /// off. This never changes the sound, only where it is shown: a ladder
-    /// band *is* that bell. A file from elsewhere that happens to match loses
-    /// nothing, and gains a filter slot.
-    private static func ladderBands(in filters: [EQFilter]) -> (bands: [EQFilter], free: [EQFilter])
-    {
-        var bands: [EQFilter] = []
-        var free: [EQFilter] = []
+    /// read back, those used to arrive as free filters. So a filter that is
+    /// exactly a rung — a bell, enabled, on a ladder frequency, at
+    /// `BuiltInProfiles.defaultQ` — goes back into that slot; the first one per
+    /// rung claims it. A gain within the graphic ±12 dB range is a band; a gain
+    /// within the free-filter ±20 dB range is a beyond-band bell, which the
+    /// user may keep exact or clip back onto the rung. Anything else is free.
+    private static func placements(in filters: [EQFilter]) -> [Placement] {
         var taken = Set<Int>()
+        var placements: [Placement] = []
         for filter in filters {
-            if filter.kind == .bell, filter.isEnabled, filter.q == BuiltInProfiles.defaultQ,
-                let slot = BuiltInProfiles.frequencies.firstIndex(of: filter.frequency),
-                taken.insert(slot).inserted
+            guard filter.kind == .bell, filter.isEnabled,
+                filter.q == BuiltInProfiles.defaultQ,
+                let slot = BuiltInProfiles.frequencies.firstIndex(of: filter.frequency)
+            else {
+                placements.append(.free)
+                continue
+            }
+            if BuiltInProfiles.gainRange.contains(filter.gain), !taken.contains(slot) {
+                taken.insert(slot)
+                placements.append(.band(slot: slot))
+            } else if !BuiltInProfiles.gainRange.contains(filter.gain),
+                BuiltInProfiles.filterGainRange.contains(filter.gain)
             {
-                bands.append(EQFilter.band(slot: slot, gain: filter.gain))
+                // A beyond-band bell does not claim its rung: it may be clipped
+                // back onto it, but a later in-range bell on the same frequency
+                // is the one that belongs on the ladder — as it always was.
+                placements.append(.beyondBand(slot: slot))
             } else {
-                free.append(filter)
+                placements.append(.free)
             }
         }
-        return (bands, free)
+        return placements
     }
 
-    /// How many values `FilterChain.normalized` and the preamp clamp will
-    /// change. A band only carries a gain; its frequency and Q are the ladder's.
-    private static func outOfRangeCount(_ filters: [EQFilter], preamp: Double) -> Int {
-        func outside(_ value: Double, _ range: ClosedRange<Double>) -> Int {
-            range.contains(value) ? 0 : 1
+    /// A filter that will be stored as a free filter, tagged with its position
+    /// in the source list so trimming and disclosure refer to the same filter
+    /// even after it is unbound into a fresh value.
+    private struct FreeCandidate {
+        let rawIndex: Int
+        let filter: EQFilter
+        /// The rung a beyond-band bell could be clipped back onto, or nil.
+        let slot: Int?
+    }
+
+    /// The two chains a set of placements can become, and what an import would
+    /// disclose about the difference.
+    private struct Assembly {
+        let exact: EQProfile
+        let clipped: EQProfile
+        let dropped: [EQFilter]
+        let disclosure: ImportDisclosure
+        let adjustedValueCount: Int
+    }
+
+    /// Builds the exact and clipped chains, and the disclosure of both.
+    ///
+    /// The kept/dropped split is decided from the exact free set in *both*
+    /// modes, so choosing to clip never changes how many filters survive.
+    private static func assemble(
+        raw: [EQFilter],
+        placements: [Placement],
+        rawPreamp: Double,
+        name: String,
+        autoGain: Bool,
+        sampleRate: Double
+    ) -> Assembly {
+        var bands: [EQFilter] = []
+        var free: [FreeCandidate] = []
+        for (rawIndex, entry) in zip(raw, placements).enumerated() {
+            let (filter, placement) = entry
+            switch placement {
+            case .band(let slot):
+                bands.append(EQFilter.band(slot: slot, gain: filter.gain))
+            case .beyondBand(let slot):
+                free.append(
+                    FreeCandidate(rawIndex: rawIndex, filter: filter.unbound(), slot: slot))
+            case .free:
+                // Unbound, so a `.coreeq` band that lands here loses its slot
+                // and normalises against the free-filter range the disclosure
+                // reports — not the ladder's ±12 dB.
+                free.append(FreeCandidate(rawIndex: rawIndex, filter: filter.unbound(), slot: nil))
+            }
         }
-        let filterCount = filters.reduce(0) { count, filter in
-            let gain = outside(filter.gain, BuiltInProfiles.gainRange)
-            guard !filter.isBand else { return count + gain }
-            return count + gain
-                + outside(filter.frequency, BuiltInProfiles.filterFrequencyRange)
-                + outside(filter.q, BuiltInProfiles.filterQRange)
+
+        let (keptFree, droppedFree) = trimFreeFilters(free)
+
+        // Colours in order again, now that the bands have left gaps.
+        let exactFree = keptFree.enumerated().map { index, candidate -> EQFilter in
+            var filter = candidate.filter
+            filter.colorIndex = index % EQFilter.colorCount
+            return filter
         }
-        return filterCount + outside(preamp, BuiltInProfiles.preampRange)
+        let preamp = rawPreamp.clamped(to: BuiltInProfiles.preampRange)
+        let exact = EQProfile(
+            name: name, filters: FilterChain.normalized(bands + exactFree),
+            preamp: preamp, autoGain: autoGain)
+
+        // Clipping returns each beyond-band bell to its rung at ±12 dB, when the
+        // rung is free. Bells on occupied rungs remain free, clipped to ±12 dB.
+        var takenSlots = Set<Int>()
+        for placement in placements {
+            if case .band(let slot) = placement { takenSlots.insert(slot) }
+        }
+        var clippedBands = bands
+        var clippedFree: [EQFilter] = []
+        for candidate in keptFree {
+            if let slot = candidate.slot, takenSlots.insert(slot).inserted {
+                clippedBands.append(
+                    EQFilter.band(
+                        slot: slot,
+                        gain: candidate.filter.gain.clamped(to: BuiltInProfiles.gainRange)))
+            } else {
+                var filter = candidate.filter
+                if candidate.slot != nil {
+                    filter.gain = filter.gain.clamped(to: BuiltInProfiles.gainRange)
+                }
+                clippedFree.append(filter)
+            }
+        }
+        let recolouredClippedFree = clippedFree.enumerated().map { index, filter -> EQFilter in
+            var filter = filter
+            filter.colorIndex = index % EQFilter.colorCount
+            return filter
+        }
+        let clipped = EQProfile(
+            name: name, filters: FilterChain.normalized(clippedBands + recolouredClippedFree),
+            preamp: preamp, autoGain: autoGain)
+
+        let adjustments = disclose(
+            raw: raw, placements: placements,
+            droppedRawIndices: Set(droppedFree.map(\.rawIndex)), rawPreamp: rawPreamp)
+        // The as-written chain, with its own trim, is what the exact result is
+        // measured against. It is not retained.
+        let intended = EQProfile(name: "", filters: raw, preamp: rawPreamp, autoGain: false)
+        let mandatoryImpact = impact(from: intended, to: exact, sampleRate: sampleRate)
+        let clipImpact = impact(from: exact, to: clipped, sampleRate: sampleRate)
+        let adjustedValueCount = adjustments.filter {
+            $0.kind != .keptBeyondBandRange && $0.kind != .droppedFilter
+        }.count
+        return Assembly(
+            exact: exact, clipped: clipped, dropped: droppedFree.map(\.filter),
+            disclosure: ImportDisclosure(
+                adjustments: adjustments, impact: mandatoryImpact, clipImpact: clipImpact),
+            adjustedValueCount: adjustedValueCount)
+    }
+
+    /// Describes every value `assemble` changes, one adjustment per change.
+    ///
+    /// A dropped filter is disclosed once, as dropped; its own out-of-range
+    /// values never reach the preset, so they are not also reported.
+    private static func disclose(
+        raw: [EQFilter],
+        placements: [Placement],
+        droppedRawIndices: Set<Int>,
+        rawPreamp: Double
+    ) -> [ImportAdjustment] {
+        var adjustments: [ImportAdjustment] = []
+        for (index, entry) in zip(raw, placements).enumerated() {
+            let (filter, placement) = entry
+            let identity = ImportAdjustment.FilterIdentity(
+                index: index, frequency: filter.frequency, q: filter.q, kind: filter.kind)
+            if droppedRawIndices.contains(index) {
+                adjustments.append(
+                    ImportAdjustment(
+                        kind: .droppedFilter, filter: identity, original: nil, adjusted: nil,
+                        limit: "\(BuiltInProfiles.maxFreeFilters) free filters"))
+                continue
+            }
+            switch placement {
+            case .band:
+                // A band carries only its gain, which the placement proved is
+                // already within range.
+                break
+            case .beyondBand:
+                adjustments.append(
+                    ImportAdjustment(
+                        kind: .keptBeyondBandRange, filter: identity, original: filter.gain,
+                        adjusted: filter.gain, limit: "±12 dB graphic bands"))
+            case .free:
+                if abs(filter.gain) > BuiltInProfiles.filterGainRange.upperBound {
+                    adjustments.append(
+                        ImportAdjustment(
+                            kind: .gain, filter: identity, original: filter.gain,
+                            adjusted: filter.gain.clamped(to: BuiltInProfiles.filterGainRange),
+                            limit: "±20 dB"))
+                }
+                if !BuiltInProfiles.filterQRange.contains(filter.q) {
+                    adjustments.append(
+                        ImportAdjustment(
+                            kind: .q, filter: identity, original: filter.q,
+                            adjusted: filter.q.clamped(to: BuiltInProfiles.filterQRange),
+                            limit: "0.1–10"))
+                }
+                if !BuiltInProfiles.filterFrequencyRange.contains(filter.frequency) {
+                    adjustments.append(
+                        ImportAdjustment(
+                            kind: .frequency, filter: identity, original: filter.frequency,
+                            adjusted: filter.frequency.clamped(
+                                to: BuiltInProfiles.filterFrequencyRange),
+                            limit: "20 Hz–20 kHz"))
+                }
+            }
+        }
+        if !BuiltInProfiles.preampRange.contains(rawPreamp) {
+            adjustments.append(
+                ImportAdjustment(
+                    kind: .preamp, filter: nil, original: rawPreamp,
+                    adjusted: rawPreamp.clamped(to: BuiltInProfiles.preampRange),
+                    limit: "−12…+12 dB"))
+        }
+        return adjustments
+    }
+
+    /// Measures `intended` against `committed`, or reports the impact as
+    /// unmeasurable when either chain holds a filter with no response.
+    private static func impact(
+        from intended: EQProfile, to committed: EQProfile, sampleRate: Double
+    ) -> ImportImpact {
+        guard
+            let result = ImportImpactCalculator.difference(
+                from: intended, to: committed, sampleRate: sampleRate)
+        else {
+            return .unmeasurable
+        }
+        return ImportImpact(rmsDB: result.rmsDB, maxDB: result.maxDB)
     }
 
     /// Keeps pass filters first up to the hard cap, then fills the remaining
-    /// budget with the strongest gain-bearing filters while retaining source order.
+    /// budget with the strongest gain-bearing filters while retaining source
+    /// order. Returns the filters that were dropped, in source order, so the
+    /// caller can disclose each one.
     private static func trimFreeFilters(
-        _ filters: [EQFilter]
+        _ candidates: [FreeCandidate]
     ) -> (
-        filters: [EQFilter],
-        dropped: Int
+        kept: [FreeCandidate],
+        dropped: [FreeCandidate]
     ) {
-        guard filters.count > BuiltInProfiles.maxFreeFilters else { return (filters, 0) }
+        guard candidates.count > BuiltInProfiles.maxFreeFilters else { return (candidates, []) }
 
-        let passIndices = filters.indices.filter {
-            filters[$0].kind == .highPass || filters[$0].kind == .lowPass
+        let passIndices = candidates.indices.filter {
+            candidates[$0].filter.kind == .highPass || candidates[$0].filter.kind == .lowPass
         }
         let keptPassIndices = Array(passIndices.prefix(BuiltInProfiles.maxFreeFilters))
         let remaining = BuiltInProfiles.maxFreeFilters - keptPassIndices.count
         let passSet = Set(passIndices)
-        let gainBearingIndices = filters.indices.filter { !passSet.contains($0) }
+        let gainBearingIndices = candidates.indices.filter { !passSet.contains($0) }
         let strongest = gainBearingIndices.sorted {
-            abs(filters[$0].gain) > abs(filters[$1].gain)
+            abs(candidates[$0].filter.gain) > abs(candidates[$1].filter.gain)
         }.prefix(remaining)
         let keptIndices = Set(keptPassIndices).union(strongest)
-        let keptFilters = filters.indices.filter { keptIndices.contains($0) }.map { filters[$0] }
-        return (keptFilters, filters.count - keptIndices.count)
+        let kept = candidates.indices.filter { keptIndices.contains($0) }.map { candidates[$0] }
+        let dropped = candidates.indices.filter { !keptIndices.contains($0) }.map {
+            candidates[$0]
+        }
+        return (kept, dropped)
     }
 
     private static func isFilterDeclaration(_ line: String) -> Bool {

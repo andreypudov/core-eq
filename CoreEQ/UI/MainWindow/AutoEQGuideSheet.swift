@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// A guide sheet explaining how to bring a headphone correction from
@@ -17,7 +18,7 @@ struct AutoEQGuideSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text("Import from AutoEQ")
+                Text("Import from AutoEq by Hand")
                     .font(Theme.Font.heading)
                     .foregroundStyle(.primary)
 
@@ -28,7 +29,7 @@ struct AutoEQGuideSheet: View {
             }
 
             Text(
-                "AutoEQ publishes correction curves for a large catalogue of headphones and earphones. Its web app can write a correction as an EqualizerAPO parametric EQ, which CoreEQ imports."
+                "AutoEq publishes correction curves for a large catalogue of headphones and earphones. Its web app can write a correction as an EqualizerAPO parametric EQ, which CoreEQ imports."
             )
             .font(Theme.Font.body)
             .foregroundStyle(.secondary)

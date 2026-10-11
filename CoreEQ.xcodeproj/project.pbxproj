@@ -24,6 +24,7 @@
 				"Extensions/Color+CoreEQ.swift",
 				"Extensions/NSFont+Bold.swift",
 				UI/MainWindow/AppMark.swift,
+				UI/MainWindow/AutoEQBrowserView.swift,
 				UI/MainWindow/ColorPalettePicker.swift,
 				UI/MainWindow/ColumnGap.swift,
 				UI/MainWindow/DownwardPointer.swift,

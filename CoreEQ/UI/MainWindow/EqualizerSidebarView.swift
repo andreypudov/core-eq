@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Sidebar column of the main window: the app mark, the preset list, and the
-/// `+` menu and the AutoEQ guide in the bar along the bottom.
+/// `+` menu and the AutoEQ catalog button in the bar along the bottom.
 ///
 /// Hosted inside an `NSSplitViewItem(sidebarWithViewController:)`, which
 /// supplies the sidebar material and the full-height layout that runs it up
@@ -11,6 +11,16 @@ import UniformTypeIdentifiers
 /// window controls, so the view itself draws no background of its own.
 struct EqualizerSidebarView: View {
     @ObservedObject var profileManager: ProfileManager
+    @ObservedObject var audioEngine: AudioEngine
+    let autoEQStore: AutoEQStore
+
+    /// Requests that the main window present the AutoEQ catalog sheet.
+    let openAutoEQBrowser: () -> Void
+
+    /// The catalog's request to show the by-hand guide here. The catalog closes
+    /// itself and taps this instead of presenting the guide, because the paste
+    /// it starts ends in a preset this list owns.
+    @ObservedObject private var autoEQRoute = AutoEQBrowserRoute.shared
 
     /// Filters the list. Empty means everything, in sections.
     @State private var search = ""
@@ -28,21 +38,39 @@ struct EqualizerSidebarView: View {
     /// Whether the app mark is under the pointer — its only affordance.
     @State private var isHoveringAppMark = false
 
+    /// Whether the AutoEQ button is under the pointer — the same cue the `+`
+    /// gets from AppKit's borderless pop-up, drawn by hand here.
+    @State private var isHoveringAutoEQ = false
+
     /// Preset the pointer is over, for the row's hover wash.
     @State private var hoveredPreset: String?
 
     /// Preset awaiting delete confirmation.
     @State private var deletionCandidate: String?
 
-    /// Controls visibility of the AutoEQ guide sheet.
-    @State private var showingAutoEQGuide = false
-    /// Set by the guide's Paste button: the clipboard is read once the sheet
-    /// has gone.
+    /// Which sheet the sidebar is showing, if any.
+    ///
+    /// One route rather than a boolean per sheet: the guide, the catalog, and
+    /// the import confirmation share a single presentation slot, so no two can
+    /// ever be presented in the same run loop — the race three separate
+    /// `.sheet` modifiers ran into when one dismissed into another.
+    @State private var sheetRoute: SheetRoute?
+
+    /// Set by the guide's Paste button: the clipboard is read once the guide has
+    /// fully gone, so its preview never races the guide's dismissal.
     @State private var pasteAfterGuide = false
+
+    /// Set by the catalog's "Import by Hand": the guide opens once the catalog
+    /// has gone.
+    @State private var showGuideAfterBrowser = false
 
     /// Error message from a failed file or clipboard import.
     @State private var importErrorMessage: String?
     @State private var exportErrorMessage: String?
+
+    /// A previewed import with nothing to disclose, shown as the quick alert.
+    /// A preview that would change the correction goes through `sheetRoute`
+    /// instead; the alert is only for the import that has nothing to say.
     @State private var pendingImport: ProfileManager.ImportPreview?
 
     var body: some View {
@@ -150,22 +178,41 @@ struct EqualizerSidebarView: View {
         } message: {
             Text(exportErrorMessage ?? "")
         }
-        // The guide's paste waits for the sheet to go, so the preview is the
-        // same dialog every other import shows rather than a second one of
-        // the guide's own.
-        .sheet(
-            isPresented: $showingAutoEQGuide,
-            onDismiss: {
-                guard pasteAfterGuide else { return }
-                pasteAfterGuide = false
-                previewClipboard()
-            }
-        ) {
-            AutoEQGuideSheet {
-                pasteAfterGuide = true
-                showingAutoEQGuide = false
+        // The sidebar's one sheet. The guide's paste and the catalog's "import
+        // by hand" both hand off through `sheetDidDismiss`, so a paste that
+        // needs confirming opens the import sheet only after the guide is gone.
+        .sheet(item: $sheetRoute, onDismiss: sheetDidDismiss) { route in
+            switch route {
+            case .autoEQGuide:
+                AutoEQGuideSheet {
+                    pasteAfterGuide = true
+                    sheetRoute = nil
+                }
+
+            case .autoEQBrowser:
+                AutoEQBrowserView(
+                    store: autoEQStore,
+                    profileManager: profileManager,
+                    audioEngine: audioEngine,
+                    onClose: { sheetRoute = nil },
+                    onImportByHand: {
+                        showGuideAfterBrowser = true
+                        sheetRoute = nil
+                    }
+                )
+
+            case .importConfirmation(let preview):
+                ImportConfirmationSheet(
+                    preview: preview,
+                    onConfirm: { choice in
+                        _ = profileManager.commitImport(preview, choice: choice)
+                        sheetRoute = nil
+                    },
+                    onCancel: { sheetRoute = nil }
+                )
             }
         }
+        .onChange(of: autoEQRoute.request) { _, _ in requestCatalog() }
         // A preset created outside the sidebar arrives as a rename request; seed
         // the field with the generated name so typing replaces it.
         .onChange(of: profileManager.profileAwaitingRename) { _, name in
@@ -182,10 +229,11 @@ struct EqualizerSidebarView: View {
     }
 
     /// True while a dialog or sheet is up, so ⌘V cannot open a second one behind
-    /// it.
+    /// it. The catalog is a sheet, so clipboard commands stay with it until
+    /// the user returns to the main window.
     private var isPresentingModal: Bool {
-        pendingImport != nil || deletionCandidate != nil || importErrorMessage != nil
-            || exportErrorMessage != nil || showingAutoEQGuide
+        pendingImport != nil || sheetRoute != nil || deletionCandidate != nil
+            || importErrorMessage != nil || exportErrorMessage != nil
     }
 
     /// App mark and name — an identity block that is also the way into About.
@@ -557,7 +605,8 @@ struct EqualizerSidebarView: View {
 
     private func previewFile(at url: URL) {
         do {
-            pendingImport = try profileManager.previewImport(fileAt: url)
+            present(
+                try profileManager.previewImport(fileAt: url, sampleRate: audioEngine.sampleRate))
         } catch {
             importErrorMessage = error.localizedDescription
         }
@@ -565,10 +614,29 @@ struct EqualizerSidebarView: View {
 
     private func previewText(_ text: String) {
         do {
-            pendingImport = try profileManager.previewImport(text: text)
+            present(
+                try profileManager.previewImport(text: text, sampleRate: audioEngine.sampleRate))
         } catch {
             importErrorMessage = error.localizedDescription
         }
+    }
+
+    /// Sends a preview to the surface that fits it: the quick alert when the
+    /// import changes nothing, the disclosure sheet when it does. Both commit
+    /// only after the user agrees.
+    private func present(_ preview: ProfileManager.ImportPreview) {
+        if preview.requiresConfirmation {
+            sheetRoute = .importConfirmation(preview)
+        } else {
+            pendingImport = preview
+        }
+    }
+
+    /// Opens the catalog for the app's route request, unless a sheet is already
+    /// up — a request while one is presenting waits rather than replacing it.
+    private func requestCatalog() {
+        guard sheetRoute == nil else { return }
+        sheetRoute = .autoEQBrowser
     }
 
     private func previewClipboard() {
@@ -588,7 +656,7 @@ struct EqualizerSidebarView: View {
     /// A borderless pull-down, so it is a real `NSPopUpButton` drawn the way
     /// AppKit draws one in a sidebar: a plain glyph, no bezel, no chevron.
     /// Deleting stays on the row's context menu, where the confirmation names
-    /// the preset it removes. The AutoEQ guide sits at the other end.
+    /// the preset it removes. The AutoEQ catalog button sits at the other end.
     private var bottomBar: some View {
         HStack(spacing: 0) {
             Menu {
@@ -618,18 +686,65 @@ struct EqualizerSidebarView: View {
 
             Spacer(minLength: 0)
 
-            // Borderless like the `+`, so both read as the bar's chrome: the
-            // system draws the pair alike, and neither outshouts the list.
+            // The same kind of borderless control as the `+`, so both read as
+            // the bar's chrome and neither outshouts the list. A button rather
+            // than a menu: AutoEQ now has one way in — the catalog sheet —
+            // and the guide to autoeq.app's optimizer lives inside it.
             Button {
-                showingAutoEQGuide = true
+                openAutoEQBrowser()
             } label: {
-                Label("AutoEQ", systemImage: "waveform.badge.magnifyingglass")
+                Label("AutoEq", systemImage: "waveform.badge.magnifyingglass")
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
-            .help("Presets for your headphones from AutoEQ")
+            .buttonStyle(.plain)
+            // A borderless control says it is one by lighting up under the
+            // pointer; AppKit does that for the `+`, so it is drawn here.
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isHoveringAutoEQ ? Color.primary.opacity(0.07) : Color.clear)
+            )
+            .onHover { isHoveringAutoEQ = $0 }
+            .animation(.easeOut(duration: 0.12), value: isHoveringAutoEQ)
+            .fixedSize()
+            .accessibilityLabel("Browse AutoEq Catalog")
+            .help("Browse AutoEq headphone corrections")
         }
         .padding(.horizontal, 12)
         .frame(height: 28)
+    }
+
+    // MARK: - Sheets
+
+    /// The one sheet the sidebar can have up, named so a single `.sheet(item:)`
+    /// presents whichever is current.
+    private enum SheetRoute: Identifiable {
+        case autoEQGuide
+        case autoEQBrowser
+        case importConfirmation(ProfileManager.ImportPreview)
+
+        var id: String {
+            switch self {
+            case .autoEQGuide: return "autoEQGuide"
+            case .autoEQBrowser: return "autoEQBrowser"
+            case .importConfirmation(let preview): return "importConfirmation-\(preview.id)"
+            }
+        }
+    }
+
+    /// Runs when a sheet is fully gone. The two hand-offs — the guide's paste,
+    /// and the catalog's "import by hand" — are deferred to the next turn of the
+    /// main run loop here, so the next sheet is never asked for while the last
+    /// one is still dismissing.
+    private func sheetDidDismiss() {
+        if pasteAfterGuide {
+            pasteAfterGuide = false
+            Task { @MainActor in previewClipboard() }
+            return
+        }
+        if showGuideAfterBrowser {
+            showGuideAfterBrowser = false
+            Task { @MainActor in sheetRoute = .autoEQGuide }
+        }
     }
 
     // MARK: - Bindings

@@ -51,9 +51,22 @@ final class ProfileManager: ObservableObject {
     /// Which of the two working states is being heard. See `ABSlot`.
     @Published private(set) var abSlot: ABSlot = .a
 
+    /// Whether the chain on screen is a temporary preview rather than the
+    /// active preset. See `beginAudition` — a preview is heard and drawn like
+    /// any other chain, but it is never written to the user's presets or to the
+    /// device's persisted slot.
+    @Published private(set) var isAuditioning = false
+
     /// The state not currently being heard, kept so switching back is exact.
     /// Nil until the user has reached for the other slot once.
     private var alternate: WorkingState?
+
+    /// The working state an audition is previewing over, kept so `endAudition`
+    /// can put it back exactly. Nil whenever `isAuditioning` is false.
+    private var auditionSnapshot: WorkingState?
+
+    /// The profile being auditioned, used as the name an unnamed save takes.
+    private var auditionedProfileName: String?
 
     /// The preset the sidebar should be showing as an editable text field, or
     /// nil when no rename is in progress.
@@ -125,6 +138,10 @@ final class ProfileManager: ObservableObject {
         // edit, and the sound should not change because the hardware blinked.
         guard let uid else { return }
         guard uid != outputDeviceUID else { return }
+        // An audition belongs to the device it was started on. Its snapshot
+        // must not follow the state to another device, where restoring it would
+        // overwrite that device's slot with one it never saw.
+        endAudition()
         persistDeviceState()
         outputDeviceUID = uid
         settings.lastOutputDeviceUID = uid
@@ -236,6 +253,10 @@ final class ProfileManager: ObservableObject {
     /// sound, so `Flat` is flat rather than flat plus whatever was left over.
     func setActiveProfile(name: String) {
         guard let profile = profile(named: name) else { return }
+        // Committing to a preset ends any preview of another: the snapshot is
+        // restored first, then replaced, so a preview can never become the
+        // active selection by accident.
+        endAudition()
         activeProfileName = profile.name
         tone = ToneControls()
         currentFilters = profile.filters
@@ -315,6 +336,10 @@ final class ProfileManager: ObservableObject {
     /// sound — bands and free filters together — becomes the preset's saved
     /// state.
     func saveChangesToActiveProfile() {
+        // Saving ends a preview first, and by restoring rather than dropping
+        // it: the audition is discarded, and what the user's own edits to the
+        // active preset were is what actually gets written.
+        endAudition()
         guard library.isEditable(activeProfileName) else { return }
         library.update(
             activeProfileName,
@@ -329,6 +354,76 @@ final class ProfileManager: ObservableObject {
 
     func canEditProfile(named name: String) -> Bool {
         library.isEditable(name)
+    }
+
+    // MARK: - Audition
+
+    /// Previews `profile` on the running engine and on screen without making it
+    /// the active preset or writing anything down.
+    ///
+    /// An audition is for hearing a curve before deciding whether to keep it —
+    /// the AutoEQ catalog's live preview. The chain and trim mode are applied
+    /// exactly as selecting the preset would apply them, and the Quick EQ tone
+    /// is re-centred for the same reason selecting a preset re-centres it: a
+    /// preset is a complete sound. None of that is committed:
+    /// `activeProfileName` does not move, no user preset is created, and
+    /// `persistDeviceState` is suppressed while `isAuditioning` is true.
+    ///
+    /// The first call snapshots the working state; calling again while already
+    /// auditioning simply swaps in the new profile, so the snapshot still
+    /// describes the state before the *first* preview and `endAudition` returns
+    /// there rather than to the previous preview.
+    func beginAudition(_ profile: EQProfile) {
+        if !isAuditioning {
+            auditionSnapshot = WorkingState(
+                profileName: activeProfileName,
+                filters: currentFilters,
+                preamp: currentPreamp,
+                tone: tone.isNeutral ? nil : [tone.bass, tone.mid, tone.treble],
+                autoGain: isAutoGain
+            )
+        }
+        auditionedProfileName = profile.name
+
+        currentFilters = FilterChain.normalized(profile.filters)
+        currentPreamp = profile.preamp
+        // A preset carries whether its trim is computed, exactly as selecting
+        // one does.
+        isAutoGain = profile.autoGain
+        tone = ToneControls()
+        isAuditioning = true
+        chainDidChange()
+    }
+
+    /// Puts the pre-audition working state back on screen and in the slot, and
+    /// clears the preview. A no-op when nothing is being auditioned.
+    func endAudition() {
+        guard isAuditioning, let snapshot = auditionSnapshot else { return }
+        restore(snapshot)
+        // Cleared before `chainDidChange`, so the restored state is filed as
+        // usual rather than being suppressed as a preview.
+        clearAudition()
+        chainDidChange()
+    }
+
+    /// Keeps the auditioned chain as a user preset and makes it active.
+    ///
+    /// The audition is dropped without restoring: the chain it was previewing
+    /// is the thing being kept, so there is nothing to go back to. Returns the
+    /// name the preset was stored under, or nil when nothing is being
+    /// auditioned.
+    @discardableResult
+    func saveAuditionAsPreset(named name: String? = nil) -> String? {
+        guard isAuditioning else { return nil }
+        let filters = currentFilters
+        let preamp = currentPreamp
+        // Read before `clearAudition`, which drops the auditioned name.
+        let storedName = name ?? auditionedProfileName ?? "New Preset"
+
+        // Not `endAudition`: restoring first would overwrite the chain being
+        // saved. `addProfile` re-activates and persists from here.
+        clearAudition()
+        return addProfile(named: storedName, filters: filters, preamp: preamp)
     }
 
     // MARK: - Import and Export
@@ -347,7 +442,21 @@ final class ProfileManager: ObservableObject {
         /// Whether `name` is only the placeholder — text from the clipboard or a
         /// drop has none of its own — so committing should ask for a real one.
         let needsName: Bool
-        fileprivate let parsed: ParametricEQParser.ParsedPreset
+        /// The chains this import could become and what each choice changes.
+        let candidates: ImportCandidates
+
+        /// What an import would change, and how far it moves the response.
+        var disclosure: ImportDisclosure { candidates.disclosure }
+        /// Whether the user may choose to clip beyond-band values.
+        var offersClipChoice: Bool { candidates.offersClipChoice }
+        /// Whether the import needs confirmation before it commits.
+        var requiresConfirmation: Bool { candidates.disclosure.requiresConfirmation }
+        /// How many values could be clipped into the graphic range.
+        var clippableCount: Int { candidates.disclosure.clippableCount }
+        /// The beyond-band adjustments the clip choice acts on.
+        var clipCandidates: [ImportAdjustment] {
+            candidates.disclosure.adjustments.filter { $0.kind == .keptBeyondBandRange }
+        }
     }
 
     enum ExportError: LocalizedError, Equatable {
@@ -370,9 +479,12 @@ final class ProfileManager: ObservableObject {
     /// `suggestedName` is the file's name when there is a file. Without one the
     /// preset is named by its own content when it has a name (`.coreeq`), or
     /// by the placeholder, which `commitImport` then puts up for rename.
-    func previewImport(text: String, suggestedName: String? = nil) throws -> ImportPreview {
+    func previewImport(
+        text: String, suggestedName: String? = nil, sampleRate: Double = 44_100
+    ) throws -> ImportPreview {
         let parsed = try ParametricEQParser.parse(
-            text: text, defaultName: suggestedName ?? Self.untitledImportName)
+            text: text, defaultName: suggestedName ?? Self.untitledImportName,
+            sampleRate: sampleRate)
         return ImportPreview(
             name: parsed.name,
             // `parsed.filters` always begins with the eleven ladder bands, so the
@@ -384,14 +496,35 @@ final class ProfileManager: ObservableObject {
             unparsedLines: parsed.unparsedLines,
             adjustedValueCount: parsed.adjustedValueCount,
             needsName: suggestedName == nil && parsed.name == Self.untitledImportName,
-            parsed: parsed)
+            candidates: parsed.candidates)
+    }
+
+    /// Wraps an already-parsed pair of chains — the AutoEQ catalog's path, where
+    /// the profile is built rather than read from text — in a preview.
+    func previewImport(
+        candidates: ImportCandidates, name: String, needsName: Bool = false
+    ) -> ImportPreview {
+        let exact = candidates.exact
+        return ImportPreview(
+            name: name,
+            filterCount: exact.filters.filter { !$0.isBand }.count,
+            preamp: exact.preamp,
+            droppedFilterCount: candidates.disclosure.adjustments.filter {
+                $0.kind == .droppedFilter
+            }.count,
+            unparsedLines: [],
+            adjustedValueCount: candidates.disclosure.adjustments.filter {
+                $0.kind != .keptBeyondBandRange && $0.kind != .droppedFilter
+            }.count,
+            needsName: needsName,
+            candidates: candidates)
     }
 
     /// Reads a preset file and parses it, named after the file.
     ///
     /// The size is checked before anything is read: this runs on the main
     /// actor, and a file someone chose by mistake can be any size at all.
-    func previewImport(fileAt url: URL) throws -> ImportPreview {
+    func previewImport(fileAt url: URL, sampleRate: Double = 44_100) throws -> ImportPreview {
         let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
         guard size <= ParametricEQParser.maxFileSize else {
             throw ParametricEQParser.ParseError.fileTooLarge
@@ -400,19 +533,28 @@ final class ProfileManager: ObservableObject {
         return try previewImport(
             text: text,
             suggestedName: Self.cleanPresetName(
-                from: url.deletingPathExtension().lastPathComponent))
+                from: url.deletingPathExtension().lastPathComponent),
+            sampleRate: sampleRate)
     }
 
     /// Adds a previewed preset to the library and makes it active. A preset
     /// with only the placeholder name lands in inline rename, the way a new
     /// preset does.
+    ///
+    /// Keep-exact is the default, so an import the user did not ask to clip
+    /// preserves every representable value. `choice` only bites when the
+    /// preview actually offers a clip: a chain with no beyond-band bells has
+    /// the same filters either way.
     @discardableResult
-    func commitImport(_ preview: ImportPreview) -> String {
+    func commitImport(_ preview: ImportPreview, choice: ImportChoice = .keepExact) -> String {
+        let source =
+            (choice == .clipBeyondBandRange && preview.offersClipChoice)
+            ? preview.candidates.clipped : preview.candidates.exact
         // `add` makes the name unique.
         let stored = library.add(
             EQProfile(
-                name: preview.name, filters: preview.parsed.filters,
-                preamp: preview.parsed.preamp, autoGain: preview.parsed.autoGain))
+                name: preview.name, filters: source.filters,
+                preamp: source.preamp, autoGain: source.autoGain))
         persistUserProfiles()
         setActiveProfile(name: stored)
         if preview.needsName { profileAwaitingRename = stored }
@@ -507,7 +649,7 @@ final class ProfileManager: ObservableObject {
         let filter = EQFilter(
             kind: kind,
             frequency: frequency.clamped(to: BuiltInProfiles.filterFrequencyRange),
-            gain: gain.clamped(to: BuiltInProfiles.gainRange),
+            gain: gain.clamped(to: BuiltInProfiles.filterGainRange),
             q: q.clamped(to: BuiltInProfiles.filterQRange),
             colorIndex: nextColorIndex
         )
@@ -533,7 +675,7 @@ final class ProfileManager: ObservableObject {
     }
 
     func setFilterGain(_ gain: Double, id: UUID) {
-        updateFreeFilter(id: id) { $0.gain = gain.clamped(to: BuiltInProfiles.gainRange) }
+        updateFreeFilter(id: id) { $0.gain = gain.clamped(to: BuiltInProfiles.filterGainRange) }
     }
 
     func setFilterQ(_ q: Double, id: UUID) {
@@ -606,6 +748,9 @@ final class ProfileManager: ObservableObject {
     /// the control is to change nothing until you ask it to.
     func setSlot(_ slot: ABSlot) {
         guard slot != abSlot else { return }
+        // A/B compares real working states, so a preview is restored away
+        // before the swap: its snapshot must not be wired into a slot.
+        endAudition()
 
         var state = currentDeviceState()
         state.swapSlots()
@@ -647,6 +792,9 @@ final class ProfileManager: ObservableObject {
     /// Restores the active profile's chain and re-centres the Quick EQ tone
     /// controls.
     func resetToActiveProfile() {
+        // Reverting is a decision about the real working state, so a preview is
+        // restored away before the reset is applied on top of it.
+        endAudition()
         tone = ToneControls()
         let profile = activeProfile
         currentFilters = profile.filters
@@ -699,6 +847,9 @@ final class ProfileManager: ObservableObject {
     /// Read on the drag path, so the preset is looked up once rather than once
     /// per term.
     var isModified: Bool {
+        // A preview is measured against the preset it came from, not reported
+        // as an unsaved edit of the preset still selected underneath it.
+        if isAuditioning { return false }
         let profile = activeProfile
         if currentFilters != profile.filters { return true }
         if isAutoGain != profile.autoGain { return true }
@@ -725,11 +876,36 @@ final class ProfileManager: ObservableObject {
         chainDidChange()
     }
 
+    /// Puts an audition snapshot's working state back, field for field. The
+    /// snapshot always carries its chain, so `filters` only falls back to the
+    /// active preset if one were ever stored empty.
+    private func restore(_ snapshot: WorkingState) {
+        activeProfileName = snapshot.profileName
+        currentFilters = snapshot.filters ?? activeProfile.filters
+        currentPreamp = snapshot.preamp
+        isAutoGain = snapshot.autoGain
+        let toneValues = snapshot.tone ?? [0, 0, 0]
+        tone = ToneControls(bass: toneValues[0], mid: toneValues[1], treble: toneValues[2])
+    }
+
+    /// Drops the audition's snapshot and flag without touching the working
+    /// state. Used by `saveAuditionAsPreset`, which keeps the previewed chain
+    /// rather than restoring it.
+    private func clearAudition() {
+        auditionSnapshot = nil
+        auditionedProfileName = nil
+        isAuditioning = false
+    }
+
     /// Files everything on screen under the current output device.
     ///
     /// One writer for the whole working state, so a new control can't be added
     /// that changes the sound without being remembered alongside the rest.
     private func persistDeviceState() {
+        // A preview is not state: while an audition is running, nothing on
+        // screen belongs in the device's slot. `endAudition` and
+        // `saveAuditionAsPreset` clear the flag before filing the real result.
+        guard !isAuditioning else { return }
         var states = settings.deviceStates
         states[Self.slot(for: outputDeviceUID)] = currentDeviceState()
         settings.deviceStates = states

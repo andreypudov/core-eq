@@ -1,0 +1,53 @@
+{
+  "revision": "7ae0f56d53074872b028649617a22bbb4232feb7",
+  "cases": [
+    {
+      "path": "oratory1990/over-ear/Sennheiser HD 600",
+      "max_rms_db": 1.0
+    },
+    {
+      "path": "oratory1990/over-ear/Sennheiser HD 650",
+      "max_rms_db": 1.0
+    },
+    {
+      "path": "oratory1990/in-ear/Etymotic ER2XR",
+      "max_rms_db": 1.0
+    },
+    {
+      "path": "Super Review/in-ear/Etymotic ER2XR",
+      "max_rms_db": 1.0
+    },
+    {
+      "path": "Rtings/HMS II.3 in-ear/1MORE Piston Fit",
+      "max_rms_db": 1.0
+    },
+    {
+      "path": "Innerfidelity/in-ear/1MORE Crystal Piston",
+      "max_rms_db": 1.0
+    },
+    {
+      "path": "oratory1990/in-ear/Bose QuietComfort 20 (passive)",
+      "max_rms_db": 1.5
+    },
+    {
+      "path": "Headphone.com Legacy/over-ear/AKG Q460 Quincy Jones",
+      "max_rms_db": 1.75
+    },
+    {
+      "path": "Kuulokenurkka/over-ear/écoute Audio TH1 (passive)",
+      "max_rms_db": 1.0
+    },
+    {
+      "path": "HypetheSonics/over-ear/Dan Clark Audio Aeon Flow Closed",
+      "max_rms_db": 1.0
+    },
+    {
+      "path": "Rtings/HMS II.3 earbud/Shokz OpenRun Pro",
+      "max_rms_db": 1.0
+    },
+    {
+      "path": "Innerfidelity/over-ear/Sennheiser Momentum Wireless (wireless)",
+      "max_rms_db": 1.75
+    }
+  ]
+}

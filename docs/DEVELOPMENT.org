@@ -113,6 +113,54 @@ log stream --predicate 'subsystem == "com.andreypudov.coreeq"' --level info
 
 * Testing
 
+** AutoEq data and cache
+
+The catalog uses upstream =results/INDEX.md= and =ParametricEQ.txt= files from
+[[https://github.com/jaakkopasanen/AutoEq][AutoEq]]. CoreEQ resolves =master= through GitHub's commits API, then fetches
+the index and individual profiles from =raw.githubusercontent.com= at that
+40-character commit SHA. The native catalog has no dependency on autoeq.app;
+the by-hand guide opens that website for its own correction workflow; the
+catalog can also compute compatible targets locally.
+
+Constructing the service or launching CoreEQ performs no AutoEq requests.
+Opening the browser starts loading. Its progress bar reports received bytes
+and a percentage when the server supplies a content length; revision checks,
+unknown-length transfers, and parsing show indeterminate progress.
+
+=Caches/<bundle id>/AutoEQ/catalog-v1.json= is one atomically written snapshot:
+schema version, Git revision, last successful check time, and the index.
+Snapshots are trusted for seven days. A forced refresh checks immediately;
+an unchanged SHA renews the timestamp without downloading the index again.
+A failed refresh returns the old snapshot marked stale. Cancellation propagates
+instead of returning stale data. Old =entries.json=/=targets.json= backend
+caches and unsupported snapshot versions are ignored.
+
+Profiles download on selection and are validated as readable corrections through
+=ParametricEQParser= before being cached: an error page is rejected, and a file
+carrying no gain-bearing filter is too. Range is not a download-time rejection;
+any value CoreEQ must change is disclosed when the profile is loaded. Their paths
+are =profiles/<revision>/<SHA256 of result path>.txt= under the same cache
+directory. A new revision never reads an old profile. Missing profiles need
+network access even when browsing works offline.
+Cache-write failures do not prevent a successful preview. macOS may evict this
+cache; there is no bundled fallback. Old revision caches are retained until
+the cache is cleared or evicted. Imported user presets live separately.
+
+Crinacle source directories are excluded case-insensitively during parsing
+and rejected again before any profile request. This is a source restriction,
+not a ban on headphone names containing Crinacle. Relative paths preserve
+upstream spelling and are encoded component by component; traversal paths
+are rejected. The app downloads published corrections rather than redistributing
+raw measurements. The repository's MIT license does not override restrictions
+on third-party measurement data. Any future data source needs its own review.
+AutoEq attribution appears in the browser and About; its notice is included in
+=CoreEQ/Resources/AutoEq-LICENSE.txt=.
+
+URLProtocol-backed tests cover revision changes, refresh failure, cancellation,
+cache schema validation, source exclusion, on-demand offline profile reuse,
+download progress, selection races, and audition/import conversion. No test
+contacts a live endpoint.
+
 =make test= runs =CoreEQTests=, a host-less logic bundle covering the filter
 maths, the built-in profiles, =ProfileManager=, =SettingsStore=, the analyzer and
 its ring buffer, the scroll handling, and the layout arithmetic that has no

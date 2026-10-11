@@ -41,6 +41,25 @@ struct ProfileManagerImportExportTests {
         #expect(storedManager.profile(named: "IEM Target") != nil)
     }
 
+    @Test func deepImportedFilterSurvivesEditingPersistenceAndExport() throws {
+        let (manager, defaults) = makeManager()
+        let name = try importText(
+            "Preamp: -6 dB\nFilter 1: ON PK Fc 125 Hz Gain -20 dB Q 1.41",
+            name: "Deep correction", into: manager)
+        let id = try #require(manager.freeFilters.first).id
+        manager.setFilterFrequency(130, id: id)
+        #expect(manager.freeFilters.first?.gain == -20)
+        manager.setFilterGain(-19.5, id: id)
+        manager.saveChangesToActiveProfile()
+        let reloaded = ProfileManager(settings: SettingsStore(defaults: defaults))
+        let profile = try #require(reloaded.profile(named: name))
+        #expect(profile.freeFilters.first?.gain == -19.5)
+        let exported = try reloaded.exportProfileToEqualizerAPO(named: name)
+        let reparsed = try ParametricEQParser.parse(text: exported)
+        #expect(reparsed.filters.filter { !$0.isBand }.first?.gain == -19.5)
+        #expect(reparsed.adjustedValueCount == 0)
+    }
+
     @Test func exportProfileToEqualizerAPOFormat() throws {
         let (manager, _) = makeManager()
 
@@ -212,7 +231,7 @@ struct ProfileManagerImportExportTests {
     @Test func previewReportsAdjustedValues() throws {
         let (manager, _) = makeManager()
         let preview = try manager.previewImport(
-            text: "Preamp: -20.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 18.0 dB Q 1.00",
+            text: "Preamp: -20.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 25.0 dB Q 1.00",
             suggestedName: "Loud")
         #expect(preview.adjustedValueCount == 2)
     }
@@ -286,5 +305,102 @@ struct ProfileManagerImportExportTests {
         let second = manager.commitImport(try manager.previewImport(text: text))
         #expect(second == "\(ProfileManager.untitledImportName) 2")
         #expect(manager.profileAwaitingRename == second)
+    }
+
+    // MARK: - Import Disclosure
+
+    private static let deepRungText = "Preamp: -6 dB\nFilter 1: ON PK Fc 125 Hz Gain -20 dB Q 1.41"
+
+    @Test func previewDoesNotMutateTheLibraryWhileDisclosingAdjustments() throws {
+        let (manager, _) = makeManager()
+        let preview = try manager.previewImport(
+            text: "Preamp: -20 dB\nFilter 1: ON PK Fc 1000 Hz Gain -25 dB Q 1.00",
+            suggestedName: "Loud")
+
+        #expect(preview.requiresConfirmation)
+        #expect(preview.adjustedValueCount == 2)
+        // Everything the disclosure promises is in the preview; nothing is
+        // written until the user commits (cancelling is the absence of that).
+        #expect(preview.disclosure.requiresConfirmation)
+        #expect(manager.library.user.isEmpty)
+        #expect(manager.profile(named: "Loud") == nil)
+        #expect(manager.activeProfileName != "Loud")
+    }
+
+    @Test func previewDisclosesWithoutMutatingAndCommitIsTheOnlyWrite() throws {
+        let (manager, _) = makeManager()
+        let preview = try manager.previewImport(
+            text: "Preamp: -20 dB\nFilter 1: ON PK Fc 1000 Hz Gain -25 dB Q 1.00",
+            suggestedName: "Adjusting")
+
+        #expect(preview.requiresConfirmation)
+        // Building the disclosure writes nothing...
+        #expect(manager.library.user.isEmpty)
+        #expect(manager.profile(named: "Adjusting") == nil)
+        // ...and only commitImport changes the library.
+        let stored = manager.commitImport(preview)
+        #expect(stored == "Adjusting")
+        #expect(manager.profile(named: "Adjusting") != nil)
+    }
+
+    @Test func defaultCommitKeepsBeyondBandValuesExact() throws {
+        let (manager, _) = makeManager()
+        let preview = try manager.previewImport(
+            text: Self.deepRungText, suggestedName: "Deep")
+
+        #expect(preview.offersClipChoice)
+        #expect(preview.disclosure.clippableCount == 1)
+
+        let name = manager.commitImport(preview)
+        let profile = try #require(manager.profile(named: name))
+        #expect(profile.preamp == -6)
+        #expect(profile.freeFilters.first?.gain == -20)
+    }
+
+    @Test func clipChoiceCommitsTheClippedCandidates() throws {
+        let (manager, _) = makeManager()
+        let preview = try manager.previewImport(
+            text: Self.deepRungText, suggestedName: "Deep")
+
+        let name = manager.commitImport(preview, choice: .clipBeyondBandRange)
+        let profile = try #require(manager.profile(named: name))
+        let slot = try #require(BuiltInProfiles.frequencies.firstIndex(of: 125))
+        #expect(profile.filters[slot].isBand)
+        #expect(profile.filters[slot].gain == -12)
+        #expect(profile.freeFilters.isEmpty)
+    }
+
+    @Test func clipChoiceIsIgnoredWhenThereIsNoClipToOffer() throws {
+        let (manager, _) = makeManager()
+        let preview = try manager.previewImport(
+            text: "Preamp: -3 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2 dB Q 1.00",
+            suggestedName: "Plain")
+        #expect(!preview.offersClipChoice)
+
+        let name = manager.commitImport(preview, choice: .clipBeyondBandRange)
+        let profile = try #require(manager.profile(named: name))
+        #expect(profile.freeFilters.first?.gain == 2)
+    }
+
+    @Test func candidatePreviewWrapsTheCatalogPath() throws {
+        let (manager, _) = makeManager()
+        let exact = EQProfile(
+            name: "AutoEQ",
+            filters: FilterChain.normalized([
+                EQFilter(kind: .bell, frequency: 1000, gain: 3, q: 1.0)
+            ]),
+            preamp: -1)
+        let candidates = ImportCandidates(exact: exact, clipped: exact, disclosure: .none)
+        let preview = manager.previewImport(candidates: candidates, name: "AutoEQ")
+
+        #expect(preview.name == "AutoEQ")
+        #expect(!preview.offersClipChoice)
+        #expect(!preview.requiresConfirmation)
+        #expect(preview.filterCount == 1)
+        #expect(preview.preamp == -1)
+
+        let name = manager.commitImport(preview)
+        #expect(name == "AutoEQ")
+        #expect(manager.profile(named: "AutoEQ") != nil)
     }
 }

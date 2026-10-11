@@ -71,6 +71,8 @@ enum BuiltInProfiles {
     static let preampRange: ClosedRange<Double> = -12...12
 
     /// Limits for the free filters' own parameters.
+    /// AutoEq parametric gain bounds, independent of the graphic ladder.
+    static let filterGainRange: ClosedRange<Double> = -20...20
     static let filterFrequencyRange: ClosedRange<Double> = 20...20_000
     static let filterQRange: ClosedRange<Double> = 0.1...10
 

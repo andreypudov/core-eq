@@ -68,3 +68,30 @@ struct ResponseAxis: Equatable {
 /// and nothing else. Folded into the main canvas it took the grid's fourteen
 /// text labels, the curve's biquad sweep, and the whole enclosing window's body
 /// down with it, sixty times a second.
+
+/// Shared vertical mapping for response curves and draggable gain handles.
+struct ResponseGainAxis {
+    let limit: Double
+    let height: CGFloat
+    let inset: CGFloat
+
+    static func limit(for filters: [EQFilter]) -> Double {
+        filters.contains {
+            !$0.isBand && $0.kind.usesGain && abs($0.gain) > BuiltInProfiles.gainRange.upperBound
+        }
+            ? BuiltInProfiles.filterGainRange.upperBound + 2 : 14
+    }
+
+    func y(for gain: Double) -> CGFloat {
+        let half = height / 2
+        let usable = max(half - inset, 1)
+        return half - usable * CGFloat(gain.clamped(to: -limit...limit) / limit)
+    }
+
+    func gain(atY y: CGFloat, range: ClosedRange<Double>) -> Double {
+        let half = height / 2
+        let usable = max(half - inset, 1)
+        let raw = limit * Double((half - y) / usable)
+        return (raw.clamped(to: range) * 2).rounded() / 2
+    }
+}

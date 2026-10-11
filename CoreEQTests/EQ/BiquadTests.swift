@@ -17,7 +17,7 @@ struct BiquadTests {
     /// handles line up with the sliders, and why subtracting a band's gain from
     /// the composite yields its neighbours' contribution.
     @Test func magnitudeAtCentreFrequencyEqualsGain() {
-        for gain in [-12.0, -6.0, -0.5, 0.5, 3.0, 6.0, 12.0] {
+        for gain in [-20.0, -12.0, -6.0, -0.5, 0.5, 3.0, 6.0, 12.0, 20.0] {
             for frequency in [32.0, 250.0, 1_000.0, 8_000.0, 16_000.0] {
                 #expect(
                     bell(frequency, gain).magnitudeDB(at: frequency, sampleRate: sampleRate)

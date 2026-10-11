@@ -56,7 +56,7 @@ struct FilterChainTests {
         let filter = try #require(chain.last)
 
         #expect(filter.frequency == BuiltInProfiles.filterFrequencyRange.upperBound)
-        #expect(filter.gain == BuiltInProfiles.gainRange.upperBound)
+        #expect(filter.gain == BuiltInProfiles.filterGainRange.upperBound)
         #expect(filter.q == BuiltInProfiles.filterQRange.upperBound)
     }
 

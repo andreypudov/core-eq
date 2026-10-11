@@ -17,7 +17,7 @@ the [[file:../README.org][README]].
 
 Presets in the sidebar, with a search field and your own presets above the
 built-ins, and a bar beneath them: the =+= creates a preset or imports one, and
-*AutoEQ* explains how to get a correction for your headphones. Then the response
+*AutoEq* opens the catalog or the guide to autoeq.app. Then the response
 graph, the *Graphic* / *Parametric* editors, and the preamp on the right. The
 output device sits in the centre of the header and names the preset playing on
 it underneath, with a dot when that preset has unsaved changes; where the
@@ -31,7 +31,7 @@ The *Graphic* editor is the professional ISO octave ladder — 32, 64, 125, 250,
 500 Hz and 1, 2, 4, 8, 16, 20 kHz — at fixed centre frequencies, each adjustable
 ±12 dB. The *Parametric* editor adds up to sixteen bands of your own anywhere
 between 20 Hz and 20 kHz, each a bell, shelf, or pass filter with its own
-frequency, gain, and Q.
+frequency, gain (±20 dB), and Q.
 
 The two editors are tabs on the editing area's own border, and both edit the
 same chain and the same graph: the sliders are eleven filters that happen to be
@@ -82,26 +82,91 @@ preset, and the on/off state are restored on every launch, per output device.
 
 * Import and export
 
-Presets move in and out as EqualizerAPO text — the format AutoEQ writes its
+Presets move in and out as EqualizerAPO text — the format AutoEq writes its
 headphone corrections in — or as CoreEQ's own =.coreeq= files. Import from the
 =+= at the bottom of the sidebar, paste with =⌘V=, or drop a file onto the
 preset list; every import shows what it found before anything is added. The
-*AutoEQ* button beside the =+= walks through getting a correction from
-autoeq.app.
+*AutoEq* button beside the =+= opens the catalog directly; for a correction from
+autoeq.app by hand, use *Import by Hand…* in the catalog sheet.
+
+An import that changes nothing asks a simple *Import* / *Cancel*. An import that
+would change a value asks with a confirmation sheet instead: it lists each
+change — which filter, the value as written and the value it would become, and
+the CoreEQ limit responsible — and the measured response impact, as RMS and
+maximum dB across 20 Hz–20 kHz. When a value has no physical response to
+measure, the sheet says the impact cannot be measured rather than inventing a
+number. Values CoreEQ can represent are kept exactly by default; a bell above
+the ±12 dB graphic range can instead be clipped back onto its slider, and the
+sheet shows what that would cost. Nothing is written until you confirm.
 
 From EqualizerAPO text, CoreEQ reads =Preamp:= and =PK=, =LSC=, =HSC=, =HP= and
 =LP= filters, with Q or bandwidth in octaves. It reads UTF-8, UTF-16 and
-Windows-1252 files. A preset holds up to sixteen filters, gain and preamp within
-±12 dB, frequency 20 Hz–20 kHz and Q 0.1–10. A longer file keeps its pass
-filters and its strongest bands, and values out of range are brought into it;
-the preview says when either happened. =GraphicEQ:=, =Channel:= and other
-EqualizerAPO commands are skipped and listed in the preview — so filters meant
-for one channel apply to both. A file without a =Preamp:= line gets the
-automatic trim.
+Windows-1252 files. A preset holds up to sixteen free filters with gain within
+±20 dB, frequency 20 Hz–20 kHz and Q 0.1–10. Graphic bands and preamp stay within
+±12 dB. A longer file keeps its pass filters and its strongest bands, and any
+value brought into range is disclosed before it is added. Previously imported
+presets whose gains were clamped must be reimported from the original file to
+recover them. =GraphicEQ:=, =Channel:= and other EqualizerAPO commands are
+skipped and listed in the preview — so filters meant for one channel apply to
+both. A file without a =Preamp:= line gets the automatic trim.
 
 Export is on a preset's right-click menu, as EqualizerAPO text or =.coreeq=.
 Exporting the preset you are listening to writes what you hear, unsaved edits
 included.
+
+* The AutoEq catalog
+
+CoreEQ can fetch a headphone correction from the [[https://github.com/jaakkopasanen/AutoEq][AutoEq project]], without
+downloading a file by hand. The *AutoEq* button beside the =+= opens the catalog
+sheet directly. For corrections AutoEq computes for a target you choose there,
+use *Import by Hand…* in the sheet's action row: it closes the catalog, opens
+the step-by-step guide on the main window, and the correction you paste lands
+in your preset list.
+
+The catalog sheet keeps the equalizer in context while you listen. Type in the
+search field to find a model by name — the catalog holds thousands and matches
+as you type. A model measured more than once says how many measurements it has.
+
+The *Measurement source* menu chooses who measured the headphones and how —
+for example Oratory1990 or Rtings. Different measurements give different
+corrections. Crinacle measurements are excluded from this catalog because
+they are not available for redistribution.
+
+Each measurement uses AutoEq's published, precomputed parametric correction.
+Choose another compatible entry in *Target curve* to compute an alternative
+correction locally. The browser credits Jaakko Pasanen and AutoEq, and names the
+measurement source for the selected profile. *Import by Hand…* remains available
+for corrections created on autoeq.app.
+
+Selecting a model or measurement plays a preview after a short pause,
+without saving anything, so you can hear it against your own music. *Cancel*
+puts the previous sound back. *Import* converts the correction and keeps it as
+one of your own presets, named after the model, where it can be edited and
+exported like any other.
+
+The catalog never refuses a correction CoreEQ can represent. When saving one
+would change it to fit CoreEQ, the browser says so, and *Import* opens the same
+confirmation sheet the manual imports use: each changed value with its response
+impact, and the choice to keep it exact or clip a beyond-slider bell back into
+the graphic range. If another filter occupies that slider, the clipped bell
+remains a free filter at ±12 dB. Impact is measured at the active device rate.
+The preview you hear is the correction kept exact, and a
+correction that needs no change imports without a sheet.
+
+No catalog or profiles are bundled with the app. Opening the AutoEq sheet for
+the first time downloads the catalog and shows a progress bar; Cancel stops
+the download and closes the sheet. Individual corrections download when
+selected and are cached for later offline previews. A correction that has not
+been downloaded still needs a connection; saved presets work independently.
+
+CoreEQ checks for catalog updates when the sheet opens if the cache is at least
+seven days old. The catalog and its profiles use the same Git commit so an
+update cannot mix old and new corrections. If an update fails, CoreEQ keeps
+the saved catalog and offers Retry. With no network and no cached catalog,
+the sheet offers Retry or manual import.
+
+Correction data comes from AutoEq by Jaakko Pasanen, used under the MIT licence;
+each result names the measurement source it came from.
 
 * Automatic gain
 

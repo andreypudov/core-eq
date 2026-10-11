@@ -23,7 +23,7 @@ struct BuiltInProfilesTests {
         for filter in profile.freeFilters {
             #expect(BuiltInProfiles.filterFrequencyRange.contains(filter.frequency))
             #expect(BuiltInProfiles.filterQRange.contains(filter.q))
-            #expect(BuiltInProfiles.gainRange.contains(filter.gain))
+            #expect(BuiltInProfiles.filterGainRange.contains(filter.gain))
         }
     }
 

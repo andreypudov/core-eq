@@ -99,3 +99,31 @@ struct ResponseAxisTests {
         #expect(axis.x(1_000).isFinite)
     }
 }
+
+struct ResponseGainAxisTests {
+    @Test func normalPresetsKeepOriginalGraphScale() {
+        for profile in BuiltInProfiles.all {
+            #expect(
+                ResponseGainAxis.limit(for: profile.filters) == 14, "\(profile.name) graph scale")
+        }
+        let shelf = EQFilter(kind: .lowShelf, frequency: 100, gain: 12, q: 0.7)
+        #expect(ResponseGainAxis.limit(for: [shelf]) == 14)
+        var deep = shelf
+        deep.gain = -12.5
+        #expect(ResponseGainAxis.limit(for: [deep]) == 22)
+    }
+
+    @Test func freeFilterRangeAndGraphRoundTripPreserveDeepGains() {
+        let filter = EQFilter(kind: .bell, frequency: 100, gain: -20, q: 1)
+        let limit = ResponseGainAxis.limit(for: [filter])
+        #expect(limit == 22)
+        let axis = ResponseGainAxis(limit: limit, height: 200, inset: 10)
+        for gain in [-20.0, -15, 0, 16, 20] {
+            #expect(
+                axis.gain(atY: axis.y(for: gain), range: BuiltInProfiles.filterGainRange) == gain)
+        }
+        #expect(axis.gain(atY: axis.y(for: 20), range: BuiltInProfiles.gainRange) == 12)
+        #expect(ResponseGainAxis.limit(for: [EQFilter.band(slot: 0, gain: 12)]) == 14)
+        #expect(KnobScale.filterGain.range == BuiltInProfiles.filterGainRange)
+    }
+}

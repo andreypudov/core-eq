@@ -72,6 +72,24 @@ struct FrequencyResponseView: View {
     /// Apple's EQ preview. Defaults to the full interactive plot.
     var minimal = false
 
+    /// Compact read-only presentation for previews that still need the same
+    /// frequency and gain context as the main graph. The full graph labels
+    /// every band; compact mode keeps five evenly spaced anchors.
+    var compact = false
+
+    /// The ratio used by the catalog preview. It follows the main graph's
+    /// readable shape without letting the small catalog card become a tall
+    /// editor panel.
+    static let compactAspectRatio: CGFloat = 3
+
+    /// Leaves breathing room around the compact graph instead of stretching
+    /// it edge to edge across the configuration card.
+    static let compactWidthFraction: CGFloat = 0.75
+
+    /// A concrete height is needed when the compact graph is placed in a
+    /// VStack: GeometryReader otherwise has no intrinsic height to contribute.
+    static let compactPreviewHeight: CGFloat = 142
+
     /// Draws the plot's own rounded backdrop. Turned off in the main window,
     /// where the enclosing section card already supplies the surface.
     var showsBackground = true
@@ -84,6 +102,7 @@ struct FrequencyResponseView: View {
         case filter(UUID)
     }
 
+    @State private var dragGainLimit: Double?
     @State private var dragged: Handle?
     @State private var hovered: Handle?
 
@@ -97,9 +116,17 @@ struct FrequencyResponseView: View {
         hovered ?? stripHoveredBand.map(Handle.band)
     }
 
-    /// Display range. Slightly wider than the ±12 dB slider range because
-    /// overlapping filters can sum a few dB past a single one's maximum.
-    private static let maxDB = 14.0
+    /// The plot's vertical range, in dB.
+    ///
+    /// Chosen from the resting axis — compact for ordinary presets, widened once
+    /// a filter actually sits beyond the graphic range — and then held constant
+    /// for the whole of a drag, so the scale never changes under the pointer.
+    /// Because it is fixed for the length of a drag, authoring a free filter past
+    /// ±12 dB is a two-step move: drag to the compact ceiling, release so the
+    /// widened axis takes over, then drag again into the full ±20 dB.
+    private var maxDB: Double {
+        dragGainLimit ?? ResponseGainAxis.limit(for: freeFilters)
+    }
     private static let curvePointCount = 160
     /// Grabbing distance, a little wider than the largest node so a click just
     /// off one still lands on it.
@@ -108,7 +135,7 @@ struct FrequencyResponseView: View {
     /// Only the extremes and the reference are marked. The ±6 dB rules were
     /// noise: the curve is read against 0 dB, and the frequency divisions
     /// already carry the grid.
-    private static let labeledDBs: [Double] = [12, 0, -12]
+    private var labeledDBs: [Double] { [maxDB - 2, 0, 2 - maxDB] }
 
     /// Width reserved at the left for the dB labels, so they sit outside the
     /// plot rather than over the curve. The main window insets its band sliders
@@ -197,6 +224,7 @@ struct FrequencyResponseView: View {
                 guard let handle = dragged ?? handle(near: value.startLocation, size) else {
                     return
                 }
+                if dragged == nil { dragGainLimit = maxDB }
                 dragged = handle
                 switch handle {
                 case .band(let slot):
@@ -209,12 +237,15 @@ struct FrequencyResponseView: View {
                     // 0 dB line and only its frequency follows the pointer.
                     let gain =
                         filter.kind.usesGain
-                        ? snappedGain(atY: value.location.y, size) : filter.gain
+                        ? snappedGain(
+                            atY: value.location.y, size, range: BuiltInProfiles.filterGainRange)
+                        : filter.gain
                     onFilterMove?(id, frequency, gain)
                 }
             }
             .onEnded { _ in
                 dragged = nil
+                dragGainLimit = nil
             }
     }
 
@@ -248,7 +279,9 @@ struct FrequencyResponseView: View {
                     guard allowsFilterCreation else { return }
                     onFilterCreate?(
                         frequency(atFraction: fraction(atX: value.location.x, size)),
-                        snappedGain(atY: value.location.y, size)
+                        snappedGain(
+                            atY: value.location.y, size,
+                            range: BuiltInProfiles.filterGainRange)
                     )
                 }
             }
@@ -286,12 +319,11 @@ struct FrequencyResponseView: View {
     /// Gain for a point dragged to vertical position `y`, clamped to the slider
     /// range and snapped to the 0.5 dB step used across the app, so the curve
     /// and the numeric readouts always agree.
-    private func snappedGain(atY y: CGFloat, _ size: CGSize) -> Double {
-        // Inverse of `yPosition`, so a dragged point tracks the pointer exactly.
-        let dB = Self.maxDB * (1.0 - 2.0 * Double(y / plotHeight(size)))
-        let range = BuiltInProfiles.gainRange
-        let clamped = min(max(dB, range.lowerBound), range.upperBound)
-        return (clamped * 2).rounded() / 2
+    private func snappedGain(
+        atY y: CGFloat, _ size: CGSize, range: ClosedRange<Double> = BuiltInProfiles.gainRange
+    ) -> Double {
+        ResponseGainAxis(limit: maxDB, height: plotHeight(size), inset: verticalInset)
+            .gain(atY: y, range: range)
     }
 
     private func fraction(atX x: CGFloat, _ size: CGSize) -> Double {
@@ -338,11 +370,21 @@ struct FrequencyResponseView: View {
         let bottom = plotHeight(size)
         let left = axisGutter
         let axis = axis(size)
+        let compactIndices = [
+            0, anchors.count / 4, anchors.count / 2,
+            anchors.count * 3 / 4, anchors.count - 1,
+        ]
+        let labelFrequencies =
+            compact
+            ? compactIndices.compactMap { index in
+                anchors.indices.contains(index) ? anchors[index] : nil
+            }
+            : anchors
 
         // Dotted verticals on the band centers are the whole grid — the major
         // frequency divisions, and nothing else competing with the curve.
         var verticals = Path()
-        for frequency in anchors {
+        for frequency in compact ? labelFrequencies : anchors {
             let x = axis.x(frequency)
             verticals.move(to: CGPoint(x: x, y: 0))
             verticals.addLine(to: CGPoint(x: x, y: bottom))
@@ -360,7 +402,7 @@ struct FrequencyResponseView: View {
         zeroLine.addLine(to: CGPoint(x: size.width, y: zeroY))
         context.stroke(zeroLine, with: .color(.primary.opacity(0.14)), lineWidth: 1)
 
-        for frequency in anchors {
+        for frequency in labelFrequencies {
             let label = Text(BandFormat.frequency(frequency))
                 .font(Theme.Font.secondary)
                 .foregroundStyle(.secondary)
@@ -370,7 +412,7 @@ struct FrequencyResponseView: View {
         }
         // Lighter than the frequency labels: the dB scale should never pull the
         // eye off the curve.
-        for dB in Self.labeledDBs {
+        for dB in labeledDBs {
             let label = Text(BandFormat.axisGain(dB))
                 .font(Theme.Font.secondary)
                 .foregroundStyle(.tertiary)
@@ -643,9 +685,7 @@ struct FrequencyResponseView: View {
     }
 
     private func yPosition(_ dB: Double, _ size: CGSize) -> CGFloat {
-        let clamped = min(max(dB, -Self.maxDB), Self.maxDB)
-        let half = plotHeight(size) / 2
-        let usable = half - verticalInset
-        return half - usable * CGFloat(clamped / Self.maxDB)
+        ResponseGainAxis(limit: maxDB, height: plotHeight(size), inset: verticalInset)
+            .y(for: dB)
     }
 }

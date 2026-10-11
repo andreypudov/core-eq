@@ -71,6 +71,15 @@ struct ParametricEQParserTests {
         #expect(abs(freeFilters[0].q - 1.4142) < 0.01)
     }
 
+    @Test func preservesDeepFilterAtLadderFrequencyAsFreeFilter() throws {
+        let parsed = try ParametricEQParser.parse(
+            text:
+                "Preamp: -6 dB\nFilter 1: ON PK Fc 125 Hz Gain -20 dB Q 1.41")
+        #expect(parsed.adjustedValueCount == 0)
+        #expect(parsed.filters.filter { !$0.isBand }.first?.gain == -20)
+        #expect(parsed.filters[2].gain == 0)
+    }
+
     @Test func clampsExtremeGainsAndFrequencies() throws {
         let text = """
             Preamp: -25.0 dB
@@ -83,11 +92,11 @@ struct ParametricEQParserTests {
         let freeFilters = result.filters.filter { !$0.isBand }
         #expect(freeFilters.count == 2)
         #expect(freeFilters[0].frequency == 20.0)
-        #expect(freeFilters[0].gain == 12.0)
+        #expect(freeFilters[0].gain == 20.0)
         #expect(freeFilters[0].q == 0.1)
 
         #expect(freeFilters[1].frequency == 20000.0)
-        #expect(freeFilters[1].gain == -12.0)
+        #expect(freeFilters[1].gain == -20.0)
         #expect(freeFilters[1].q == 10.0)
 
         // The preamp, and all three values of each filter.
@@ -107,16 +116,19 @@ struct ParametricEQParserTests {
         #expect(result.adjustedValueCount == 0)
     }
 
-    @Test func coreEQBandCountsOnlyItsGain() throws {
+    @Test func coreEQBandBeyondGraphicRangeIsKeptExact() throws {
         // A ladder band's frequency and Q are the ladder's, whatever the file
-        // says, so only an out-of-range gain is a change the user would see.
+        // says. A gain beyond the graphic ±12 dB range but within the free ±20
+        // dB range is kept exact as a free filter rather than clamped, and
+        // disclosed as clippable — not as an adjusted value.
         let band = EQFilter(kind: .bell, frequency: 5, gain: 20, q: 50, band: 0)
         let json = try ParametricEQSerializer.serializeToCoreEQJSON(
             EQProfile(name: "Band", filters: [band]))
 
         let result = try ParametricEQParser.parse(text: json)
-        #expect(result.adjustedValueCount == 1)
-        #expect(result.filters.first?.gain == BuiltInProfiles.gainRange.upperBound)
+        #expect(result.adjustedValueCount == 0)
+        #expect(result.filters.filter { !$0.isBand }.first?.gain == 20)
+        #expect(result.candidates.disclosure.clippableCount == 1)
     }
 
     @Test func valuesInRangeAreNotReportedAsAdjusted() throws {
@@ -134,7 +146,7 @@ struct ParametricEQParserTests {
 
         let result = try ParametricEQParser.parse(text: json)
         #expect(result.preamp == BuiltInProfiles.preampRange.lowerBound)
-        #expect(result.filters.filter { !$0.isBand }.first?.gain == 12)
+        #expect(result.filters.filter { !$0.isBand }.first?.gain == 20)
         #expect(result.adjustedValueCount == 2)
     }
 

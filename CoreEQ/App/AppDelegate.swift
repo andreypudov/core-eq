@@ -18,6 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var audioEngine = AudioEngine(settings: settings)
     private var menuBarController: MenuBarController?
     private var mainWindow: NSWindow?
+
+    /// The AutoEQ catalog, owned by the app rather than by the sidebar that used
+    /// to present it: the download is one-time and the selection has to survive
+    /// the browser window closing and reopening. The window below reads it.
+    private let autoEQStore = AutoEQStore()
+
     /// Held because the toolbar's tracking separator needs the split view, and
     /// the toolbar is asked for its items while the window is still being built.
     private var splitViewController: NSSplitViewController?
@@ -102,7 +108,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let sidebar = NSSplitViewItem(
                 sidebarWithViewController: NSHostingController(
-                    rootView: EqualizerSidebarView(profileManager: profileManager)
+                    rootView: EqualizerSidebarView(
+                        profileManager: profileManager,
+                        audioEngine: audioEngine,
+                        autoEQStore: autoEQStore,
+                        openAutoEQBrowser: { AutoEQBrowserRoute.shared.requestBrowser() }
+                    )
                 )
             )
             // The setting that actually runs the sidebar material to the top of
@@ -238,13 +249,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// for this — the window has to say.
 extension AppDelegate: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        guard window === mainWindow else { return }
         audioEngine.spectrum.stop()
     }
 
     /// Also covers minimising and being fully covered by another window, where
     /// the plot is just as invisible as it is when closed.
     func windowDidChangeOcclusionState(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
+        guard let window = notification.object as? NSWindow, window === mainWindow else { return }
         if window.occlusionState.contains(.visible) {
             audioEngine.spectrum.start()
         } else {

@@ -35,7 +35,7 @@ enum FilterChain {
             } else if free.count < BuiltInProfiles.maxFreeFilters {
                 var loose = filter.unbound()
                 loose.frequency = loose.frequency.clamped(to: BuiltInProfiles.filterFrequencyRange)
-                loose.gain = loose.gain.clamped(to: BuiltInProfiles.gainRange)
+                loose.gain = loose.gain.clamped(to: BuiltInProfiles.filterGainRange)
                 loose.q = loose.q.clamped(to: BuiltInProfiles.filterQRange)
                 free.append(loose)
             }

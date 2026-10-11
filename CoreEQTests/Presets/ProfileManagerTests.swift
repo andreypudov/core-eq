@@ -542,7 +542,7 @@ import Testing
         #expect(manager.freeFilters[0].q == BuiltInProfiles.filterQRange.lowerBound)
 
         manager.setFilterGain(99, id: id)
-        #expect(manager.freeFilters[0].gain == BuiltInProfiles.gainRange.upperBound)
+        #expect(manager.freeFilters[0].gain == BuiltInProfiles.filterGainRange.upperBound)
     }
 
     /// Colours are what tell one band's row and one node on the graph from
