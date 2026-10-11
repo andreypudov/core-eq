@@ -57,7 +57,19 @@ struct FilterChainTests {
 
         #expect(filter.frequency == BuiltInProfiles.filterFrequencyRange.upperBound)
         #expect(filter.gain == BuiltInProfiles.filterGainRange.upperBound)
-        #expect(filter.q == BuiltInProfiles.filterQRange.upperBound)
+        #expect(filter.q == BuiltInProfiles.bellQRange.upperBound)
+    }
+
+    /// A bell may be narrower than anything else, and only a bell: past Q 10 a
+    /// shelf overshoots and a pass filter grows a resonance, so a stored shelf
+    /// at a bell's Q comes back at the shared ceiling.
+    @Test func qIsClampedToTheRangeOfItsKind() throws {
+        let bell = EQFilter(kind: .bell, frequency: 1_000, gain: -6, q: 14)
+        let shelf = EQFilter(kind: .highShelf, frequency: 8_000, gain: 3, q: 14)
+        let pass = EQFilter(kind: .highPass, frequency: 30, gain: 0, q: 14)
+        let free = FilterChain.normalized([bell, shelf, pass]).filter { !$0.isBand }
+
+        #expect(free.map(\.q) == [14, 10, 10])
     }
 
     /// A hand-edited defaults entry must not be able to push the chain past the

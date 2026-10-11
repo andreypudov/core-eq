@@ -47,7 +47,13 @@ struct KnobScale {
     /// frame of a drag.
     static let filterFrequency = KnobScale.frequency(BuiltInProfiles.filterFrequencyRange)
     static let filterQ = KnobScale.q(BuiltInProfiles.filterQRange)
+    static let bellQ = KnobScale.q(BuiltInProfiles.bellQRange)
     static let filterGain = KnobScale.linear(BuiltInProfiles.filterGainRange, step: 0.5)
+
+    /// The Q scale for a filter of `kind`: a bell's reaches further.
+    static func filterQ(for kind: EQFilter.Kind) -> KnobScale {
+        kind == .bell ? bellQ : filterQ
+    }
 
     /// Gain: half a decibel throughout, the same step the band sliders snap to,
     /// so scrolling a knob and scrolling a slider can't land between each

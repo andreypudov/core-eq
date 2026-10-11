@@ -31,7 +31,9 @@ The *Graphic* editor is the professional ISO octave ladder — 32, 64, 125, 250,
 500 Hz and 1, 2, 4, 8, 16, 20 kHz — at fixed centre frequencies, each adjustable
 ±12 dB. The *Parametric* editor adds up to sixteen bands of your own anywhere
 between 20 Hz and 20 kHz, each a bell, shelf, or pass filter with its own
-frequency, gain (±20 dB), and Q.
+frequency, gain (±20 dB), and Q. A bell's Q goes up to 16, about a twelfth of
+an octave, narrow enough for a single resonance or a whine; shelves and pass
+filters stop at 10, because past that they overshoot rather than narrow.
 
 The two editors are tabs on the editing area's own border, and both edit the
 same chain and the same graph: the sliders are eleven filters that happen to be
@@ -102,7 +104,8 @@ sheet shows what that would cost. Nothing is written until you confirm.
 From EqualizerAPO text, CoreEQ reads =Preamp:= and =PK=, =LSC=, =HSC=, =HP= and
 =LP= filters, with Q or bandwidth in octaves. It reads UTF-8, UTF-16 and
 Windows-1252 files. A preset holds up to sixteen free filters with gain within
-±20 dB, frequency 20 Hz–20 kHz and Q 0.1–10. Graphic bands and preamp stay within
+±20 dB, frequency 20 Hz–20 kHz, and Q 0.1–16 for a bell or 0.1–10 for shelves and
+pass filters. Graphic bands and preamp stay within
 ±12 dB. A longer file keeps its pass filters and its strongest bands, and any
 value brought into range is disclosed before it is added. Previously imported
 presets whose gains were clamped must be reimported from the original file to

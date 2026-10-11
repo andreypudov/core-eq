@@ -74,7 +74,24 @@ enum BuiltInProfiles {
     /// AutoEq parametric gain bounds, independent of the graphic ladder.
     static let filterGainRange: ClosedRange<Double> = -20...20
     static let filterFrequencyRange: ClosedRange<Double> = 20...20_000
+    /// Q for shelves and pass filters. Raising it does not make them narrower:
+    /// a shelf overshoots and a pass filter grows a resonant bump at its corner,
+    /// which is why AutoEq itself holds shelves at 0.7.
     static let filterQRange: ClosedRange<Double> = 0.1...10
+    /// Q for a bell, which is the one shape a higher Q only narrows.
+    ///
+    /// Sixteen, about a twelfth of an octave, reaches the sharp resonances
+    /// in-ear headphones are corrected with and a single whine to notch out.
+    /// Not further, because a narrow boost rings: it keeps sounding for about
+    /// Q / (π f) after the music stops, 51 ms at 100 Hz here against 32 ms at
+    /// the old ceiling of 10. Studio EQs go to 40 or 100; a listening EQ has no
+    /// use for that, and every step past this is ringing nobody asked for.
+    static let bellQRange: ClosedRange<Double> = 0.1...16
+
+    /// The Q range for a filter of `kind`.
+    static func qRange(for kind: EQFilter.Kind) -> ClosedRange<Double> {
+        kind == .bell ? bellQRange : filterQRange
+    }
 
     static let all: [EQProfile] = [
         profile("Flat",           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),

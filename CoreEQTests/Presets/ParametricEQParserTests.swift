@@ -97,7 +97,7 @@ struct ParametricEQParserTests {
 
         #expect(freeFilters[1].frequency == 20000.0)
         #expect(freeFilters[1].gain == -20.0)
-        #expect(freeFilters[1].q == 10.0)
+        #expect(freeFilters[1].q == 16.0)  // A bell's ceiling, not a shelf's
 
         // The preamp, and all three values of each filter.
         #expect(result.adjustedValueCount == 7)

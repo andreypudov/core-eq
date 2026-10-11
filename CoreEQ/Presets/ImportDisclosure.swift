@@ -10,7 +10,7 @@ struct ImportAdjustment: Equatable, Identifiable {
     enum Kind: String, Equatable {
         /// A free filter gain beyond ±20 dB, clamped into range.
         case gain
-        /// A free filter Q outside 0.1–10.
+        /// A free filter Q outside its kind's range: 0.1–16 for a bell, 0.1–10 otherwise.
         case q
         /// A free filter frequency outside 20 Hz–20 kHz.
         case frequency

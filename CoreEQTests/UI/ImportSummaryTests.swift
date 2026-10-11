@@ -114,7 +114,7 @@ struct ImportSummaryTests {
         #expect(ImportSummary.isLoss(gain))
 
         let q = try adjustment(.q, in: preview("Filter 1: ON PK Fc 1000 Hz Gain 3 dB Q 50"))
-        #expect(ImportSummary.change(q) == "Q 50.00 → Q 10.00")
+        #expect(ImportSummary.change(q) == "Q 50.00 → Q 16.00")
 
         let frequency = try adjustment(
             .frequency, in: preview("Filter 1: ON PK Fc 5 Hz Gain 3 dB Q 1.00"))

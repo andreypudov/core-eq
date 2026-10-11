@@ -545,6 +545,31 @@ import Testing
         #expect(manager.freeFilters[0].gain == BuiltInProfiles.filterGainRange.upperBound)
     }
 
+    /// A bell's Q reaches 16; any other kind stops at 10.
+    @Test func qIsClampedToTheRangeOfTheFiltersKind() throws {
+        let manager = makeManager()
+        let bell = try #require(manager.addFilter(kind: .bell, q: 99))
+        let shelf = try #require(manager.addFilter(kind: .lowShelf, q: 99))
+        #expect(manager.freeFilters.map(\.q) == [16, 10])
+
+        manager.setFilterQ(99, id: bell)
+        manager.setFilterQ(99, id: shelf)
+        #expect(manager.freeFilters.map(\.q) == [16, 10])
+    }
+
+    /// Turning a narrow bell into a shelf brings its Q within the shelf's range
+    /// rather than leaving a value no shelf control can show.
+    @Test func changingKindBringsQIntoTheNewRange() throws {
+        let manager = makeManager()
+        let id = try #require(manager.addFilter(kind: .bell, q: 14))
+
+        manager.setFilterKind(.highShelf, id: id)
+        #expect(manager.freeFilters[0].q == 10)
+
+        manager.setFilterKind(.bell, id: id)
+        #expect(manager.freeFilters[0].q == 10, "widening the range does not invent a value")
+    }
+
     /// Colours are what tell one band's row and one node on the graph from
     /// another's, so bands added one after another must not arrive matching.
     @Test func addedFiltersTakeDistinctColours() {

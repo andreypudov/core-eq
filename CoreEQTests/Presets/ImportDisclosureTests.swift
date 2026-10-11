@@ -34,9 +34,30 @@ struct ImportDisclosureTests {
         let q = try #require(adjustment(.q, in: parsed.candidates.disclosure))
 
         #expect(q.original == 50)
+        #expect(q.adjusted == 16)
+        #expect(q.limit == "0.1–16")
+        #expect(q.filter?.index == 0)
+    }
+
+    /// The limit reported is the one for that filter's kind: a shelf stops at
+    /// 10 where a bell would not.
+    @Test func disclosesTheQLimitOfTheFiltersKind() throws {
+        let parsed = try ParametricEQParser.parse(
+            text: "Filter 1: ON LSC Fc 100 Hz Gain 3 dB Q 12")
+        let q = try #require(adjustment(.q, in: parsed.candidates.disclosure))
+
         #expect(q.adjusted == 10)
         #expect(q.limit == "0.1–10")
-        #expect(q.filter?.index == 0)
+    }
+
+    /// Room-correction tools write bells between Q 10 and 16. Those now import
+    /// exactly, with nothing to disclose.
+    @Test func aBellUpToQSixteenImportsExactly() throws {
+        let parsed = try ParametricEQParser.parse(
+            text: "Filter 1: ON PK Fc 7000 Hz Gain -6 dB Q 14.5")
+
+        #expect(adjustment(.q, in: parsed.candidates.disclosure) == nil)
+        #expect(parsed.candidates.exact.filters.filter { !$0.isBand }.first?.q == 14.5)
     }
 
     @Test func disclosesFrequencyOutsideRange() throws {
