@@ -48,7 +48,13 @@ struct Spectrum11BarView: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.black.opacity(0.24))
         )
-        .onAppear { updateLevels() }
+        .onAppear {
+            analyzer.start()
+            updateLevels()
+        }
+        .onDisappear {
+            analyzer.stop()
+        }
         .onReceive(analyzer.$points) { _ in
             updateLevels()
         }
@@ -94,4 +100,3 @@ struct Spectrum11BarView: View {
         }
     }
 }
-
