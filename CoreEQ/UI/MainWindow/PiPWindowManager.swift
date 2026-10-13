@@ -9,7 +9,7 @@ final class PiPWindowManager: NSObject, NSWindowDelegate {
     private var host: NSHostingController<Spectrum11BarView>?
     private var analyzer: SpectrumAnalyzer?
     private let defaultSize = NSSize(width: 200, height: 80)
-    private let dragStripHeight: CGFloat = 20
+    private let dragStripHeight: CGFloat = 28
 
     var isVisible: Bool { window != nil }
 
@@ -31,7 +31,7 @@ final class PiPWindowManager: NSObject, NSWindowDelegate {
         let container = PiPContainerView()
         container.translatesAutoresizingMaskIntoConstraints = false
 
-        let dragStrip = DragStripView()
+        let dragStrip = DragStripView(height: dragStripHeight)
         dragStrip.translatesAutoresizingMaskIntoConstraints = false
         dragStrip.wantsLayer = true
         dragStrip.layer?.backgroundColor = NSColor.clear.cgColor
@@ -67,7 +67,7 @@ final class PiPWindowManager: NSObject, NSWindowDelegate {
         newWindow.hasShadow = true
         newWindow.level = .floating
         newWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        newWindow.isMovableByWindowBackground = true
+        newWindow.isMovableByWindowBackground = false // we use custom drag strip
         newWindow.isMovable = true
 
         newWindow.standardWindowButton(.closeButton)?.isHidden = true
@@ -80,7 +80,9 @@ final class PiPWindowManager: NSObject, NSWindowDelegate {
         newWindow.delegate = self
         self.window = newWindow
 
+        // Start analyzer for PiP — SpectrumAnalyzer.start is idempotent and ref-counted
         analyzer.start()
+
         newWindow.makeKeyAndOrderFront(nil)
     }
 
@@ -111,19 +113,70 @@ final class PiPWindowManager: NSObject, NSWindowDelegate {
 }
 
 final class PiPContainerView: NSView {
+    // Let the system handle edge resize; don't intercept mouseDown here.
     override func mouseDown(with event: NSEvent) {
-        // Let resize continue on edges; only the dedicated drag strip owns window movement.
-        // This allows the window to still resize from corners/borders while the top strip moves it.
         super.mouseDown(with: event)
     }
 }
 
 final class DragStripView: NSView {
-    override func mouseDown(with event: NSEvent) {
-        if let win = self.window {
-            win.performDrag(with: event)
-        } else {
-            super.mouseDown(with: event)
+    private var trackingArea: NSTrackingArea?
+    private let dragHeight: CGFloat
+
+    init(height: CGFloat) {
+        self.dragHeight = height
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        updateTrackingArea()
+    }
+
+    required init?(coder: NSCoder) {
+        self.dragHeight = 28
+        super.init(coder: coder)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        updateTrackingArea()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        updateTrackingArea()
+    }
+
+    private func updateTrackingArea() {
+        if let ta = trackingArea {
+            removeTrackingArea(ta)
+            trackingArea = nil
         }
+        let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect]
+        let ta = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
+        addTrackingArea(ta)
+        trackingArea = ta
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        NSCursor.openHand.push()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSCursor.pop()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let win = window else { super.mouseDown(with: event); return }
+        // show closed hand while dragging
+        NSCursor.closedHand.push()
+        win.performDrag(with: event)
+        NSCursor.pop() // restore previous cursor
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Ensure the strip receives events across its full width
+        return self
     }
 }
