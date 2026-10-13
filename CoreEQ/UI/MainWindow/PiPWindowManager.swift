@@ -17,9 +17,9 @@ final class PiPWindowManager: NSObject, NSWindowDelegate {
         hideIfNeededBeforeShow()
 
         // If already visible, just update the analyzer/view
-        if let window = window, let host = host {
+        if let existingHost = host, window != nil {
             self.analyzer = analyzer
-            host.rootView = Spectrum11BarView(analyzer: analyzer)
+            existingHost.rootView = Spectrum11BarView(analyzer: analyzer)
             return
         }
 
