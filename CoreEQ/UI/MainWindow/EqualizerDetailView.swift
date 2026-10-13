@@ -40,6 +40,8 @@ struct EqualizerDetailView: View {
     /// area is a fixed height for the same reason — nothing above it moves.
     @AppStorage("editorTab") private var tab: EditorTab = .graphic
 
+    @State private var isPiPVisible = false
+
     enum EditorTab: String {
         case graphic, parametric
     }
@@ -121,6 +123,26 @@ struct EqualizerDetailView: View {
                 }
 
                 settingsButton
+
+                Button {
+                    isPiPVisible.toggle()
+                    if isPiPVisible {
+                        PiPWindowManager.shared.show(
+                            Spectrum11BarView(analyzer: spectrum)
+                        )
+                    } else {
+                        PiPWindowManager.shared.hide()
+                    }
+                } label: {
+                    Image(systemName: isPiPVisible ? "pip.exit" : "pip")
+                        .font(Theme.Font.body)
+                        .foregroundStyle(.secondary)
+                        .padding(3)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(isPiPVisible ? "Close Picture-in-Picture" : "Open Picture-in-Picture")
+                .accessibilityLabel("Picture-in-Picture")
 
                 // Furthest right, and unlabelled: it governs everything in the
                 // window, so it belongs at the end of the row rather than inside
@@ -776,3 +798,4 @@ struct EqualizerDetailView: View {
     }
 
 }
+
