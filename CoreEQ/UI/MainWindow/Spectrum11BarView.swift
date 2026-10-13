@@ -49,13 +49,9 @@ struct Spectrum11BarView: View {
                 .fill(Color.black.opacity(0.24))
         )
         .onAppear {
-            // Ensure PiP drives the analyzer while it is visible.
             analyzer.start()
             updateLevels()
         }
-        // Do NOT stop the analyzer in onDisappear; PiPWindowManager hides the
-        // PiP and stops the analyzer explicitly so minimizing the window does
-        // not immediately stop updates.
         .onReceive(analyzer.$points) { _ in
             updateLevels()
         }

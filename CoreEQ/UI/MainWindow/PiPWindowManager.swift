@@ -1,4 +1,3 @@
-@MainActor
 import AppKit
 import SwiftUI
 
@@ -10,8 +9,9 @@ final class PiPWindowManager {
     private var analyzer: SpectrumAnalyzer?
     private let defaultSize = NSSize(width: 200, height: 80)
 
+    var isVisible: Bool { window != nil }
+
     func show(analyzer: SpectrumAnalyzer) {
-        // Ensure any existing window is closed and its analyzer stopped.
         hide()
 
         self.analyzer = analyzer
@@ -19,8 +19,6 @@ final class PiPWindowManager {
         let host = NSHostingController(rootView: Spectrum11BarView(analyzer: analyzer))
         let newWindow = NSWindow(contentViewController: host)
 
-        // Use a transparent titlebar but keep the window titled/resizable so
-        // it supports dragging by background and system resize handles.
         newWindow.styleMask = [.titled, .fullSizeContentView, .resizable]
         newWindow.titlebarAppearsTransparent = true
         newWindow.titleVisibility = .hidden
@@ -31,11 +29,9 @@ final class PiPWindowManager {
         newWindow.level = .floating
         newWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
 
-        // Allow dragging by background for a borderless look.
         newWindow.isMovableByWindowBackground = true
         newWindow.isMovable = true
 
-        // Hide standard titlebar controls if desired (keeps a cleaner PiP look)
         newWindow.standardWindowButton(.closeButton)?.isHidden = true
         newWindow.standardWindowButton(.miniaturizeButton)?.isHidden = true
         newWindow.standardWindowButton(.zoomButton)?.isHidden = true
@@ -48,20 +44,16 @@ final class PiPWindowManager {
 
         self.window = newWindow
 
-        // Start analyzer explicitly for PiP so it remains live even if the
-        // main window is closed or hidden.
         analyzer.start()
 
         newWindow.makeKeyAndOrderFront(nil)
     }
 
     func hide() {
-        // Stop the analyzer when PiP is explicitly closed.
         if let analyzer = analyzer {
             analyzer.stop()
             self.analyzer = nil
         }
-
         window?.close()
         window = nil
     }
