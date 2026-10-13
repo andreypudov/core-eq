@@ -14,7 +14,7 @@ struct Spectrum11BarView: View {
     var body: some View {
         VStack(spacing: 4) {
             HStack(alignment: .bottom, spacing: 6) {
-                ForEach(0..<levels.count, id: \.self) { index in
+                ForEach(0..<levels.count, id: \ .self) { index in
                     ZStack(alignment: .bottom) {
                         RoundedRectangle(cornerRadius: 4)
                             .fill(
@@ -49,6 +49,10 @@ struct Spectrum11BarView: View {
                 .fill(Color.black.opacity(0.24))
         )
         .onAppear {
+            // PiP owns starting the analyzer, but the view can request it safely —
+            // SpectrumAnalyzer.start() is idempotent and reference-counted so
+            // multiple callers are safe. Do not stop the analyzer in onDisappear;
+            // PiPWindowManager controls lifecycle for the PiP case.
             analyzer.start()
             updateLevels()
         }
