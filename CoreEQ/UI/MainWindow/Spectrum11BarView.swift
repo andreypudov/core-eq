@@ -14,7 +14,7 @@ struct Spectrum11BarView: View {
     var body: some View {
         VStack(spacing: 4) {
             HStack(alignment: .bottom, spacing: 6) {
-                ForEach(0..<levels.count, id: \ .self) { index in
+                ForEach(0..<levels.count, id: \.self) { index in
                     ZStack(alignment: .bottom) {
                         RoundedRectangle(cornerRadius: 4)
                             .fill(
@@ -49,12 +49,13 @@ struct Spectrum11BarView: View {
                 .fill(Color.black.opacity(0.24))
         )
         .onAppear {
+            // Ensure PiP drives the analyzer while it is visible.
             analyzer.start()
             updateLevels()
         }
-        .onDisappear {
-            analyzer.stop()
-        }
+        // Do NOT stop the analyzer in onDisappear; PiPWindowManager hides the
+        // PiP and stops the analyzer explicitly so minimizing the window does
+        // not immediately stop updates.
         .onReceive(analyzer.$points) { _ in
             updateLevels()
         }
