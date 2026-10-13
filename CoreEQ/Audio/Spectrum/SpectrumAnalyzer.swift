@@ -21,6 +21,7 @@ final class SpectrumAnalyzer: ObservableObject {
     /// Log-spaced points, ascending in frequency; `level` is 0...1.
     @Published private(set) var points: [Point]
     @Published private(set) var isRunning = false
+    private var runRefCount = 0
 
     // Analysis parameters.
     private static let fftSize = 4_096
@@ -28,7 +29,7 @@ final class SpectrumAnalyzer: ObservableObject {
     /// Points across the plot. At a typical window width this is a point every
     /// six or seven points of screen, which is finer than the eye resolves in a
     /// backdrop — and each one costs a bin lookup, a smoothing step, and a path
-    /// segment on every frame.
+    /// segment on every frame of animation.
     private static let displayPointCount = 128
 
     /// Analysis rate.
@@ -141,7 +142,9 @@ final class SpectrumAnalyzer: ObservableObject {
     /// Begins analysis. Called when the main window becomes visible; safe to
     /// call repeatedly.
     func start() {
-        guard !isRunning, fftSetup != nil else { return }
+        guard fftSetup != nil else { return }
+        runRefCount += 1
+        if isRunning { return }
         isRunning = true
         let timer = Timer(timeInterval: 1.0 / Self.framesPerSecond, repeats: true) {
             [weak self] _ in
@@ -153,6 +156,11 @@ final class SpectrumAnalyzer: ObservableObject {
 
     /// Stops analysis and clears the display. Called when the window is hidden.
     func stop() {
+        // Reference-counted stop. Only fully stop when every owner releases.
+        guard runRefCount > 0 else { return }
+        runRefCount -= 1
+        if runRefCount > 0 { return }
+
         guard isRunning else { return }
         isRunning = false
         timer?.invalidate()
