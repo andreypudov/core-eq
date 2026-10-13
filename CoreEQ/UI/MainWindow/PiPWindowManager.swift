@@ -9,6 +9,7 @@ final class PiPWindowManager: NSObject, NSWindowDelegate {
     private var host: NSHostingController<Spectrum11BarView>?
     private var analyzer: SpectrumAnalyzer?
     private let defaultSize = NSSize(width: 200, height: 80)
+    private let dragStripHeight: CGFloat = 20
 
     var isVisible: Bool { window != nil }
 
@@ -27,15 +28,27 @@ final class PiPWindowManager: NSObject, NSWindowDelegate {
         hosting.view.layer?.backgroundColor = NSColor.clear.cgColor
         self.host = hosting
 
-        let container = DraggingContainerView()
+        let container = PiPContainerView()
         container.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(hosting.view)
-        hosting.view.translatesAutoresizingMaskIntoConstraints = false
 
+        let dragStrip = DragStripView()
+        dragStrip.translatesAutoresizingMaskIntoConstraints = false
+        dragStrip.wantsLayer = true
+        dragStrip.layer?.backgroundColor = NSColor.clear.cgColor
+
+        container.addSubview(dragStrip)
+        container.addSubview(hosting.view)
+
+        hosting.view.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
+            dragStrip.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            dragStrip.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            dragStrip.topAnchor.constraint(equalTo: container.topAnchor),
+            dragStrip.heightAnchor.constraint(equalToConstant: dragStripHeight),
+
             hosting.view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             hosting.view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            hosting.view.topAnchor.constraint(equalTo: container.topAnchor),
+            hosting.view.topAnchor.constraint(equalTo: dragStrip.bottomAnchor),
             hosting.view.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
 
@@ -97,22 +110,20 @@ final class PiPWindowManager: NSObject, NSWindowDelegate {
     }
 }
 
-final class DraggingContainerView: NSView {
+final class PiPContainerView: NSView {
+    override func mouseDown(with event: NSEvent) {
+        // Let resize continue on edges; only the dedicated drag strip owns window movement.
+        // This allows the window to still resize from corners/borders while the top strip moves it.
+        super.mouseDown(with: event)
+    }
+}
+
+final class DragStripView: NSView {
     override func mouseDown(with event: NSEvent) {
         if let win = self.window {
             win.performDrag(with: event)
         } else {
             super.mouseDown(with: event)
         }
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        if let sub = super.hitTest(point) {
-            if sub == self.subviews.first {
-                return self
-            }
-            return sub
-        }
-        return self
     }
 }
