@@ -12,47 +12,51 @@ struct Spectrum11BarView: View {
     @State private var peaks: [Float] = Array(repeating: 0, count: 11)
 
     var body: some View {
-        VStack(spacing: 4) {
-            HStack(alignment: .bottom, spacing: 6) {
-                ForEach(0..<levels.count, id: \ .self) { index in
-                    ZStack(alignment: .bottom) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        colorForLevel(levels[index]),
-                                        colorForLevel(min(levels[index] + 0.25, 1))
-                                    ]),
-                                    startPoint: .bottom,
-                                    endPoint: .top
-                                )
-                            )
-                            .frame(
-                                width: 12,
-                                height: max(6, CGFloat(levels[index]) * 56)
-                            )
+        GeometryReader { proxy in
+            let width = max(0, proxy.size.width)
+            let height = max(0, proxy.size.height)
+            let barCount = CGFloat(levels.count)
+            let totalSpacing = 6 * (barCount - 1) + 16
+            let availableWidth = max(0, width - totalSpacing)
+            let barWidth = max(6, availableWidth / barCount)
+            let usableHeight = max(0, height - 20)
 
-                        Rectangle()
-                            .fill(Color.white.opacity(0.9))
-                            .frame(width: 2, height: 3)
-                            .offset(y: -CGFloat(peaks[index]) * 56 + 4)
+            VStack(spacing: 4) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    ForEach(0..<levels.count, id: \ .self) { index in
+                        ZStack(alignment: .bottom) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            colorForLevel(levels[index]),
+                                            colorForLevel(min(levels[index] + 0.25, 1))
+                                        ]),
+                                        startPoint: .bottom,
+                                        endPoint: .top
+                                    )
+                                )
+                                .frame(width: barWidth, height: max(6, CGFloat(levels[index]) * usableHeight))
+
+                            Rectangle()
+                                .fill(Color.white.opacity(0.9))
+                                .frame(width: max(2, barWidth * 0.15), height: 3)
+                                .offset(y: -CGFloat(peaks[index]) * usableHeight + 4)
+                        }
                     }
                 }
+                .frame(width: width, height: height, alignment: .center)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .frame(width: width, height: height)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.black.opacity(0.24))
+            )
         }
-        .frame(width: 200, height: 80)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.black.opacity(0.24))
-        )
+        .frame(minWidth: 160, minHeight: 64)
         .onAppear {
-            // PiP owns starting the analyzer, but the view can request it safely —
-            // SpectrumAnalyzer.start() is idempotent and reference-counted so
-            // multiple callers are safe. Do not stop the analyzer in onDisappear;
-            // PiPWindowManager controls lifecycle for the PiP case.
             analyzer.start()
             updateLevels()
         }
