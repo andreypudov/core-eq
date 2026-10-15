@@ -61,6 +61,43 @@ muted the other's equalized output and nothing reached the speakers. A copy that
 finds another already running now asks which one to quit before it builds
 anything.
 
+** The AutoEq catalog
+
+Contributed by Sebastian Ullrich in #40, the step past the file import he added
+in 1.9: the *AutoEq* button beside the =+= now searches AutoEq's corrections by
+headphone model, rather than sending you to autoeq.app for a file. Selecting a
+measurement plays it after a short pause, against whatever is playing, without
+saving anything; *Cancel* puts the previous sound back, and *Import* keeps it as
+a preset of your own. Crinacle's measurements are left out.
+
+It is CoreEQ's first network connection, so the roadmap pinned its shape before
+any of it was built: it happens only on explicit action. Nothing is fetched at
+launch or when a device appears. Opening the sheet downloads the catalog, and
+checks it again only once it is a week old; a correction downloads when it is
+selected. Both come from one AutoEq commit, so an update can never mix old and
+new corrections, and both are cached, so a correction heard once previews
+offline. No data is bundled with the app.
+
+The published correction is used as AutoEq wrote it. Choosing another
+compatible *Target curve* computes a correction instead, in the app, with a
+native fitter written for this rather than AutoEq's Python. Run on AutoEq's
+default target across 100 catalog entries, it lands within 0.36 dB RMS of
+AutoEq's own result below 6 kHz at the median, and 1.48 dB at worst, in about
+60 ms. [[file:AUTOEQ_LOCAL.org][AUTOEQ_LOCAL.org]] has the method
+and what it does not reproduce.
+
+Imports keep what they read. 1.9 clamped a value past CoreEQ's limits and
+counted it; now free filters reach ±20 dB, and any value that would still change is listed before
+anything is added — the filter, the old and new value, the limit responsible,
+and what it does to the response in dB. A bell past the ±12 dB of the graphic
+range can be kept exact as a free filter or clipped onto its slider. The same
+sheet serves the catalog, a pasted profile, and a dropped file.
+
+*Done* for published corrections: 100 of them imported with no change at all
+to their response or preamp. Not yet checked across the whole catalog, or for
+alternative targets against an AutoEq reference; both are noted in
+AUTOEQ_LOCAL.org.
+
 ** Narrower bells
 
 Asked for in #41. A parametric bell's Q now goes to 16, about a twelfth of an

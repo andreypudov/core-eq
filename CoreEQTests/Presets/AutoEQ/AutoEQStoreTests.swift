@@ -172,22 +172,116 @@ extension AutoEQIntegrationTests {
             #expect(store.previewProfile == nil)
         }
 
-        @Test func browserOpenResetIsSeparateFromCatalogReload() async throws {
+        @Test func browserOpenKeepsTheLastSelection() async throws {
+            let cache = AutoEQTestFixtures.makeCacheDirectory()
+            defer { AutoEQTestFixtures.remove(cache) }
+            StubURLProtocol.setHandler(AutoEQTestFixtures.catalogHandler())
+            let store = try await loadedStore(cache)
+            store.selectModel(named: "Alpha Headphones")
+            let rtings = try #require(store.availableVariants.last)
+            store.selectVariant(rtings)
+            store.searchText = "alpha"
+            #expect(await store.loadSelectedProfile() != nil)
+
+            store.prepareForBrowserOpen()
+            await store.loadCatalog(forceRefresh: true)
+
+            #expect(store.selectedModelName == "Alpha Headphones")
+            #expect(store.selectedVariant == rtings)
+            #expect(store.searchText == "alpha")
+            // The preview is dropped for the browser to load again, not kept.
+            #expect(store.previewProfile == nil)
+            #expect(store.previewState == .idle)
+        }
+
+        @Test func aKeptAlternativeTargetIsNeverAnsweredWithThePublishedCorrection() async throws {
+            let cache = AutoEQTestFixtures.makeCacheDirectory()
+            defer { AutoEQTestFixtures.remove(cache) }
+            let target = AutoEQTarget(
+                label: "Alternative",
+                compatible: [
+                    .init(source: "oratory1990", rig: "GRAS 43AG-7", form: "over-ear")
+                ], recommended: [], fr: .init(frequency: [20, 1000, 20000], raw: [2, 0, -2]))
+            let targetData = try JSONEncoder().encode([target])
+            func handler(revision: String, targetsOnline: Bool) -> StubHandler {
+                { request in
+                    let url = request.url!
+                    if url.path.hasSuffix("targets.json") {
+                        guard targetsOnline else { throw URLError(.notConnectedToInternet) }
+                        return (httpResponse(url: url), targetData)
+                    }
+                    if url.path.hasSuffix(".csv") {
+                        return (
+                            httpResponse(url: url),
+                            Data("frequency,raw\n20,0\n1000,0\n20000,0".utf8)
+                        )
+                    }
+                    return try AutoEQTestFixtures.catalogHandler(revision: revision)(request)
+                }
+            }
+            StubURLProtocol.setHandler(
+                handler(revision: AutoEQTestFixtures.revision, targetsOnline: true))
+            let store = try await loadedStore(cache)
+            store.selectModel(named: "Alpha Headphones")
+            store.selectTarget(label: "Alternative")
+
+            // A new revision whose targets cannot be downloaded: the kept
+            // selection must report that, not play AutoEq's published file.
+            StubURLProtocol.setHandler(
+                handler(revision: AutoEQTestFixtures.nextRevision, targetsOnline: false))
+            store.prepareForBrowserOpen()
+            await store.loadCatalog(forceRefresh: true)
+            #expect(store.selectedTargetLabel == "Alternative")
+            #expect(await store.loadSelectedProfile() == nil)
+            #expect(store.previewState == .failed(AutoEQError.offline.localizedDescription))
+            #expect(
+                !StubURLProtocol.requests.contains {
+                    $0.url?.path.contains(AutoEQTestFixtures.nextRevision) == true
+                        && $0.url?.path.hasSuffix(" ParametricEQ.txt") == true
+                })
+
+            // Retry once the connection is back downloads the targets again.
+            StubURLProtocol.setHandler(
+                handler(revision: AutoEQTestFixtures.nextRevision, targetsOnline: true))
+            let profile = try #require(await store.loadSelectedProfile())
+            #expect(profile.name == "Alpha Headphones · Alternative")
+            #expect(store.availableTargets.filter { $0.label == "Alternative" }.count == 1)
+        }
+
+        @Test func browserOpenSearchesForAKeptModelTheListNoLongerShows() async throws {
             let cache = AutoEQTestFixtures.makeCacheDirectory()
             defer { AutoEQTestFixtures.remove(cache) }
             let store = try await loadedStore(cache)
-            store.selectModel(named: "Alpha Headphones")
+            store.selectModel(named: "Zeta Headphones")
             store.searchText = "alpha"
+            #expect(!store.searchResults.contains { $0.name == "Zeta Headphones" })
+
+            store.prepareForBrowserOpen()
+
+            #expect(store.searchText == "Zeta Headphones")
+            #expect(store.searchResults.map(\.name) == ["Zeta Headphones"])
+            #expect(store.selectedModelName == "Zeta Headphones")
+        }
+
+        @Test func catalogUpdateDropsAKeptModelItNoLongerHas() async throws {
+            let cache = AutoEQTestFixtures.makeCacheDirectory()
+            defer { AutoEQTestFixtures.remove(cache) }
+            let store = try await loadedStore(cache)
+            store.selectModel(named: "Zeta Headphones")
+            #expect(store.selectedVariant != nil)
+
+            let withoutZeta = AutoEQTestFixtures.index
+                .split(separator: "\n").filter { !$0.contains("Zeta") }.joined(separator: "\n")
+            StubURLProtocol.setHandler(
+                AutoEQTestFixtures.catalogHandler(
+                    revision: AutoEQTestFixtures.nextRevision, index: Data(withoutZeta.utf8)))
+            store.prepareForBrowserOpen()
             await store.loadCatalog(forceRefresh: true)
-            #expect(store.selectedModelName == "Alpha Headphones")
-            #expect(store.searchText == "alpha")
-            store.resetSelectionForBrowserOpen()
+
+            #expect(store.catalogRevision == AutoEQTestFixtures.nextRevision)
             #expect(store.selectedModelName == nil)
             #expect(store.selectedVariant == nil)
             #expect(store.selectedTargetLabel == nil)
-            #expect(store.searchText.isEmpty)
-            #expect(store.searchResults.count == 3)
-            #expect(store.previewState == .idle)
         }
 
         @Test func selectionChangeDuringDownloadCannotPublishAnOldPreview() async throws {

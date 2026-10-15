@@ -30,8 +30,12 @@ accounted for 90% of all CodeQL minutes the repository had ever spent.
 
 The yield did not justify that. CodeQL's Swift suite targets network, crypto,
 WebView and JavaScript, SQL, =NSPredicate=, XML, regex, and command or path
-injection; CoreEQ has none of that surface and no third-party dependencies. The
-weekly run still keeps the Security tab current and picks up new query packs.
+injection; CoreEQ has almost none of that surface and no third-party
+dependencies. The exception, from 1.10, is the AutoEq catalog: HTTPS requests
+the user starts, to two fixed GitHub hosts, with path encoding and cache writes
+covered by unit tests. That is not enough to put the run back in front of every
+pull request. The weekly run still keeps the Security tab current and picks up
+new query packs.
 
 The job also builds *one* slice (=XCODE_FLAGS=ARCHS=arm64=): extraction is
 source-level, so the second architecture doubles the traced compile and adds

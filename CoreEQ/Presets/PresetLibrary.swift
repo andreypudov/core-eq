@@ -19,9 +19,10 @@ struct PresetLibrary: Equatable {
     /// The user's own. Renameable, editable, deletable.
     private(set) var user: [EQProfile]
 
-    /// Built-ins first, then the user's own — the order the sidebar and the menu
-    /// present them in.
-    var all: [EQProfile] { builtIn + user }
+    /// The user's own first, then the built-ins — the order the sidebar and the
+    /// menu present them in. The user's are the ones worth finding, and there
+    /// are a few of them against twenty-odd built-ins.
+    var all: [EQProfile] { user + builtIn }
 
     /// Builds a library from what was stored, dropping any preset whose name
     /// collides with a built-in or with an earlier entry.

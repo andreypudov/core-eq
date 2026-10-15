@@ -75,6 +75,11 @@ struct FrequencyResponseView: View {
     /// Compact read-only presentation for previews that still need the same
     /// frequency and gain context as the main graph. The full graph labels
     /// every band; compact mode keeps five evenly spaced anchors.
+    ///
+    /// Read-only means no grips: the band markers and numbered filter nodes are
+    /// for dragging, and in a picture that cannot be edited they only crowd it —
+    /// and, sitting at each filter's own gain rather than on the curve, they
+    /// read as points the curve misses. Only the curve and its axes are drawn.
     var compact = false
 
     /// The ratio used by the catalog preview. It follows the main graph's
@@ -186,12 +191,17 @@ struct FrequencyResponseView: View {
 
                     Canvas { context, _ in
                         drawGrid(context, size)
-                        drawHighlightedFilterCurve(context, size)
+                        if !compact { drawHighlightedFilterCurve(context, size) }
                         drawCurve(context, size)
-                        drawBandMarkers(context, size)
-                        drawFilterNodes(context, size)
+                        if !compact {
+                            drawBandMarkers(context, size)
+                            drawFilterNodes(context, size)
+                        }
                     }
                 }
+                // Nothing to grab in a compact preview, so the pointer passes
+                // through: no hover highlight, no drag, no double-click.
+                .allowsHitTesting(!compact)
                 .gesture(dragGesture(size))
                 .simultaneousGesture(doubleClickGesture(size))
                 .simultaneousGesture(selectionGesture(size))

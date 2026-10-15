@@ -18,8 +18,11 @@ installed into the system and nothing left behind when CoreEQ is not running.
   passes through, over a real-time spectrum analyzer.
 - *Twenty-two built-in presets and your own*, each built-in with a one-line
   description of what it is for.
-- *AutoEq and EqualizerAPO import and export*, so a headphone correction loads
-  in a few clicks.
+- *The AutoEq catalog, built in*: search thousands of headphone corrections by
+  model, hear one before keeping it, and save it as a preset of your own. It
+  goes online only when you open it.
+- *AutoEq and EqualizerAPO import and export*, so a correction from anywhere
+  else loads in a few clicks.
 - *Automatic gain* holds a preset at the loudness it started from, so comparing
   presets compares their tone, not their volume.
 - *A/B comparison* of two versions of the same preset.
@@ -113,8 +116,9 @@ most requested feature it had.
 
 CoreEQ's AutoEq catalog browser uses headphone correction data from
 [[https://github.com/jaakkopasanen/AutoEq][AutoEq]] by Jaakko Pasanen, under the MIT
-licence. The measurements come from third-party sources including Oratory1990,
-Crinacle, Rtings, and Innerfidelity; each result credits the source it came from.
+licence. The measurements come from third-party sources such as Oratory1990,
+Rtings, and Innerfidelity; Crinacle's are excluded. Each result credits the
+source it came from.
 
 * License
 
