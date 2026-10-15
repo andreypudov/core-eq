@@ -147,6 +147,12 @@ puts the previous sound back. *Import* converts the correction and keeps it as
 one of your own presets, named after the model, where it can be edited and
 exported like any other.
 
+Closing the catalog and opening it again returns to where you were: the same
+model, measurement and target, with the correction's curve drawn, and the same
+search — or the model's name, if that search no longer lists it. It does not
+play by itself — press *Play Preview*, click the model again, or choose
+something else.
+
 The catalog never refuses a correction CoreEQ can represent. When saving one
 would change it to fit CoreEQ, the browser says so, and *Import* opens the same
 confirmation sheet the manual imports use: each changed value with its response

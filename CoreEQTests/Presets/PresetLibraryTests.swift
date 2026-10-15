@@ -19,11 +19,11 @@ struct PresetLibraryTests {
         #expect(library.all.count == BuiltInProfiles.all.count)
     }
 
-    /// Built-ins first is the order the sidebar and the menu both present.
-    @Test func builtInsComeBeforeTheUsersOwn() {
+    /// The user's own first is the order the sidebar and the menu both present.
+    @Test func theUsersOwnComeBeforeBuiltIns() {
         let library = PresetLibrary(stored: [profile("Mine")])
-        #expect(library.all.first?.name == BuiltInProfiles.all[0].name)
-        #expect(library.all.last?.name == "Mine")
+        #expect(library.all.first?.name == "Mine")
+        #expect(library.all.dropFirst().map(\.name) == BuiltInProfiles.all.map(\.name))
     }
 
     /// Names are identity — every device's stored state refers to a preset by

@@ -47,9 +47,11 @@ jobs:
   # not the project. Running it on both push and pull_request analyzed every
   # change twice and accounted for 90% of all CodeQL minutes spent on the repo.
   #
-  # What it buys is small. CoreEQ has no network, crypto, WebView, SQL,
-  # NSPredicate, XML or subprocess surface for the Swift queries to match, and
-  # no third-party dependencies. Weekly keeps the Security tab current and picks
+  # What it buys is small. CoreEQ has no crypto, WebView, SQL, NSPredicate, XML
+  # or subprocess surface for the Swift queries to match, and no third-party
+  # dependencies. Its one network surface is the AutoEq catalog: HTTPS GETs to
+  # two fixed GitHub hosts, opened by the user, whose path handling and cache
+  # writes have their own unit tests. Weekly keeps the Security tab current and picks
   # up new query packs without putting 19 minutes in front of a pull request.
   swift:
     name: Analyze (swift)

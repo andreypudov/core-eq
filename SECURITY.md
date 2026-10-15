@@ -39,10 +39,17 @@ advisory unless you ask otherwise.
 
 ## Scope
 
-CoreEQ is a local, single-user menu bar application. It opens no network
-sockets and no listening ports, has no update mechanism of its own, and no
-inter-process interface beyond the standard macOS ones. It stores presets and
-per-device settings in `UserDefaults` under the user's own account.
+CoreEQ is a local, single-user menu bar application. It opens no listening
+ports, has no update mechanism of its own, and no inter-process interface
+beyond the standard macOS ones. It stores presets and per-device settings in
+`UserDefaults` under the user's own account.
+
+Its one outbound connection is the AutoEq catalog, and only while the user has
+it open: HTTPS requests to `api.github.com` for the AutoEq repository's latest
+commit, and to `raw.githubusercontent.com` for files at that commit. Nothing
+about the user or their audio is sent: the requests name only the file they
+want, with a `CoreEQ/<version>` User-Agent. Downloads are
+cached under `~/Library/Caches/<bundle id>/AutoEQ`.
 
 In scope:
 
@@ -52,6 +59,10 @@ In scope:
   own container.
 - Crashes in the audio render path that are reachable from untrusted input
   (audio data, preset values, device properties).
+- Anything a downloaded AutoEq file — the index, a correction, a target or a
+  measurement — can do beyond being refused or disclosed as a correction:
+  writing outside the cache directory, a request to a host other than the two
+  above, or a crash.
 - Misuse of the *System Audio Recording* permission — CoreEQ requests it to
   process what you hear, and captured audio must never be written to disk or
   leave the machine. CoreEQ reads its own status for that permission through

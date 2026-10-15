@@ -15,10 +15,10 @@ enum MainWindowGeometry {
 
     /// Below this the fixed sections start overlapping, so the window refuses to
     /// go smaller whatever the screen says.
-    static let minimum = CGSize(width: 960, height: 540)
+    static let minimum = CGSize(width: 960, height: 720)
 
-    /// What it opens at when there is room.
-    static let preferred = CGSize(width: 1_120, height: 760)
+    /// What it opens at when there is room: the minimum's 4:3, a size up.
+    static let preferred = CGSize(width: 1_120, height: 840)
 
     /// Kept clear of the screen edges, so the window always arrives fully on
     /// screen rather than with its corners past the edge.

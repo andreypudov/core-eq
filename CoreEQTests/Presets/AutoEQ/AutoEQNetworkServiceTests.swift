@@ -165,6 +165,40 @@ extension AutoEQIntegrationTests {
             #expect(StubURLProtocol.requests.count == 2)
         }
 
+        @Test func aFailedConnectionReportsInCoreEQsWordsForEveryDownload() async throws {
+            let cache = AutoEQTestFixtures.makeCacheDirectory()
+            defer { AutoEQTestFixtures.remove(cache) }
+            let variant = AutoEQVariant(
+                source: "oratory1990", form: "over-ear",
+                resultPath: "oratory1990/GRAS 43AG-7 over-ear/Alpha Headphones")
+            for code in [URLError.Code.timedOut, .notConnectedToInternet, .networkConnectionLost] {
+                StubURLProtocol.setHandler { _ in throw URLError(code) }
+                await #expect(throws: AutoEQError.offline) {
+                    _ = try await service(cache).fetchPrecomputedParametricEQ(
+                        model: "Alpha Headphones", variant: variant,
+                        revision: AutoEQTestFixtures.revision)
+                }
+                await #expect(throws: AutoEQError.offline) {
+                    _ = try await service(cache).loadTargets(revision: AutoEQTestFixtures.revision)
+                }
+            }
+        }
+
+        @Test func aConnectionDroppedDuringTheIndexReportsInCoreEQsWords() async throws {
+            let cache = AutoEQTestFixtures.makeCacheDirectory()
+            defer { AutoEQTestFixtures.remove(cache) }
+            let catalog = AutoEQTestFixtures.catalogHandler()
+            StubURLProtocol.setHandler { request in
+                if request.url!.path.hasSuffix("/INDEX.md") {
+                    throw URLError(.networkConnectionLost)
+                }
+                return try catalog(request)
+            }
+            await #expect(throws: AutoEQError.offline) {
+                _ = try await service(cache).loadCatalog(forceRefresh: true)
+            }
+        }
+
         @Test func rejectsRestrictedSourcesAndUnsafePathsBeforeNetwork() async throws {
             let cache = AutoEQTestFixtures.makeCacheDirectory()
             defer { AutoEQTestFixtures.remove(cache) }

@@ -341,9 +341,10 @@ struct EqualizerDetailView: View {
         // and it compresses rather than pushing the window past the screen when
         // the window is small and the Filters section is open.
         //
-        // The floor and `contentMinSize` are a pair. At the window minimum the
-        // fixed sections plus the editing area come to ~640 pt with this floor;
-        // raise it and the editor clips instead of the graph compressing.
+        // The floor and `contentMinSize` are a pair. With this floor the fixed
+        // sections plus the editing area come to ~640 pt, inside the window's
+        // 720 pt minimum; raise the floor past that, or lower the minimum below
+        // it, and the editor clips instead of the graph compressing.
         .frame(minHeight: 120, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)

@@ -12,6 +12,7 @@ enum AppRelaunch {
     /// instance has to start after this one has gone. Opened alongside it, two
     /// copies would briefly put two icons in the menu bar and, with the
     /// permission given, two taps on the same audio.
+    @MainActor
     static func relaunch() {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")

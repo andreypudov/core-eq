@@ -32,6 +32,17 @@ struct AutoEQBrowserView: View {
     /// Model the pointer is over, for the row's hover wash.
     @State private var hoveredModel: String?
 
+    /// The curve the graph draws: the preview once it arrives, and kept
+    /// through the next selection's load so the graph never empties between
+    /// two clicks. Cleared only when nothing is selected.
+    @State private var displayedProfile: EQProfile?
+
+    /// Set when the sheet reopens on a kept selection: its preview loads and
+    /// draws, but does not play until asked. Opening the catalog never changes
+    /// what is heard by itself. Cleared by the user's own choices only, so a
+    /// catalog update or sample-rate change under a held preview keeps it held.
+    @State private var auditionHeld = false
+
     /// Whether the search field holds the keyboard when the window opens.
     @FocusState private var searchFieldFocused: Bool
 
@@ -49,10 +60,6 @@ struct AutoEQBrowserView: View {
     /// know.
     private static let searchResultLimit = 300
 
-    /// Where the attribution footer sends its readers: the AutoEQ project every
-    /// correction in this catalog comes from.
-    private static let autoEQRepository = URL(string: "https://github.com/jaakkopasanen/AutoEq")!
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             stateContent
@@ -61,12 +68,13 @@ struct AutoEQBrowserView: View {
 
             attributionFooter
         }
-        // A floor rather than a fixed size: the view is a window's content now,
-        // so it lays out in whatever the window is given, and the window's own
-        // minimum keeps the measurement dropdown from truncating.
-        .frame(minWidth: 600, minHeight: 520)
+        // A fixed size, not a floor. A sheet takes the size its content asks
+        // for, and a list asks for the height of its rows: with only a minimum
+        // the sheet grew and shrank with every keystroke of a search.
+        .frame(width: 600, height: 680)
         .task {
-            store.resetSelectionForBrowserOpen()
+            auditionHeld = store.selectedModelName != nil
+            store.prepareForBrowserOpen()
             // First-use download starts here, never at app launch. Reopening
             // checks cache freshness before making an update request.
             await store.loadCatalog()
@@ -83,7 +91,11 @@ struct AutoEQBrowserView: View {
         }
         .onChange(of: store.previewProfile) { _, profile in
             guard let profile else { return }
-            profileManager.beginAudition(profile)
+            displayedProfile = profile
+            if !auditionHeld { profileManager.beginAudition(profile) }
+        }
+        .onChange(of: store.selectedModelName) { _, name in
+            if name == nil { displayedProfile = nil }
         }
         // The preview is the window's own. Leaving takes it down rather than
         // leaving a curve playing that the user can no longer see — a window's
@@ -163,38 +175,26 @@ struct AutoEQBrowserView: View {
         return "\(receivedText) of \(totalText)"
     }
 
+    /// The system's own empty state, so a failed load looks like every other
+    /// app's "nothing here" rather than a layout of CoreEQ's.
     private func catalogErrorView(_ message: String) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(Theme.Font.body)
-                .foregroundStyle(.secondary)
-
-            Text("Couldn’t load the AutoEq catalog")
-                .font(Theme.Font.heading)
-
+        ContentUnavailableView {
+            Label("Couldn’t Load the AutoEq Catalog", systemImage: "wifi.exclamationmark")
+        } description: {
             Text(message)
-                .font(Theme.Font.label)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 380)
-
+        } actions: {
             // The guide works with no catalog at all: autoeq.app is reached in
             // the browser and the correction comes back through the clipboard,
             // so a failed load is not a dead end.
             HStack(spacing: 10) {
+                Button("Import by Hand…") { onImportByHand() }
+
                 Button("Retry") {
                     Task { await store.loadCatalog(forceRefresh: true) }
                 }
-                .buttonStyle(.borderedProminent)
-
-                Button("Import from AutoEq by Hand…") { onImportByHand() }
-                    .buttonStyle(.bordered)
+                .keyboardShortcut(.defaultAction)
             }
-            .padding(.top, 2)
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Browser
@@ -203,9 +203,15 @@ struct AutoEQBrowserView: View {
         VStack(alignment: .leading, spacing: 0) {
             searchArea
 
+            // The list is the one framed region, as a table in a macOS sheet
+            // is; the controls under it sit on the sheet itself.
             resultsList
-
-            Divider()
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Theme.blockBorder, lineWidth: 1)
+                )
+                .padding(.horizontal, 16)
 
             bottomArea
         }
@@ -215,14 +221,14 @@ struct AutoEQBrowserView: View {
         VStack(alignment: .leading, spacing: 6) {
             searchField
 
-            Text(searchSummary)
-                .font(Theme.Font.secondary)
-                .foregroundStyle(.secondary)
-            if store.catalogIsStale {
-                HStack {
+            // The count and, when it applies, the stale note share one line, so
+            // a failed update check does not push the list down.
+            HStack(spacing: 6) {
+                Text(searchSummary)
+                if store.catalogIsStale {
+                    Spacer(minLength: 8)
                     Text("Using a saved catalog. Couldn’t check for updates.")
-                        .font(Theme.Font.secondary)
-                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     Button("Retry") {
                         stopAuditionIfNeeded()
                         Task { await store.loadCatalog(forceRefresh: true) }
@@ -230,6 +236,8 @@ struct AutoEQBrowserView: View {
                     .buttonStyle(.borderless)
                 }
             }
+            .font(Theme.Font.secondary)
+            .foregroundStyle(.secondary)
         }
         // The first content in the window now that the header is gone: enough
         // top padding that the field does not crowd the title bar.
@@ -274,32 +282,44 @@ struct AutoEQBrowserView: View {
         .onAppear { searchFieldFocused = true }
     }
 
+    @ViewBuilder
     private var resultsList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 2) {
-                if store.searchResults.isEmpty {
-                    emptyResults
-                } else {
-                    ForEach(store.searchResults) { model in
-                        modelRow(model)
+        if store.searchResults.isEmpty {
+            emptyResults
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollViewReader { scroll in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(store.searchResults) { model in
+                            modelRow(model)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                }
+                // Reopening on a kept selection shows its row, as the sidebar
+                // shows the active preset.
+                .onAppear {
+                    if let name = store.selectedModelName {
+                        scroll.scrollTo(name, anchor: .center)
                     }
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .frame(maxHeight: .infinity)
         }
-        .frame(maxHeight: .infinity)
     }
 
+    /// The system's search empty state — "No Results for …" with its own
+    /// wording and symbol — the same one Finder and Mail show.
+    @ViewBuilder
     private var emptyResults: some View {
         let query = store.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return Text(
-            query.isEmpty ? "No models are available." : "No models match “\(query)”."
-        )
-        .font(Theme.Font.label)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .padding(.top, 8)
+        if query.isEmpty {
+            ContentUnavailableView("No Models", systemImage: "headphones")
+        } else {
+            ContentUnavailableView.search(text: query)
+        }
     }
 
     /// One model row. Hand-built to match the sidebar's preset rows: the
@@ -336,7 +356,17 @@ struct AutoEQBrowserView: View {
                 .fill(rowFill(isSelected: isSelected, isHovered: isHovered))
         )
         .contentShape(Rectangle())
-        .onTapGesture { store.selectModel(named: model.name) }
+        .onTapGesture {
+            // Selecting again would reset the measurement and target to the
+            // model's defaults; on the selected row a click plays a held
+            // preview instead, and otherwise does nothing.
+            if isSelected {
+                playHeldPreview()
+            } else {
+                auditionHeld = false
+                store.selectModel(named: model.name)
+            }
+        }
         .onHover { isInside in
             if isInside {
                 hoveredModel = model.name
@@ -359,12 +389,15 @@ struct AutoEQBrowserView: View {
 
     // MARK: - Configuration and actions
 
+    /// Every part of this area keeps its size whatever is selected, loading or
+    /// playing: the sheet is fixed, so anything here that grew or shrank would
+    /// take its height from the list above and make the list jump.
     private var bottomArea: some View {
         VStack(alignment: .leading, spacing: 12) {
             configurationCard
 
             statusView
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: Self.statusHeight, alignment: .leading)
                 .animation(.easeInOut(duration: 0.15), value: store.previewState)
 
             actionButtons
@@ -374,233 +407,187 @@ struct AutoEQBrowserView: View {
         .padding(.vertical, 14)
     }
 
+    /// Two lines of secondary text: the longest the status line says, the
+    /// import notice, fits in it, so no message changes its height.
+    private static let statusHeight: CGFloat = 30
+
     private var configurationCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            selectionSummary
-
-            if store.previewWouldAdjust, let disclosure = store.previewCandidates?.disclosure {
-                importAdjustmentNotice(for: disclosure)
-            }
-
-            labeled("Measurement source") { measurementControl }
-            labeled("Target curve") { targetControl }
-
-            if let profile = store.previewProfile {
-                GeometryReader { geometry in
-                    FrequencyResponseView(
-                        filters: profile.filters,
-                        sampleRate: audioEngine.sampleRate,
-                        preamp: profile.preamp,
-                        compact: true,
-                        showsBackground: false
-                    )
-                    .frame(
-                        width: geometry.size.width * FrequencyResponseView.compactWidthFraction,
-                        height: geometry.size.width
-                            * FrequencyResponseView.compactWidthFraction
-                            / FrequencyResponseView.compactAspectRatio
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Labels leading and right-aligned against their pop-ups, the way a
+            // macOS form sets them, so the two choices read as one column. The
+            // model itself is not repeated here: it is the row selected above.
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 8) {
+                GridRow {
+                    formLabel("Measurement source:")
+                    measurementControl
                 }
-                // The outer frame gives the GeometryReader a real height;
-                // the inner graph stays narrower and preserves its own ratio.
-                .frame(height: FrequencyResponseView.compactPreviewHeight)
-                .accessibilityLabel("Preview response curve")
+                GridRow {
+                    formLabel("Target curve:")
+                    targetControl
+                }
             }
 
-            if store.selectedVariant != nil {
-                Text(
-                    store.selectedTargetLabel == AutoEQCatalogParser.defaultTargetLabel
-                        ? "Published correction by AutoEq"
-                        : "Computed by CoreEQ using AutoEq target data"
-                )
-                .font(Theme.Font.secondary)
-                .foregroundStyle(.secondary)
-            }
-
-            if store.selectedVariant != nil && !store.supportsCustomTargets {
-                Text(
-                    "No compatible alternative targets are available for this measurement. Uses AutoEq’s published correction."
-                )
-                .font(Theme.Font.secondary)
-                .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentBlock()
-    }
-
-    /// The notice under the selected model when saving the preview would change
-    /// it: how many values CoreEQ would adjust, and how far that moves the
-    /// response. The full disclosure waits in the confirmation sheet.
-    private func importAdjustmentNotice(for disclosure: ImportDisclosure) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(Theme.Font.secondary)
-                .foregroundStyle(.orange)
-                .accessibilityHidden(true)
-
-            Text(ImportSummary.notice(for: disclosure))
-                .font(Theme.Font.secondary)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.orange.opacity(0.10))
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Saving will adjust this correction")
-    }
-
-    private var selectionSummary: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(store.selectedModelName ?? "No model selected")
-                .font(Theme.Font.heading)
-                .foregroundStyle(
-                    store.selectedModelName == nil
-                        ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
-                )
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Text(selectionDetail)
-                .font(Theme.Font.secondary)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            responsePreview
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var selectionDetail: String {
-        guard let model = store.selectedModel else {
-            return "Pick a model from the list to configure it."
+    /// The graph's slot is always there. Before anything has played it holds a
+    /// flat line; while the next selection loads it keeps the last curve,
+    /// dimmed, rather than collapsing and reopening around every click.
+    private var responsePreview: some View {
+        let isCurrent = store.previewProfile != nil
+        return GeometryReader { geometry in
+            FrequencyResponseView(
+                filters: displayedProfile?.filters ?? [],
+                sampleRate: audioEngine.sampleRate,
+                preamp: displayedProfile?.preamp ?? 0,
+                compact: true,
+                showsBackground: false
+            )
+            .frame(
+                width: geometry.size.width * FrequencyResponseView.compactWidthFraction,
+                height: geometry.size.width
+                    * FrequencyResponseView.compactWidthFraction
+                    / FrequencyResponseView.compactAspectRatio
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        let count = model.variants.count
-        return count == 1 ? "1 measurement" : "\(count) measurements"
+        // The outer frame gives the GeometryReader a real height;
+        // the inner graph stays narrower and preserves its own ratio.
+        .frame(height: FrequencyResponseView.compactPreviewHeight)
+        .opacity(isCurrent ? 1 : 0.4)
+        .animation(.easeInOut(duration: 0.15), value: isCurrent)
+        .accessibilityLabel("Preview response curve")
     }
 
-    private func labeled<Content: View>(
-        _ title: String, @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(Theme.Font.label)
-                .foregroundStyle(.secondary)
-            content()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    private func formLabel(_ title: String) -> some View {
+        Text(title)
+            .font(Theme.Font.body)
+            .gridColumnAlignment(.trailing)
     }
 
     // MARK: - Dropdowns
 
+    /// Native pop-up buttons: each choice is one line, so the `Picker` that
+    /// `PopUpMenuButton` stands in for elsewhere has nothing to get wrong here,
+    /// and it brings the system's own face and check mark.
+    ///
+    /// With one option or none there is nothing to choose, so the value is
+    /// stated as text instead — as the output device is when the Mac has only
+    /// one. The pop-up stays in the layout, hidden, so the row is the same
+    /// height either way and switching model never moves the graph.
     private var measurementControl: some View {
         let variants = store.availableVariants
-        let isEnabled = !variants.isEmpty
-
-        return PopUpMenuButton {
-            measurementMenu()
-        } label: {
-            dropdownLabel(
-                store.selectedVariant?.displayName ?? "Choose a model first",
-                isEnabled: isEnabled
+        return Picker(
+            "Measurement source",
+            selection: Binding(
+                get: { store.selectedVariant },
+                set: { variant in
+                    auditionHeld = false
+                    variant.map(store.selectVariant)
+                }
             )
+        ) {
+            if store.selectedVariant == nil {
+                Text("Choose a model first").tag(AutoEQVariant?.none)
+            }
+            ForEach(variants, id: \.self) { variant in
+                Text(variant.displayName).tag(Optional(variant))
+            }
         }
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.5)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Measurement source")
-        .accessibilityValue(store.selectedVariant?.displayName ?? "None")
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .statedWhenSingle(
+            variants.count <= 1,
+            value: store.selectedVariant?.displayName,
+            placeholder: "Choose a model first",
+            accessibilityLabel: "Measurement source"
+        )
     }
 
     private var targetControl: some View {
-        PopUpMenuButton {
-            let menu = NSMenu()
-            for target in store.availableTargets {
-                let item = ActionMenuItem(title: target.label) { [store] in
-                    store.selectTarget(label: target.label)
+        let targets = store.availableTargets
+        return Picker(
+            "Target curve",
+            selection: Binding(
+                get: { store.selectedTargetLabel },
+                set: { label in
+                    auditionHeld = false
+                    label.map(store.selectTarget(label:))
                 }
-                item.state = target.label == store.selectedTargetLabel ? .on : .off
-                menu.addItem(item)
+            )
+        ) {
+            if store.selectedTargetLabel == nil {
+                Text("Choose a measurement first").tag(String?.none)
             }
-            return menu
-        } label: {
-            dropdownLabel(
-                store.selectedTargetLabel ?? "Choose a measurement first",
-                isEnabled: !store.availableTargets.isEmpty)
+            ForEach(targets) { target in
+                Text(target.label).tag(Optional(target.label))
+            }
         }
-        .disabled(store.availableTargets.isEmpty)
-        .accessibilityLabel("Target curve")
-        .accessibilityValue(store.selectedTargetLabel ?? "None")
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .help("Only targets compatible with this measurement source, rig and form are available.")
-    }
-
-    /// The control's own face: a filled rounded rect, the selected label, and
-    /// the up-down chevron macOS puts on a pop-up button. Drawn rather than a
-    /// `.roundedBorder` so it sits at the same weight as the search field above
-    /// it, which is the same kind of control.
-    private func dropdownLabel(_ title: String, isEnabled: Bool) -> some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(Theme.Font.body)
-                .foregroundStyle(
-                    isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary)
-                )
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Spacer(minLength: 6)
-
-            Image(systemName: "chevron.up.chevron.down")
-                .font(Theme.Font.secondary)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.primary.opacity(0.06))
+        .statedWhenSingle(
+            targets.count <= 1,
+            value: store.selectedTargetLabel,
+            placeholder: "Choose a measurement first",
+            accessibilityLabel: "Target curve"
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(Theme.blockBorder, lineWidth: 1)
-        )
-    }
-
-    private func measurementMenu() -> NSMenu {
-        let menu = NSMenu()
-        for variant in store.availableVariants {
-            let item = ActionMenuItem(title: variant.displayName) { [store] in
-                store.selectVariant(variant)
-            }
-            item.state = variant == store.selectedVariant ? .on : .off
-            menu.addItem(item)
-        }
-        return menu
     }
 
     // MARK: - Status
 
+    /// One line for what the preview is doing, at a fixed height. A correction
+    /// CoreEQ would have to change says so here, in place of "Playing", since
+    /// that is the one thing worth knowing before Import; the full list waits
+    /// in the confirmation sheet.
     @ViewBuilder
     private var statusView: some View {
-        if profileManager.isAuditioning {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Color.accentColor)
-                    .frame(width: 6, height: 6)
-                    .accessibilityHidden(true)
-
-                Text("Playing preview “\(store.previewProfile?.name ?? "preview")”")
+        if auditionHeld && store.previewState == .ready {
+            HStack(spacing: 8) {
+                Text("Last selection, not playing.")
                     .font(Theme.Font.label)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    .foregroundStyle(.secondary)
+
+                Button("Play Preview") { playHeldPreview() }
+                    .controlSize(.small)
+            }
+        } else if profileManager.isAuditioning {
+            if store.previewWouldAdjust, let disclosure = store.previewCandidates?.disclosure {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(Theme.Font.secondary)
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+
+                    Text(ImportSummary.notice(for: disclosure))
+                        .font(Theme.Font.secondary)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+            } else {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
+
+                    Text("Playing preview")
+                        .font(Theme.Font.label)
+                        .foregroundStyle(.secondary)
+                }
             }
         } else {
             switch store.previewState {
+            case .ready:
+                Text("Playing preview")
+                    .font(Theme.Font.label)
+                    .foregroundStyle(.secondary)
             case .idle:
                 Text(
                     store.selectedModelName == nil
@@ -619,10 +606,6 @@ struct AutoEQBrowserView: View {
                     .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
                 }
-            case .ready:
-                Text("Playing preview, \(store.previewProfile?.filters.count ?? 0) filters")
-                    .font(Theme.Font.label)
-                    .foregroundStyle(.secondary)
             case .failed(let message):
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "exclamationmark.triangle")
@@ -651,20 +634,20 @@ struct AutoEQBrowserView: View {
             // catalog cannot help: muted and leading, so it never competes with
             // the actions on the model that is selected. Never disabled — it does
             // not depend on a selection, and it is the fallback in every state.
+            // Kept at full strength: a dimmed title on a push button is how macOS
+            // draws a disabled one, and the leading position is muting enough.
             Button("Import by Hand…") { onImportByHand() }
-                .buttonStyle(.bordered)
-                .foregroundStyle(.secondary)
                 .help("Import from AutoEq by hand")
                 .accessibilityLabel("Import from AutoEq by hand")
 
             Spacer(minLength: 12)
 
             Button("Cancel") { cancel() }
-                .buttonStyle(.bordered)
                 .keyboardShortcut(.cancelAction)
 
+            // The default-action shortcut alone makes it the blue default
+            // button, as in any macOS dialog.
             Button("Import") { saveToPresets() }
-                .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canPreview)
         }
@@ -678,27 +661,26 @@ struct AutoEQBrowserView: View {
     /// and small and tertiary the way a licence note is: present for the record
     /// rather than read.
     private var attributionFooter: some View {
-        HStack(spacing: 4) {
-            Text("Data from")
-            Link("AutoEq", destination: Self.autoEQRepository)
-            Text(attributionCredit)
-        }
-        .font(Theme.Font.secondary)
-        .foregroundStyle(.tertiary)
-        .tint(.secondary)
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.horizontal, 16)
-        .padding(.top, 6)
-        .padding(.bottom, 8)
+        Text(attributionCredit)
+            .font(Theme.Font.secondary)
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+            .padding(.bottom, 8)
     }
 
     /// The line's licence and, once a measurement is chosen, who took it.
     private var attributionCredit: String {
-        var credit = "AutoEq · MIT, Jaakko Pasanen"
+        var credit = "Data from AutoEq · MIT, Jaakko Pasanen"
         if let source = store.selectedVariant?.sourceDisplayName {
             credit += " · measurement by \(source)"
+        }
+        if let target = store.selectedTargetLabel, target != AutoEQCatalogParser.defaultTargetLabel
+        {
+            credit += " · computed by CoreEQ"
         }
         return credit
     }
@@ -711,7 +693,7 @@ struct AutoEQBrowserView: View {
         let query = store.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if query.isEmpty {
-            return "Showing \(shown.formatted()) of \(total.formatted()) models"
+            return "\(total.formatted()) models"
         }
         if shown == 0 {
             return "No matches"
@@ -743,6 +725,13 @@ struct AutoEQBrowserView: View {
     private func selectionDidChange() {
         stopAuditionIfNeeded()
         store.schedulePreview(sampleRate: audioEngine.sampleRate)
+    }
+
+    /// Starts the preview the sheet reopened with, when it is ready.
+    private func playHeldPreview() {
+        guard auditionHeld, let profile = store.previewProfile else { return }
+        auditionHeld = false
+        profileManager.beginAudition(profile)
     }
 
     private func cancel() {
@@ -785,4 +774,36 @@ final class AutoEQBrowserRoute: ObservableObject {
     func requestBrowser() { request &+= 1 }
 
     private init() {}
+}
+
+/// How far a menu-style pop-up button sets its title in from its left edge,
+/// measured on macOS 27. Text standing in for a pop-up is indented by the same
+/// amount, so values in a form column start at one x whichever is shown.
+private let popUpTitleInset: CGFloat = 12
+
+extension View {
+    /// Shows a value as plain text in place of this control when there is
+    /// nothing to choose between. The control stays in the layout, hidden, so
+    /// the row keeps the height it has with a choice.
+    fileprivate func statedWhenSingle(
+        _ isSingle: Bool, value: String?, placeholder: String, accessibilityLabel: String
+    ) -> some View {
+        opacity(isSingle ? 0 : 1)
+            .allowsHitTesting(!isSingle)
+            .accessibilityHidden(isSingle)
+            .overlay(alignment: .leading) {
+                if isSingle {
+                    Text(value ?? placeholder)
+                        .font(Theme.Font.body)
+                        .padding(.leading, popUpTitleInset)
+                        .foregroundStyle(
+                            value == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
+                        )
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .accessibilityLabel(accessibilityLabel)
+                        .accessibilityValue(value ?? "None")
+                }
+            }
+    }
 }

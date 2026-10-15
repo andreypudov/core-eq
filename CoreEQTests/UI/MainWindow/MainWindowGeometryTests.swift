@@ -18,7 +18,7 @@ struct MainWindowGeometryTests {
     /// The window arrives fully on screen rather than with its edges past the
     /// corner, so a display that cannot hold the preferred size gets less.
     @Test func aSmallerScreenIsKeptClearOfItsEdges() {
-        let visible = CGSize(width: 1_280, height: 720)
+        let visible = CGSize(width: 1_180, height: 880)
         let size = MainWindowGeometry.openingSize(visibleFrame: visible)
 
         #expect(size.width <= visible.width - MainWindowGeometry.screenInset)
@@ -40,10 +40,10 @@ struct MainWindowGeometryTests {
 
     /// Each axis is capped on its own: a wide, short screen keeps its width.
     @Test func eachAxisIsCappedIndependently() {
-        let size = MainWindowGeometry.openingSize(visibleFrame: CGSize(width: 2_560, height: 700))
+        let size = MainWindowGeometry.openingSize(visibleFrame: CGSize(width: 2_560, height: 860))
 
         #expect(size.width == MainWindowGeometry.preferred.width)
-        #expect(size.height == 620)
+        #expect(size.height == 780)
     }
 
     /// AppKit genuinely reports no main screen — during login, or with the lid

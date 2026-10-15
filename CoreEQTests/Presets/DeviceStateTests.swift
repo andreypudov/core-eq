@@ -489,12 +489,13 @@ import Testing
         #expect(storedState()?.filters == nil, "back to the preset means nothing to remember")
     }
 
-    @Test func profilesListsBuiltInsBeforeUserPresets() {
+    /// The menu lists this order, so it has to match the sidebar's.
+    @Test func profilesListsUserPresetsBeforeBuiltIns() {
         let manager = makeManager()
         manager.addProfile(named: "Mine")
 
         #expect(manager.profiles.count == BuiltInProfiles.all.count + 1)
-        #expect(manager.profiles.last?.name == "Mine")
-        #expect(manager.profiles.first?.name == BuiltInProfiles.all[0].name)
+        #expect(manager.profiles.first?.name == "Mine")
+        #expect(manager.profiles.last?.name == BuiltInProfiles.all.last?.name)
     }
 }
