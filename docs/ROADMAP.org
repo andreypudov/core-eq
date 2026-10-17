@@ -10,8 +10,9 @@ shape of the filter chain the later releases build on is in [[file:ARCHITECTURE.
 
 The ordering rule is simple. A defect that makes the app produce no sound
 outranks the most-asked-for feature, and both outrank a feature that
-widens what the app is. So: 1.8 fixes, 1.9 opens the preset format, 1.10 opens
-the scope from one chain per device to one chain per application.
+widens what the app is. So: 1.8 fixes, 1.9 opens the preset format, and 1.10
+opens the scope only as far as leaving apps out. One chain per application is
+under *Later*, until it is asked for on its own.
 
 Dates are deliberately absent. This is a project I wrote for myself and put on
 GitHub because it turned out to be useful to other people; the order is a
@@ -144,72 +145,32 @@ What is left is the wake case:
   self-exclusion error is a tap that could not leave CoreEQ out, and an echo
   with neither points somewhere not yet looked at.
 
-* 1.10 — Open the scope: per-application EQ, volume, and exclusion
+* Later — worth doing, not yet scheduled
 
-Asked for repeatedly, on Reddit and as GitHub issues, and someone also asked
-whether the process-tap API supports per-app taps at all. One request puts the
-appeal well: per-app volume “would really compliment the eq feature”.
+** Per-application EQ and volume
 
-It does. =CATapDescription= takes a process list; CoreEQ only uses the
-global-minus-itself variant because I wanted one curve over everything. So this
-is not an audio-path question. It is a state-model question — one chain per
-process rather than one chain per device — and a UI question, which is the
-larger half.
+Asked for repeatedly, on Reddit and as GitHub issues; one request puts the
+appeal well: per-app volume “would really compliment the eq feature”. Most of
+what was asked for under that heading was really exclusion — leave this app
+alone — which shipped in 1.10 (see [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]]) without any of what follows.
 
-What has to be decided:
+A curve per app is a bigger change than this document once said. It was
+described here as a state-model and UI question, not an audio-path one, because
+=CATapDescription= takes a process list. But one tap delivers its processes
+already mixed, so a chain per app means a tap per app, each filtered on its own
+and summed in the render callback: more Core Audio objects to keep consistent
+through device changes, sleep and launches, which is where 1.8's defects lived.
+
+What would have to be decided:
 
 - How a per-app chain relates to the global one. Replace, or stack on top.
-- What happens to a chain when its application quits and comes back with a new
-  pid, and how profiles bind to an application rather than a process.
+- How profiles bind to an application rather than a process. On macOS 26 the
+  tap's bundle identifiers and process restore answer this, as they do for
+  exclusion.
 - Whether per-app implies a mixer view, and how that stays an app someone opens
   to make their music sound better rather than becoming an audio workstation.
 
-Per-app *volume* is the easier half and rides along: it is a gain stage on a
-chain that already exists.
-
-*Exclusion is the easier half still, and it is asked for on its own.* Issue #20
-wants an exclusion list, from a musician who needs Studio One, Logic Pro and the
-rest of a mastering chain left alone while everything else stays corrected.
-
-This is the cheapest slice of the section, because it needs none of the state
-model above: there is no per-app chain to relate to the global one, nothing to
-rebind when a pid changes, and no mixer view to design. There is a set of
-processes, and =CATapDescription= already takes one. The list is already a list:
-=AudioEngine= builds an =excluded: [AudioObjectID]= array, puts its own process
-in it for the feedback reason under *Echo and doubled audio*, and hands it to
-=CATapDescription(__excludingProcesses:)=. Adding user-chosen processes appends
-to an array that already exists rather than changing the audio path, so this can
-ship ahead of the rest of 1.10.
-
-It is also worth more than the flat curve the request asks for. A flat profile
-does pass audio through untouched — every band at 0 dB is identity, so the chain
-is skipped — but the audio still enters the tap and comes back. Excluding the
-process keeps CoreEQ out of the path entirely, which is what *Bit-perfect
-passthrough* under *Not planned* calls the honest maximum this design can offer.
-Per-app exclusion is that maximum, applied per app, and it is the one form of
-the bit-perfect question that has a real answer here.
-
-Two things to decide, both smaller than the questions above:
-
-- Whether the list binds to a bundle identifier or to a process. A bundle
-  identifier survives quitting and relaunching, which is what the request means;
-  a pid does not. The macOS 26 SDK answers this directly: =CATapDescription=
-  gained a =bundleIDs= array, and a =processRestoreEnabled= flag that saves
-  tapped processes by bundle ID when they exit and restores them when they start
-  again — precisely the rebinding problem, handled by the system. Both are
-  =API_AVAILABLE(macos(26.0))= against a 14.2 floor, so the choice is to write
-  the pid path for 14.2–25 and gate =bundleIDs= as an improvement on 26+, or to
-  start the feature at 26. Worth settling before any of it is built: it is the
-  difference between one implementation and two.
-- Whether an excluded app is visible as excluded outside the settings pane, so
-  that “CoreEQ is doing nothing to this app” is shown rather than remembered.
-
-Not a cure for doubled screen recordings, which this section once hoped it
-might be. That was measured in 1.9 and is not a loop through CoreEQ's tap: the
-recorder hears the original and CoreEQ's copy, and excluding the recorder from
-CoreEQ changes neither. 1.9 answers it by stepping aside while a recording runs.
-
-* Later — worth doing, not yet scheduled
+Per-app *volume* rides along: a gain stage on a chain that would then exist.
 
 ** Rendering through Aggregate and Multi-Output Devices
 
@@ -263,9 +224,10 @@ Stated here so the answer is written down once.
 
 - *Bit-perfect passthrough.* A process tap sits after the system mixer by
   definition, so the honest maximum CoreEQ can offer is getting out of the path
-  entirely, which bypass already does. Real bit-perfect means hog mode and
-  exclusive device access, which is a different application. Better to not
-  claim it than to half-claim it.
+  entirely, which bypass already does — and, since 1.10, per app, by leaving it
+  out of the tap. Real bit-perfect means hog mode and exclusive device access,
+  which is a different application. Better to not claim it than to half-claim
+  it.
 - *Global volume control.* macOS already has one. CoreEQ adjusts tone.
 - *HRTF.* Raised once with no detail. Large, and a different product from an
   equalizer.

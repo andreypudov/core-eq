@@ -146,4 +146,46 @@ import Testing
         #expect(SettingsStore(defaults: defaults).pausesWhileRecording == false)
     }
 
+    /// Nothing is excluded until the user excludes it.
+    @Test func noAppIsExcludedByDefault() {
+        #expect(settings.excludedBundleIDs.isEmpty)
+    }
+
+    @Test func excludedAppsSurviveARelaunchInOrder() {
+        settings.excludedBundleIDs = ["com.presonus.studioone6", "com.apple.logic10"]
+        #expect(
+            SettingsStore(defaults: defaults).excludedBundleIDs
+                == ["com.presonus.studioone6", "com.apple.logic10"])
+    }
+
+    /// Emptying the list removes the key rather than storing an empty array.
+    @Test func removingTheLastExcludedAppClearsTheSetting() {
+        settings.excludedBundleIDs = ["com.apple.logic10"]
+        settings.excludedBundleIDs = []
+        #expect(defaults.object(forKey: "excludedBundleIDs") == nil)
+    }
+
+    /// A switched-off app stays listed, without being excluded.
+    @Test func theExclusionListKeepsAppsThatAreSwitchedOff() {
+        settings.exclusionListBundleIDs = ["com.apple.logic10", "com.apple.Music"]
+        settings.excludedBundleIDs = ["com.apple.Music"]
+        let reopened = SettingsStore(defaults: defaults)
+        #expect(reopened.exclusionListBundleIDs == ["com.apple.logic10", "com.apple.Music"])
+        #expect(reopened.excludedBundleIDs == ["com.apple.Music"])
+    }
+
+    /// An excluded app missing from the list is still shown, so it can always
+    /// be switched back on from the pane.
+    @Test func anExcludedAppIsAlwaysListed() {
+        settings.exclusionListBundleIDs = ["com.apple.logic10"]
+        settings.excludedBundleIDs = ["com.apple.Music"]
+        #expect(settings.exclusionListBundleIDs == ["com.apple.logic10", "com.apple.Music"])
+    }
+
+    @Test func emptyingTheExclusionListClearsTheSetting() {
+        settings.exclusionListBundleIDs = ["com.apple.logic10"]
+        settings.exclusionListBundleIDs = []
+        #expect(defaults.object(forKey: "exclusionListBundleIDs") == nil)
+    }
+
 }

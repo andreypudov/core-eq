@@ -31,6 +31,8 @@ installed into the system and nothing left behind when CoreEQ is not running.
 - *Menu bar control*, with Quick EQ bass, mid, and treble over any preset.
 - *Recording-aware*: CoreEQ steps aside while a screen recording captures
   system audio, so the recording does not come out doubled.
+- *Apps left alone*: exclude a DAW or any other app, and its sound goes straight
+  to the output, untouched (macOS 26 or later).
 
 Every feature is described in the [[file:docs/USER_GUIDE.org][user guide]].
 

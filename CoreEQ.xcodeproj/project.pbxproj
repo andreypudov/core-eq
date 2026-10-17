@@ -53,6 +53,7 @@
 				UI/PowerToggleStyle.swift,
 				UI/Settings/AboutSettingsView.swift,
 				UI/Settings/DiagnosticsSettingsView.swift,
+				UI/Settings/ExclusionsSettingsView.swift,
 				UI/Settings/GeneralSettingsView.swift,
 				UI/Settings/SettingsOpener.swift,
 				UI/Settings/SettingsView.swift,

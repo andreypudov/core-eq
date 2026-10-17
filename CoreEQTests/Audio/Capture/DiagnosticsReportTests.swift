@@ -106,6 +106,21 @@ struct DiagnosticsReportTests {
         #expect(text(engine: engine).contains("audio is left alone"))
     }
 
+    /// The first thing to check when one app is reported as unequalized.
+    @Test func excludedAppsAreListed() {
+        var engine = self.engine()
+        engine.excludedApps = ["com.apple.logic10", "com.presonus.studioone6"]
+
+        #expect(
+            text(engine: engine).contains(
+                "excluded apps:   com.apple.logic10, com.presonus.studioone6"))
+    }
+
+    /// Nothing excluded is the common case, and adds nothing to the report.
+    @Test func noExcludedAppsAddNoLine() {
+        #expect(!text(engine: engine()).contains("excluded apps"))
+    }
+
     @Test func aProvenTapReportsThatItIsMuting() {
         var engine = self.engine()
         engine.isMuting = true

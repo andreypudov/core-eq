@@ -343,8 +343,14 @@ enum AudioDevices {
     /// CoreEQ launched beside it read its silence as a refused permission. For
     /// the permission verdict that is the right trade, because leaving one out
     /// only makes the verdict wait, never wrong.
+    ///
+    /// `ignoringApps` leaves out apps the tap was told to leave alone, by
+    /// lowercased bundle identifier. Their sound never reaches the tap by
+    /// design, so counting it as evidence called a working tap broken: with only
+    /// an excluded app playing, CoreEQ said it was not capturing audio.
     static func isAnyProcessPlayingOutput(
-        excluding excluded: AudioObjectID, ignoringCapturing: Bool = false
+        excluding excluded: AudioObjectID, ignoringCapturing: Bool = false,
+        ignoringApps: Set<String> = []
     ) -> Bool {
         var listAddress = address(kAudioHardwarePropertyProcessObjectList)
         var dataSize: UInt32 = 0
@@ -376,6 +382,18 @@ enum AudioDevices {
                 size = UInt32(MemoryLayout<UInt32>.size)
                 if AudioObjectGetPropertyData(process, &inputAddress, 0, nil, &size, &isCapturing)
                     == noErr, isCapturing != 0
+                {
+                    continue
+                }
+            }
+            if !ignoringApps.isEmpty {
+                var bundleAddress = address(kAudioProcessPropertyBundleID)
+                var bundleID: Unmanaged<CFString>?
+                size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+                if AudioObjectGetPropertyData(process, &bundleAddress, 0, nil, &size, &bundleID)
+                    == noErr,
+                    let id = bundleID?.takeRetainedValue() as String?,
+                    ignoringApps.contains(id.lowercased())
                 {
                     continue
                 }

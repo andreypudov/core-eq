@@ -38,6 +38,11 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(SettingsTab.general)
 
+            ExclusionsSettingsView()
+                .frame(width: Self.size.width, height: Self.size.height, alignment: .top)
+                .tabItem { Label("Exclusions", systemImage: "nosign") }
+                .tag(SettingsTab.exclusions)
+
             DiagnosticsSettingsView()
                 .frame(width: Self.size.width, height: Self.size.height, alignment: .top)
                 .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
