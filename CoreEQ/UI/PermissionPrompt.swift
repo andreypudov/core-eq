@@ -25,9 +25,17 @@ struct PermissionPrompt: Equatable {
 
         var title: String {
             switch self {
-            case .allow: return "Allow…"
-            case .openSystemSettings: return "Open System Settings…"
-            case .relaunch: return "Relaunch CoreEQ"
+            case .allow:
+                return String(
+                    localized: "Allow…",
+                    comment: "Button: asks macOS for the audio permission, which shows its prompt")
+            case .openSystemSettings:
+                return String(
+                    localized: "Open System Settings",
+                    comment: "Button: opens Privacy & Security in System Settings")
+            case .relaunch:
+                return String(
+                    localized: "Relaunch CoreEQ", comment: "Button: quits and reopens CoreEQ")
             }
         }
     }
@@ -53,33 +61,48 @@ struct PermissionPrompt: Equatable {
         case .granted, .unknown:
             return nil
         case .notDetermined:
-            title = "CoreEQ needs to reach the sound to change it"
+            title = String(
+                localized: "CoreEQ needs to reach the sound to change it",
+                comment: "Permission heading, before macOS has asked")
             explanation = Self.whatItIsFor
             primary = .allow
             secondary = nil
-            menuTitle = "Allow audio access"
+            menuTitle = String(
+                localized: "Allow Audio Access",
+                comment: "Menu bar extra row: opens Settings to give the audio permission")
         case .denied:
-            title = "CoreEQ is not allowed to process audio"
+            title = String(
+                localized: "CoreEQ isn’t allowed to reach the sound",
+                comment: "Permission heading, after the permission was refused")
             // Relaunching is part of the instruction, not an afterthought: macOS
             // settles the permission once per process, so switching it on does
             // nothing for the CoreEQ that is running.
             explanation =
                 canAskMacOS
-                ? "Turn on CoreEQ under Screen & System Audio Recording, then choose Quit & "
-                    + "Reopen when macOS asks."
-                : "Turn on CoreEQ under Screen & System Audio Recording. If it is already on, "
-                    + "turn it off and on again — an update gives CoreEQ a new signature and "
-                    + "macOS keeps the old entry. Then relaunch CoreEQ."
+                ? String(
+                    localized:
+                        "Turn on CoreEQ under Screen & System Audio Recording, then choose Quit & Reopen when macOS asks.",
+                    comment:
+                        "Permission instructions. “Quit & Reopen” is the button macOS shows; use its translation."
+                )
+                : String(
+                    localized:
+                        "Turn on CoreEQ under Screen & System Audio Recording. If it’s already on, turn it off and on again: an update gives CoreEQ a new signature, and macOS keeps the old entry. Then relaunch CoreEQ.",
+                    comment: "Permission instructions, when macOS can’t say whether it was refused")
             primary = .openSystemSettings
             secondary = .relaunch
-            menuTitle = "Audio permission needed"
+            menuTitle = String(
+                localized: "Audio Permission Needed",
+                comment: "Menu bar extra row: the permission was refused; opens Settings")
         }
     }
 
     /// What the permission is for, said before macOS asks rather than after.
     /// "System Audio Recording" sounds far broader than what an equalizer does.
-    static let whatItIsFor =
-        "An equalizer has to reach the sound to change it. CoreEQ reads audio on its way to "
-        + "your speakers, adjusts it, and plays it straight back. Nothing is recorded, stored, "
-        + "or sent anywhere, and quitting CoreEQ hands the audio back immediately."
+    static var whatItIsFor: String {
+        String(
+            localized:
+                "An equalizer has to reach the sound to change it. CoreEQ reads audio on its way to your speakers, adjusts it, and plays it straight back. Nothing is recorded, stored, or sent anywhere, and quitting CoreEQ hands the audio back immediately.",
+            comment: "What the audio permission is for, shown before macOS asks")
+    }
 }

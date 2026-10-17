@@ -10,9 +10,12 @@ final class QuickEQBodyView: NSView {
         case bass, mid, treble
         var title: String {
             switch self {
-            case .bass: return "Bass"
-            case .mid: return "Mid"
-            case .treble: return "Treble"
+            case .bass:
+                return String(localized: "Bass", comment: "Quick EQ slider: low frequencies")
+            case .mid:
+                return String(localized: "Mid", comment: "Quick EQ slider: middle frequencies")
+            case .treble:
+                return String(localized: "Treble", comment: "Quick EQ slider: high frequencies")
             }
         }
     }
@@ -88,7 +91,9 @@ final class QuickEQBodyView: NSView {
         slider.onDoubleClick = { [weak self] in self?.reset(axis) }
         slider.translatesAutoresizingMaskIntoConstraints = false
         slider.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        slider.setAccessibilityLabel("\(axis.title) gain")
+        // The axis alone: the slider's value is the gain, and VoiceOver says
+        // that it is a slider.
+        slider.setAccessibilityLabel(axis.title)
         sliders[axis] = slider
 
         // No numeric readout: Control Center sliders never show values, and the

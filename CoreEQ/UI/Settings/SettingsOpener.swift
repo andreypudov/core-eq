@@ -61,7 +61,7 @@ final class SettingsOpener {
         AppActivation.activate()
 
         guard let openSettings else {
-            logger.error("Settings action unavailable; the capture view never appeared.")
+            logger.error("Settings action unavailable; the capture view never appeared")
             return
         }
         openSettings()

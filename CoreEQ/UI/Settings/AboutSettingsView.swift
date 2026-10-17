@@ -33,8 +33,8 @@ struct AboutSettingsView: View {
                 .frame(maxWidth: 300)
 
             HStack(spacing: 14) {
-                Link("Source code", destination: Self.repository)
-                Link("Release notes", destination: Self.releases)
+                Link("Source Code", destination: Self.repository)
+                Link("Release Notes", destination: Self.releases)
             }
             .font(Theme.Font.label)
 
@@ -51,7 +51,8 @@ struct AboutSettingsView: View {
     private var versionLine: String {
         let version =
             Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        return "Version \(version ?? "—")"
+        return String(
+            localized: "Version \(version ?? "—")", comment: "About: the app’s version number")
     }
 
     private var copyright: String {

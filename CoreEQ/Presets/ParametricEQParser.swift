@@ -26,17 +26,24 @@ enum ParametricEQParser {
         var errorDescription: String? {
             switch self {
             case .emptyContent:
-                return "The preset content is empty."
+                return String(localized: "The preset is empty.", comment: "Import error")
             case .noValidFiltersFound:
-                return "No valid filters were found in the preset text."
+                return String(
+                    localized: "The preset doesn’t contain any filters CoreEQ can read.",
+                    comment: "Import error")
             case .unsupportedFilterDeclaration:
-                return "The preset contains an unsupported filter declaration."
+                return String(
+                    localized: "The preset contains a filter type CoreEQ doesn’t support.",
+                    comment: "Import error")
             case .damagedCoreEQFile:
-                return "The CoreEQ preset is damaged and cannot be read."
+                return String(
+                    localized: "The CoreEQ preset is damaged and can’t be read.",
+                    comment: "Import error")
             case .fileTooLarge:
-                return "The file is too large to be a preset."
+                return String(
+                    localized: "The file is too large to be a preset.", comment: "Import error")
             case .unreadableText:
-                return "The file is not a text preset."
+                return String(localized: "The file isn’t a text preset.", comment: "Import error")
             }
         }
     }
@@ -97,7 +104,7 @@ enum ParametricEQParser {
     /// the disclosure reflects the device the preset would play through.
     static func parse(
         text: String,
-        defaultName: String = "Imported Preset",
+        defaultName: String = ProfileManager.untitledImportName,
         sampleRate: Double = 44_100
     ) throws -> ParsedPreset {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -381,7 +388,10 @@ enum ParametricEQParser {
                 adjustments.append(
                     ImportAdjustment(
                         kind: .droppedFilter, filter: identity, original: nil, adjusted: nil,
-                        limit: "\(BuiltInProfiles.maxFreeFilters) free filters"))
+                        limit: String(
+                            localized: "\(BuiltInProfiles.maxFreeFilters) parametric bands",
+                            bundle: .coreEQ,
+                            comment: "Import limit: how many parametric bands CoreEQ holds")))
                 continue
             }
             switch placement {
@@ -393,7 +403,10 @@ enum ParametricEQParser {
                 adjustments.append(
                     ImportAdjustment(
                         kind: .keptBeyondBandRange, filter: identity, original: filter.gain,
-                        adjusted: filter.gain, limit: "±12 dB graphic bands"))
+                        adjusted: filter.gain,
+                        limit: String(
+                            localized: "±12 dB graphic range",
+                            comment: "Import limit: the graphic sliders’ range")))
             case .free:
                 if abs(filter.gain) > BuiltInProfiles.filterGainRange.upperBound {
                     adjustments.append(
@@ -425,7 +438,7 @@ enum ParametricEQParser {
                 ImportAdjustment(
                     kind: .preamp, filter: nil, original: rawPreamp,
                     adjusted: rawPreamp.clamped(to: BuiltInProfiles.preampRange),
-                    limit: "−12…+12 dB"))
+                    limit: "±12 dB"))
         }
         return adjustments
     }

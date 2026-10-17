@@ -15,9 +15,12 @@ enum AutoEQCatalogProgress: Sendable, Equatable {
 
     var message: String {
         switch self {
-        case .checkingRevision: return "Checking for AutoEq updates…"
-        case .downloading: return "Downloading the AutoEq catalog…"
-        case .preparing: return "Preparing the AutoEq catalog…"
+        case .checkingRevision:
+            return String(localized: "Checking for AutoEq updates…", comment: "AutoEq progress")
+        case .downloading:
+            return String(localized: "Downloading the AutoEq catalog…", comment: "AutoEq progress")
+        case .preparing:
+            return String(localized: "Preparing the AutoEq catalog…", comment: "AutoEq progress")
         }
     }
 }

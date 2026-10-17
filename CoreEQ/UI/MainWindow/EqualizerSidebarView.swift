@@ -92,7 +92,7 @@ struct EqualizerSidebarView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         if matches.user.isEmpty && matches.builtIn.isEmpty {
-                            Text("No presets match “\(search)”.")
+                            Text("No Results for “\(search)”")
                                 .font(Theme.Font.label)
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 10)
@@ -107,7 +107,7 @@ struct EqualizerSidebarView: View {
                         }
 
                         if !matches.builtIn.isEmpty {
-                            caption("Built-in")
+                            caption("Built-In")
                                 .padding(.top, matches.user.isEmpty ? 0 : 12)
                             ForEach(matches.builtIn) { presetRow($0) }
                         }
@@ -144,7 +144,7 @@ struct EqualizerSidebarView: View {
             Text("You can’t undo this action.")
         }
         .alert(
-            "Import Failed",
+            "Couldn’t Import Preset",
             isPresented: Binding(
                 get: { importErrorMessage != nil },
                 set: { if !$0 { importErrorMessage = nil } }
@@ -170,7 +170,7 @@ struct EqualizerSidebarView: View {
             }
         }
         .alert(
-            "Export Failed",
+            "Couldn’t Export Preset",
             isPresented: Binding(
                 get: { exportErrorMessage != nil }, set: { if !$0 { exportErrorMessage = nil } })
         ) {
@@ -333,8 +333,11 @@ struct EqualizerSidebarView: View {
         profileManager.profiles(matching: search)
     }
 
-    private func caption(_ text: String) -> some View {
-        Text(text.uppercased())
+    private func caption(_ text: LocalizedStringKey) -> some View {
+        // Capitals by the text system, which knows the language's own rules,
+        // rather than by uppercasing a string.
+        Text(text)
+            .textCase(.uppercase)
             .font(Theme.Font.value)
             .kerning(0.6)
             .foregroundStyle(.secondary)
@@ -354,7 +357,7 @@ struct EqualizerSidebarView: View {
 
         return HStack(spacing: 6) {
             if isRenaming {
-                TextField("Preset Name", text: $renameText)
+                TextField("Preset name", text: $renameText)
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.small)
                     .focused($renameFieldFocused)
@@ -416,7 +419,12 @@ struct EqualizerSidebarView: View {
         .id(profile.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(profile.name)
-        .accessibilityValue(isSelected && profileManager.isModified ? "Edited" : "")
+        .accessibilityValue(
+            isSelected && profileManager.isModified
+                ? String(
+                    localized: "Edited", comment: "Preset row, for VoiceOver: has unsaved changes")
+                : ""
+        )
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
         // What a built-in is for, on hover. A user's own preset has no line: its
         // name is the only description it was given.
@@ -446,7 +454,7 @@ struct EqualizerSidebarView: View {
         let isEditable = profileManager.canEditProfile(named: name)
         let isActive = name == profileManager.activeProfileName
 
-        Button("Rename…") { profileManager.beginRename(of: name) }
+        Button("Rename") { profileManager.beginRename(of: name) }
             .disabled(!isEditable)
 
         Button("Duplicate") { profileManager.duplicateProfile(named: name) }
@@ -491,8 +499,10 @@ struct EqualizerSidebarView: View {
 
     private func showImportDialog() {
         let panel = NSOpenPanel()
-        panel.title = "Import Preset"
-        panel.message = "Choose an EqualizerAPO (.txt) or CoreEQ (.coreeq, .json) preset file"
+        panel.title = String(localized: "Import Preset", comment: "Open panel title")
+        panel.message = String(
+            localized: "Choose an EqualizerAPO (.txt) or CoreEQ (.coreeq, .json) preset file.",
+            comment: "Open panel message")
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -539,7 +549,7 @@ struct EqualizerSidebarView: View {
         }
 
         let panel = NSSavePanel()
-        panel.title = "Export Preset"
+        panel.title = String(localized: "Export Preset", comment: "Save panel title")
         panel.nameFieldStringValue = filename
         panel.allowedContentTypes = allowedTypes
         panel.allowsOtherFileTypes = true
@@ -549,7 +559,7 @@ struct EqualizerSidebarView: View {
             do {
                 try content.write(to: url, atomically: true, encoding: .utf8)
             } catch {
-                exportErrorMessage = "Failed to export preset: \(error.localizedDescription)"
+                exportErrorMessage = error.localizedDescription
             }
         }
     }
@@ -641,7 +651,9 @@ struct EqualizerSidebarView: View {
 
     private func previewClipboard() {
         guard let text = NSPasteboard.general.string(forType: .string) else {
-            importErrorMessage = "The clipboard holds no preset text."
+            importErrorMessage = String(
+                localized: "The clipboard doesn’t contain a preset.",
+                comment: "Paste Preset error message")
             return
         }
         previewText(text)
@@ -682,7 +694,7 @@ struct EqualizerSidebarView: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .accessibilityLabel("Add Preset")
-            .help("New or imported preset")
+            .help("Create or import a preset")
 
             Spacer(minLength: 0)
 

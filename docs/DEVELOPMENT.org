@@ -55,6 +55,7 @@ toolchain if =xcode-select= points at the Command Line Tools):
 | =make test=    | Run the =CoreEQTests= unit suite                       |
 | =make format=  | Apply the house style to every Swift file              |
 | =make lint=    | Report style violations without changing anything      |
+| =make strings= | Build, then merge new interface text into the catalog  |
 | =make sign=    | Build, then re-sign with =SIGN_IDENTITY= when it is set |
 | =make install= | Sign and install to =/Applications=                    |
 | =make release= | Sign and zip to =dist/CoreEQ-<version>.zip= (=ditto=)  |
@@ -457,6 +458,19 @@ the indentation and line-length settings that =.swift-format= already holds, fre
 to drift out of step with it. It earns its place the day someone edits this
 project in VS Code or Vim, and not before.
 
+* Interface text
+
+Every string a person sees lives in the String Catalog,
+=CoreEQ/Resources/Localizable.xcstrings=, and is written to the rules in
+[[file:STRINGS.org][STRINGS.org]], which follow Apple's own style. SwiftUI literals reach the
+catalog by themselves; anything else is =String(localized:comment:)=. After
+changing a string, run =make strings= and commit the catalog with the code:
+=xcodebuild= extracts strings but, unlike Xcode, never writes them back.
+
+Plural strings pass =bundle: .coreEQ=. The tests build the same catalog into
+their own bundle, which is why the test target has a Resources phase and
+excludes every other resource.
+
 * Design tokens
 
 Every font in the app comes from =Theme.Font=, and every colour from
@@ -605,11 +619,14 @@ CoreEQ/
     Array+SafeIndex.swift   Bounds-checked element access
     Color+CoreEQ.swift      Accent shorthand
     NSFont+Bold.swift       Bold variant for the AppKit menu labels
+    Bundle+CoreEQ.swift     The bundle the String Catalog is built into
   Resources/
     AppIcon.icns            Generated app icon (make icons)
     AppIcon.icon/           Icon Composer document (macOS 26+ app icon)
     MenuBarIconTemplate.png (+@2x) Generated menu bar template (make icons)
     MenuBarIconSlashTemplate.png (+@2x) The same mark, struck through, for off
+    Localizable.xcstrings   Every interface string (make strings)
+    InfoPlist.xcstrings     The permission reason macOS shows, and the copyright
 #+end_example
 
 *What =Audio/Capture/= is for.* Everything under it is pure: it decides or

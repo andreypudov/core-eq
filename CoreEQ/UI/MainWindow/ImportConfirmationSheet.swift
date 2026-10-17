@@ -73,16 +73,15 @@ struct ImportConfirmationSheet: View {
     private var disclosureBody: some View {
         VStack(alignment: .leading, spacing: 18) {
             if !losses.isEmpty {
-                adjustmentList(title: "CoreEQ will change these", adjustments: losses)
+                adjustmentList(title: "Changes CoreEQ Will Make", adjustments: losses)
             }
 
             if !kept.isEmpty {
                 adjustmentList(
-                    title: "Kept beyond the graphic range",
+                    title: "Kept Beyond the Graphic Range",
                     adjustments: kept,
                     explainer:
-                        "These are kept exactly, as free filters above the ±12 dB sliders. "
-                        + "You can clip their gains to ±12 dB instead."
+                        "These are kept exactly, as parametric bands beyond the sliders’ ±12 dB range. You can clip their gains to ±12 dB instead."
                 )
             }
 
@@ -123,9 +122,9 @@ struct ImportConfirmationSheet: View {
     // MARK: - Adjustments
 
     private func adjustmentList(
-        title: String,
+        title: LocalizedStringKey,
         adjustments: [ImportAdjustment],
-        explainer: String? = nil
+        explainer: LocalizedStringKey? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
@@ -168,7 +167,7 @@ struct ImportConfirmationSheet: View {
                 Text(ImportSummary.filterName(adjustment.filter))
                     .font(Theme.Font.body)
 
-                Text("\(ImportSummary.change(adjustment)) · \(adjustment.limit)")
+                Text(verbatim: "\(ImportSummary.change(adjustment)) · \(adjustment.limit)")
                     .font(Theme.Font.value)
                     .foregroundStyle(.secondary)
             }
@@ -206,16 +205,22 @@ struct ImportConfirmationSheet: View {
 
     private var impactSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("How far it moves the response")
+            Text("Effect on the Response")
                 .font(Theme.Font.labelEmphasized)
 
-            impactRow(label: "Import", impact: disclosure.impact)
+            impactRow(
+                label: String(localized: "Import", comment: "Import sheet: the import’s effect"),
+                impact: disclosure.impact)
 
             if preview.offersClipChoice {
                 // `clipImpact` measures exact-to-clipped, the extra move that
                 // choosing to clip adds on top of the import — not the clipped
                 // result's total distance from what was written.
-                impactRow(label: "Extra change from clipping", impact: disclosure.clipImpact)
+                impactRow(
+                    label: String(
+                        localized: "Extra change from clipping",
+                        comment: "Import sheet: what clipping to ±12 dB adds to the effect"),
+                    impact: disclosure.clipImpact)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -236,7 +241,10 @@ struct ImportConfirmationSheet: View {
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(summary)")
+        .accessibilityLabel(
+            String(
+                localized: "\(label): \(summary)",
+                comment: "Import sheet effect row, for VoiceOver: its label and the effect"))
     }
 
     // MARK: - Actions
@@ -251,7 +259,7 @@ struct ImportConfirmationSheet: View {
             if preview.offersClipChoice {
                 Button("Import and Clip to ±12 dB") { onConfirm(.clipBeyondBandRange) }
                     .help(
-                        "Clip every beyond-band gain to ±12 dB; use a graphic slider when available"
+                        "Clip every gain beyond ±12 dB, and use a graphic slider where one fits"
                     )
             }
 

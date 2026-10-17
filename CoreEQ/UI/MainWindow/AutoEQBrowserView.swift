@@ -170,9 +170,16 @@ struct AutoEQBrowserView: View {
     private func downloadSummary(received: Int, total: Int?) -> String {
         let receivedText = ByteCountFormatter.string(
             fromByteCount: Int64(received), countStyle: .file)
-        guard let total else { return "\(receivedText) downloaded" }
+        guard let total else {
+            return String(
+                localized: "\(receivedText) downloaded",
+                comment: "AutoEq catalog download progress, size unknown, such as “2 MB downloaded”"
+            )
+        }
         let totalText = ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .file)
-        return "\(receivedText) of \(totalText)"
+        return String(
+            localized: "\(receivedText) of \(totalText)",
+            comment: "AutoEq catalog download progress, such as “2 MB of 5 MB”")
     }
 
     /// The system's own empty state, so a failed load looks like every other
@@ -189,7 +196,7 @@ struct AutoEQBrowserView: View {
             HStack(spacing: 10) {
                 Button("Import by Hand…") { onImportByHand() }
 
-                Button("Retry") {
+                Button("Try Again") {
                     Task { await store.loadCatalog(forceRefresh: true) }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -229,7 +236,7 @@ struct AutoEQBrowserView: View {
                     Spacer(minLength: 8)
                     Text("Using a saved catalog. Couldn’t check for updates.")
                         .lineLimit(1)
-                    Button("Retry") {
+                    Button("Try Again") {
                         stopAuditionIfNeeded()
                         Task { await store.loadCatalog(forceRefresh: true) }
                     }
@@ -377,7 +384,13 @@ struct AutoEQBrowserView: View {
         .animation(.easeOut(duration: 0.12), value: hoveredModel)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(model.name)
-        .accessibilityValue(model.variants.count > 1 ? "\(model.variants.count) measurements" : "")
+        .accessibilityValue(
+            model.variants.count > 1
+                ? String(
+                    localized: "\(model.variants.count) measurements", bundle: .coreEQ,
+                    comment: "AutoEq model row: how many measurements the model has")
+                : ""
+        )
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
     }
 
@@ -461,7 +474,7 @@ struct AutoEQBrowserView: View {
         .accessibilityLabel("Preview response curve")
     }
 
-    private func formLabel(_ title: String) -> some View {
+    private func formLabel(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(Theme.Font.body)
             .gridColumnAlignment(.trailing)
@@ -502,8 +515,10 @@ struct AutoEQBrowserView: View {
         .statedWhenSingle(
             variants.count <= 1,
             value: store.selectedVariant?.displayName,
-            placeholder: "Choose a model first",
-            accessibilityLabel: "Measurement source"
+            placeholder: String(
+                localized: "Choose a model first", comment: "Measurement pop-up, before a model"),
+            accessibilityLabel: String(
+                localized: "Measurement source", comment: "Measurement pop-up, for VoiceOver")
         )
     }
 
@@ -529,12 +544,15 @@ struct AutoEQBrowserView: View {
         .pickerStyle(.menu)
         .labelsHidden()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .help("Only targets compatible with this measurement source, rig and form are available.")
+        .help("Only targets compatible with this measurement source, rig, and form are available")
         .statedWhenSingle(
             targets.count <= 1,
             value: store.selectedTargetLabel,
-            placeholder: "Choose a measurement first",
-            accessibilityLabel: "Target curve"
+            placeholder: String(
+                localized: "Choose a measurement first",
+                comment: "Target pop-up, before a measurement"),
+            accessibilityLabel: String(
+                localized: "Target curve", comment: "Target pop-up, for VoiceOver")
         )
     }
 
@@ -589,22 +607,20 @@ struct AutoEQBrowserView: View {
                     .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
             case .idle:
-                Text(
-                    store.selectedModelName == nil
-                        ? "Choose a model to get started." : "Preview follows your selection."
-                )
-                .font(Theme.Font.label)
-                .foregroundStyle(.secondary)
+                (store.selectedModelName == nil
+                    ? Text("Choose a model to get started.")
+                    : Text("Preview follows your selection."))
+                    .font(Theme.Font.label)
+                    .foregroundStyle(.secondary)
             case .loading:
                 HStack(spacing: 6) {
                     ProgressView()
                         .controlSize(.small)
-                    Text(
-                        store.selectedTargetLabel == AutoEQCatalogParser.defaultTargetLabel
-                            ? "Loading correction…" : "Computing correction in CoreEQ…"
-                    )
-                    .font(Theme.Font.label)
-                    .foregroundStyle(.secondary)
+                    (store.selectedTargetLabel == AutoEQCatalogParser.defaultTargetLabel
+                        ? Text("Loading correction…")
+                        : Text("Computing correction in CoreEQ…"))
+                        .font(Theme.Font.label)
+                        .foregroundStyle(.secondary)
                 }
             case .failed(let message):
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -618,7 +634,7 @@ struct AutoEQBrowserView: View {
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Button("Retry") {
+                    Button("Try Again") {
                         store.schedulePreview(after: 0, sampleRate: audioEngine.sampleRate)
                     }
                     .controlSize(.small)
@@ -674,15 +690,29 @@ struct AutoEQBrowserView: View {
 
     /// The line's licence and, once a measurement is chosen, who took it.
     private var attributionCredit: String {
-        var credit = "Data from AutoEq · MIT, Jaakko Pasanen"
+        // Separate items, joined by the separator, rather than one sentence:
+        // each stands alone and any can be missing.
+        var credit = [
+            String(
+                localized: "Data from AutoEq · MIT, Jaakko Pasanen",
+                comment: "AutoEq catalog credit: the data’s source and license")
+        ]
         if let source = store.selectedVariant?.sourceDisplayName {
-            credit += " · measurement by \(source)"
+            credit.append(
+                String(
+                    localized: "measurement by \(source)",
+                    comment:
+                        "AutoEq catalog credit: who measured the headphones, such as “oratory1990”")
+            )
         }
         if let target = store.selectedTargetLabel, target != AutoEQCatalogParser.defaultTargetLabel
         {
-            credit += " · computed by CoreEQ"
+            credit.append(
+                String(
+                    localized: "computed by CoreEQ",
+                    comment: "AutoEq catalog credit: CoreEQ computed this correction itself"))
         }
-        return credit
+        return credit.joined(separator: " · ")
     }
 
     // MARK: - State
@@ -693,17 +723,23 @@ struct AutoEQBrowserView: View {
         let query = store.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if query.isEmpty {
-            return "\(total.formatted()) models"
+            return String(
+                localized: "\(total) models", bundle: .coreEQ,
+                comment: "AutoEq catalog: how many headphone models it has")
         }
         if shown == 0 {
-            return "No matches"
+            return String(localized: "No matches", comment: "AutoEq catalog search: nothing found")
         }
         // The store caps a search at the page size, so a full page is reported
         // as the beginning of the matches rather than as all of them.
         if shown >= Self.searchResultLimit {
-            return "First \(Self.searchResultLimit) matches"
+            return String(
+                localized: "First \(Self.searchResultLimit) matches",
+                comment: "AutoEq catalog search: only the first page of matches is shown")
         }
-        return shown == 1 ? "1 match" : "\(shown) matches"
+        return String(
+            localized: "\(shown) matches", bundle: .coreEQ,
+            comment: "AutoEq catalog search: how many models match")
     }
 
     /// Whether a current preview is ready to import.
@@ -802,7 +838,10 @@ extension View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .accessibilityLabel(accessibilityLabel)
-                        .accessibilityValue(value ?? "None")
+                        .accessibilityValue(
+                            value
+                                ?? String(localized: "None", comment: "Pop-up value, for VoiceOver")
+                        )
                 }
             }
     }

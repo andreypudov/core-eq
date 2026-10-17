@@ -23,7 +23,7 @@ ifneq (,$(findstring CommandLineTools,$(shell xcode-select -p)))
 export DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 endif
 
-.PHONY: build sign test audio-test format lint install release icons clean
+.PHONY: build sign test audio-test format lint strings install release icons clean
 
 build:
 	xcodebuild -project $(APP).xcodeproj -target $(APP) -configuration $(CONFIG) $(XCODE_FLAGS) build
@@ -40,6 +40,16 @@ format:
 # gate on it.
 lint:
 	xcrun swift-format lint --strict --recursive --configuration .swift-format CoreEQ CoreEQTests
+
+# Merges every string the compiler extracted into the String Catalog, the way
+# Xcode does on build — xcodebuild extracts them but leaves the catalog alone.
+# Strings no longer in the code are marked stale rather than dropped. One
+# architecture's extraction is enough: both see the same source.
+STRINGSDATA_DIR := build/$(APP).build/$(CONFIG)/$(APP).build/Objects-normal/arm64
+
+strings: build
+	xcrun xcstringstool sync $(APP)/Resources/Localizable.xcstrings \
+		--stringsdata $$(find $(STRINGSDATA_DIR) -name '*.stringsdata')
 
 test:
 	xcodebuild test -project $(APP).xcodeproj -scheme $(APP) -destination 'platform=macOS'

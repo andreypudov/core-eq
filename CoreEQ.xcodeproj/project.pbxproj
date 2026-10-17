@@ -23,6 +23,13 @@
 				Audio/AudioEngine.swift,
 				"Extensions/Color+CoreEQ.swift",
 				"Extensions/NSFont+Bold.swift",
+				Resources/AppIcon.icns,
+				Resources/AppIcon.icon,
+				"Resources/AutoEq-LICENSE.txt",
+				Resources/MenuBarIconSlashTemplate.png,
+				"Resources/MenuBarIconSlashTemplate@2x.png",
+				Resources/MenuBarIconTemplate.png,
+				"Resources/MenuBarIconTemplate@2x.png",
 				UI/MainWindow/AppMark.swift,
 				UI/MainWindow/AutoEQBrowserView.swift,
 				UI/MainWindow/ColorPalettePicker.swift,
@@ -134,6 +141,7 @@
 			buildPhases = (
 				1A0000000000000000000013 /* Sources */,
 				1A0000000000000000000014 /* Frameworks */,
+				1A0000000000000000000019 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -190,6 +198,13 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		1A0000000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1A0000000000000000000019 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (

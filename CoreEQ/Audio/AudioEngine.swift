@@ -34,13 +34,17 @@ final class AudioEngine: ObservableObject {
         var description: String {
             switch self {
             case .stopped:
-                return "Audio engine stopped."
+                return String(localized: "CoreEQ isn’t running.", comment: "Engine status")
             case .running(let deviceName):
-                return "Processing system audio on “\(deviceName)”."
+                return String(
+                    localized: "Equalizing the sound on “\(deviceName)”.",
+                    comment: "Engine status: the output device being equalized")
             case .awaitingPermission:
-                return "Waiting for permission to process system audio."
+                return String(
+                    localized: "Waiting for permission to reach the sound.",
+                    comment: "Engine status")
             case .failed(_, let message):
-                return "Audio engine error: \(message)"
+                return message
             }
         }
 
@@ -370,9 +374,10 @@ final class AudioEngine: ObservableObject {
             scheduleIdleCheck()
         } catch {
             teardownEngine()
-            let message =
-                (error as? CoreAudioError)?.localizedDescription ?? error.localizedDescription
-            logger.error("Engine start failed: \(message, privacy: .public)")
+            let message = error.localizedDescription
+            // The error itself, not its message: the message is for the person
+            // and may be translated, the error names the Core Audio operation.
+            logger.error("Engine start failed: \(String(describing: error), privacy: .public)")
             diagnostics = nil
             // Only a signal when TCC cannot be asked. Measured, a refusal does
             // not make tap creation fail, so with TCC's answer in hand an error
@@ -529,7 +534,10 @@ final class AudioEngine: ObservableObject {
             throw CoreAudioError(
                 status: OSStatus(kAudioHardwareBadDeviceError), operation: "reading the device UID")
         }
-        return OutputDevice(id: id, uid: uid, name: AudioDevices.name(of: id) ?? "Unknown Device")
+        return OutputDevice(
+            id: id, uid: uid,
+            name: AudioDevices.name(of: id)
+                ?? String(localized: "Unknown Device", comment: "An output device without a name"))
     }
 
     /// Core Audio will not nest one aggregate device inside another, and it does
@@ -761,10 +769,18 @@ final class AudioEngine: ObservableObject {
                 self.tapAccess = TapAccess.resolve(tcc: self.lastTCCAnswer, proof: .notCapturing)
                 let isRefusal = self.tapAccess == .denied
                 self.status = .failed(
-                    summary: "Not capturing audio",
-                    message: "CoreEQ is not receiving any audio, so it is leaving your sound "
-                        + "alone rather than replacing it."
-                        + (isRefusal ? " This is what a refused permission looks like." : ""))
+                    summary: String(
+                        localized: "Not Receiving Audio",
+                        comment: "Menu bar extra row: sound is playing but none reaches CoreEQ"),
+                    message: isRefusal
+                        ? String(
+                            localized:
+                                "CoreEQ isn’t receiving any audio, so it’s leaving your sound alone instead of replacing it. This is what a refused permission looks like.",
+                            comment: "Engine failure, when the permission seems to be refused")
+                        : String(
+                            localized:
+                                "CoreEQ isn’t receiving any audio, so it’s leaving your sound alone instead of replacing it.",
+                            comment: "Engine failure: sound is playing but none reaches CoreEQ"))
             }
             // Kept watching either way. A verdict here is a reading of the
             // moment, not a sentence: allow the permission and the next sound
@@ -1267,7 +1283,7 @@ final class AudioEngine: ObservableObject {
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("coreeq-rate-trace.txt")
             try? report.write(to: url, atomically: true, encoding: .utf8)
-            self.logger.notice("rate trace written to \(url.path, privacy: .public)")
+            self.logger.notice("Rate trace written to \(url.path, privacy: .public)")
         }
         rateTraceDump = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: work)
@@ -1393,15 +1409,15 @@ final class AudioEngine: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .aggregateDevice(let name):
-                return """
-                    “\(name)” is an Aggregate or Multi-Output Device, which CoreEQ \
-                    cannot process audio through. Choose a single output device.
-                    """
+                return String(
+                    localized:
+                        "“\(name)” is an aggregate or multi-output device, which CoreEQ can’t equalize. Choose a single output device.",
+                    comment: "Engine failure: the output device is made of several devices")
             case .noOutputStreams(let name):
-                return """
-                    The audio device CoreEQ built around “\(name)” reported no output \
-                    channels, so there is nowhere to send the equalized audio.
-                    """
+                return String(
+                    localized:
+                        "The audio device CoreEQ built around “\(name)” reported no output channels, so there’s nowhere to send the equalized sound.",
+                    comment: "Engine failure: the output device has no channels")
             }
         }
     }
@@ -1411,11 +1427,10 @@ final class AudioEngine: ObservableObject {
     /// once Core Audio knows the process, so the ordinary retries apply.
     private struct SelfExclusionUnavailable: Error, LocalizedError {
         var errorDescription: String? {
-            """
-            CoreEQ could not identify its own audio output, so it cannot leave \
-            itself out of what it captures. It is leaving your sound alone and \
-            will try again.
-            """
+            String(
+                localized:
+                    "CoreEQ couldn’t identify its own audio output, so it can’t leave itself out of what it captures. It’s leaving your sound alone and will try again.",
+                comment: "Engine failure: CoreEQ couldn’t find its own audio process")
         }
     }
 
@@ -1423,15 +1438,30 @@ final class AudioEngine: ObservableObject {
         let status: OSStatus
         let operation: String
 
-        var errorDescription: String? { "\(operation) failed (OSStatus \(status))" }
+        /// The operation is for the log, through `String(describing:)`; the
+        /// person gets what failed and the code to quote.
+        var errorDescription: String? {
+            String(
+                localized: "CoreEQ couldn’t set up the audio path (error \(status)).",
+                comment: "Engine failure: a Core Audio call failed; the number is its error code")
+        }
     }
 
     /// A few words naming what went wrong, for the menu.
     private static func summary(for error: any Error) -> String {
         switch error {
-        case is UnusableOutputDevice: return "Unsupported output device"
-        case is TapUnavailable: return "System audio not allowed"
-        default: return "Audio engine error"
+        case is UnusableOutputDevice:
+            return String(
+                localized: "Unsupported Output Device",
+                comment: "Menu bar extra row: CoreEQ can’t equalize this device")
+        case is TapUnavailable:
+            return String(
+                localized: "System Audio Not Allowed",
+                comment: "Menu bar extra row: CoreEQ couldn’t capture system audio")
+        default:
+            return String(
+                localized: "Equalizer Unavailable",
+                comment: "Menu bar extra row: CoreEQ couldn’t start equalizing")
         }
     }
 

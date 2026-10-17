@@ -34,7 +34,9 @@ struct ValueField: View {
             // Written back only when the text was actually changed. See
             // `FieldCommit`: a plain binding rounded the value to what the field
             // shows every time focus left it.
-            TextField("", value: committed, format: format)
+            // Labelled for VoiceOver. The field always holds a value, so the
+            // label never shows as a placeholder.
+            TextField(accessibilityLabel, value: committed, format: format)
                 .textFieldStyle(.plain)
                 .multilineTextAlignment(.trailing)
                 .font(Theme.Font.value)

@@ -165,38 +165,60 @@ enum AutoEQError: Error, LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .offline:
-            return "Couldn’t download AutoEq data from GitHub. Check your connection and retry."
+            return String(
+                localized:
+                    "CoreEQ couldn’t download AutoEq data from GitHub. Check your internet connection and try again.",
+                comment: "AutoEq error")
         case .httpStatus(let code):
             return code == 403 || code == 429
-                ? "GitHub is limiting downloads. Try again later."
-                : "Couldn’t download AutoEq data (HTTP \(code)). Try again."
+                ? String(
+                    localized: "GitHub is limiting downloads. Try again later.",
+                    comment: "AutoEq error: GitHub refused because of too many requests")
+                : String(
+                    localized: "CoreEQ couldn’t download AutoEq data (HTTP \(code)). Try again.",
+                    comment: "AutoEq error: the number is the HTTP status code")
         case .invalidResponse:
-            return "AutoEq replied with an unexpected response."
+            return String(localized: "AutoEq sent an unexpected response.", comment: "AutoEq error")
         case .emptyCatalog:
-            return "AutoEq returned an empty catalog."
+            return String(localized: "The AutoEq catalog is empty.", comment: "AutoEq error")
         case .noMatchingTarget:
-            return "No correction target matches this headphone."
+            return String(
+                localized: "No correction target matches this model.", comment: "AutoEq error")
         case .unsupportedVariant:
-            return "No supported published correction is available for this measurement."
+            return String(
+                localized: "There’s no published correction CoreEQ supports for this measurement.",
+                comment: "AutoEq error")
         case .malformedData:
-            return "AutoEq returned data CoreEQ could not read."
+            return String(
+                localized: "AutoEq sent data CoreEQ couldn’t read.", comment: "AutoEq error")
         case .unsupportedFilter(let type):
-            return "The profile uses filters CoreEQ cannot render (\(type))."
+            return String(
+                localized: "The correction uses filters CoreEQ can’t apply (\(type)).",
+                comment: "AutoEq error: the filter type code follows in parentheses")
         }
     }
 
     var recoverySuggestion: String? {
         switch self {
         case .offline:
-            return "Check your internet connection and try again."
+            return String(
+                localized: "Check your internet connection and try again.",
+                comment: "AutoEq recovery suggestion")
         case .httpStatus, .invalidResponse, .malformedData, .emptyCatalog:
-            return "Try again in a moment; AutoEq may be temporarily unavailable."
+            return String(
+                localized: "Try again in a moment. AutoEq may be temporarily unavailable.",
+                comment: "AutoEq recovery suggestion")
         case .noMatchingTarget:
-            return "Choose a different measurement variant."
+            return String(
+                localized: "Choose a different measurement.", comment: "AutoEq recovery suggestion")
         case .unsupportedVariant:
-            return "Choose a different measurement source or import a correction by hand."
+            return String(
+                localized: "Choose a different measurement source, or import a correction by hand.",
+                comment: "AutoEq recovery suggestion")
         case .unsupportedFilter:
-            return "Choose a different target or variant."
+            return String(
+                localized: "Choose a different target or measurement.",
+                comment: "AutoEq recovery suggestion")
         }
     }
 }

@@ -16,7 +16,9 @@ final class MenuHeaderView: NSView {
         // view from constraints (fixed content width, fixed row height).
         translatesAutoresizingMaskIntoConstraints = false
 
-        let title = NSTextField(labelWithString: "CoreEQ")
+        let title = NSTextField(
+            labelWithString: String(
+                localized: "CoreEQ", comment: "Menu bar extra heading: the app name"))
         title.font = NSFont.menuFont(ofSize: 0).bold()
         title.translatesAutoresizingMaskIntoConstraints = false
 
@@ -26,7 +28,8 @@ final class MenuHeaderView: NSView {
         toggle.target = self
         toggle.action = #selector(switchToggled)
         toggle.translatesAutoresizingMaskIntoConstraints = false
-        toggle.setAccessibilityLabel("CoreEQ equalizer")
+        toggle.setAccessibilityLabel(
+            String(localized: "Equalizer", comment: "Menu bar extra switch, for VoiceOver"))
 
         addSubview(title)
         addSubview(toggle)

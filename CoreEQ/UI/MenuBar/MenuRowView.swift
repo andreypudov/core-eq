@@ -192,7 +192,11 @@ final class MenuRowView: NSView {
             chevronView.image = symbol?.withSymbolConfiguration(
                 NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
             )
-            setAccessibilityValue(expanded ? "expanded" : "collapsed")
+            setAccessibilityValue(
+                expanded
+                    ? String(localized: "Expanded", comment: "Menu row, for VoiceOver: list shown")
+                    : String(
+                        localized: "Collapsed", comment: "Menu row, for VoiceOver: list hidden"))
         }
     }
 

@@ -50,10 +50,17 @@ enum Theme {
     /// Why CoreEQ has stepped aside for a recording, where there is room to
     /// say it: the main window, and the setting that controls it. The menu has
     /// room for `recordingPauseTitle` alone.
-    static let recordingPauseTitle = "Paused while recording"
-    static let recordingPauseExplanation =
-        "Screen recordings capture both your apps’ sound and CoreEQ’s equalized copy, which "
-        + "sounds doubled. CoreEQ steps aside until the recording stops."
+    static var recordingPauseTitle: String {
+        String(
+            localized: "Paused While Recording",
+            comment: "Heading and menu bar extra row: CoreEQ stepped aside for a screen recording")
+    }
+    static var recordingPauseExplanation: String {
+        String(
+            localized:
+                "Screen recordings capture both your apps’ sound and CoreEQ’s equalized copy, which sounds doubled. CoreEQ steps aside until the recording stops.",
+            comment: "Why CoreEQ pauses while a screen recording captures system audio")
+    }
 
     /// Every size and weight the app is allowed to use.
     ///

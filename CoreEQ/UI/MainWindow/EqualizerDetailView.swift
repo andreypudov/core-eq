@@ -131,16 +131,21 @@ struct EqualizerDetailView: View {
                 // it is not the way back on: the way back is a different output
                 // device. Its position still shows what the user asked for, so
                 // the setting is waiting rather than lost.
-                Toggle("", isOn: $audioEngine.isEnabled)
+                // Labelled for VoiceOver; the style draws only the switch.
+                Toggle("Equalizer", isOn: $audioEngine.isEnabled)
                     .toggleStyle(.power)
                     .labelsHidden()
                     .disabled(!audioEngine.canProcess)
                     .opacity(audioEngine.canProcess ? 1.0 : 0.5)
-                    .accessibilityLabel("Equalizer")
                     .help(
                         audioEngine.canProcess
                             ? (audioEngine.isEnabled
-                                ? "Turn the equalizer off" : "Turn the equalizer on")
+                                ? String(
+                                    localized: "Turn the equalizer off",
+                                    comment: "Power button help tag")
+                                : String(
+                                    localized: "Turn the equalizer on",
+                                    comment: "Power button help tag"))
                             : audioEngine.status.description)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -292,11 +297,15 @@ struct EqualizerDetailView: View {
     }
 
     private var deviceAccessibilityValue: String {
-        let preset =
-            profileManager.isModified
-            ? "\(profileManager.activeProfileName), edited"
-            : profileManager.activeProfileName
-        return "\(outputs.defaultDeviceName), playing \(preset)"
+        profileManager.isModified
+            ? String(
+                localized:
+                    "\(outputs.defaultDeviceName), playing \(profileManager.activeProfileName), edited",
+                comment: "Output device, for VoiceOver: device name and its edited preset")
+            : String(
+                localized:
+                    "\(outputs.defaultDeviceName), playing \(profileManager.activeProfileName)",
+                comment: "Output device, for VoiceOver: device name and its preset")
     }
 
     // MARK: - Graph
@@ -454,7 +463,7 @@ struct EqualizerDetailView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Settings")
-        .help("CoreEQ settings")
+        .help("Open CoreEQ settings")
     }
 
     /// Two working states of one preset, and the switch between them.
@@ -475,7 +484,7 @@ struct EqualizerDetailView: View {
         .labelsHidden()
         .fixedSize()
         .accessibilityLabel("Comparison slot")
-        .help("Two versions of this preset — switch to compare them")
+        .help("Two versions of this preset; switch between them to compare")
         // Bound to local state and applied afterwards, rather than written
         // straight into the manager through the binding.
         //
@@ -562,7 +571,10 @@ struct EqualizerDetailView: View {
             )
             .frame(width: Theme.BandRow.columnWidth, height: trackHeight)
             .accessibilityLabel("\(BandFormat.frequency(band.frequency)) hertz")
-            .accessibilityValue(String(format: "%+.1f decibels", band.gain))
+            .accessibilityValue(
+                String(
+                    localized: "\(String(format: "%+.1f", band.gain)) decibels",
+                    comment: "Gain, for VoiceOver, such as “+2.5 decibels”"))
 
             Text(BandFormat.frequency(band.frequency))
                 .font(Theme.Font.secondary)
@@ -589,7 +601,7 @@ struct EqualizerDetailView: View {
             // A move, not a conversion: the lifted filter keeps this band's
             // frequency, gain, and Q, and the slot stays in the strip at 0 dB,
             // so the sound is identical either side of the command.
-            Button("Edit as Filter…") {
+            Button("Edit as Filter") {
                 if let id = profileManager.editBandAsFilter(slot: slot) {
                     selectedFilterID = id
                     // Follow the filter to where it now lives, or the command
@@ -685,7 +697,7 @@ struct EqualizerDetailView: View {
     /// they want when it does.
     private func engineOverlay(_ message: String) -> some View {
         VStack(spacing: 8) {
-            Label("Not processing audio", systemImage: "exclamationmark.triangle.fill")
+            Label("Not Equalizing", systemImage: "exclamationmark.triangle.fill")
                 .font(Theme.Font.heading)
                 .foregroundStyle(.primary)
 
@@ -761,9 +773,16 @@ struct EqualizerDetailView: View {
     private var engineWarning: String? {
         switch audioEngine.status {
         case .running: return nil
-        case .stopped: return "Audio engine stopped"
-        case .awaitingPermission: return "Waiting for audio permission"
-        case .failed: return "Audio engine error"
+        case .stopped:
+            return String(
+                localized: "CoreEQ isn’t running", comment: "Warning icon, for VoiceOver")
+        case .awaitingPermission:
+            return String(
+                localized: "Waiting for the audio permission",
+                comment: "Warning icon, for VoiceOver")
+        case .failed:
+            return String(
+                localized: "Equalizer unavailable", comment: "Warning icon, for VoiceOver")
         }
     }
 

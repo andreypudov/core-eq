@@ -26,13 +26,23 @@ enum SingleInstance {
 
         AppActivation.activate()
         let alert = NSAlert()
-        alert.messageText = "Another copy of CoreEQ is running"
+        alert.messageText = String(
+            localized: "Another copy of CoreEQ is running.",
+            comment: "Alert title at launch, when CoreEQ is already running")
         let paths = others.compactMap { $0.bundleURL?.path }.joined(separator: "\n")
+        let reason = String(
+            localized: "Two copies would each silence the other’s sound, so only one can run.",
+            comment: "Alert message: why two copies of CoreEQ can’t run together")
         alert.informativeText =
-            "Two copies would each silence the other’s sound, so only one can run."
-            + (paths.isEmpty ? "" : "\n\nThe other copy is at:\n\(paths)")
-        alert.addButton(withTitle: "Quit the Other Copy")
-        alert.addButton(withTitle: "Quit This Copy")
+            paths.isEmpty
+            ? reason
+            : reason + "\n\n"
+                + String(
+                    localized: "The other copy is at:\n\(paths)",
+                    comment: "Alert message: where the other copy of CoreEQ is installed")
+        alert.addButton(
+            withTitle: String(localized: "Quit the Other Copy", comment: "Alert button"))
+        alert.addButton(withTitle: String(localized: "Quit This Copy", comment: "Alert button"))
 
         guard alert.runModal() == .alertFirstButtonReturn else {
             NSApp.terminate(nil)
