@@ -219,11 +219,12 @@ preset library itself is shared across devices.
 
 * Settings
 
-A gear in the window's header, or *Settings…* in the menu. Three tabs:
+A gear in the window's header, or *Settings…* in the menu. Four tabs:
 *General*, which holds *Open CoreEQ at login*, *Release the audio device when
 nothing is playing*, *Pause while recording system audio*, and the status of
-the System Audio Recording permission; *Diagnostics*, a report of the audio
-setup to copy into a bug report; and *About*. Clicking the CoreEQ mark at the
+the System Audio Recording permission; *Exclusions*, the apps CoreEQ leaves
+alone (see [[*Leaving apps out][Leaving apps out]]); *Diagnostics*, a report of the audio setup to
+copy into a bug report; and *About*. Clicking the CoreEQ mark at the
 top of the sidebar opens About directly.
 
 * Recordings and other audio tools
@@ -244,6 +245,29 @@ such as BlackHole — is not recognised; switch CoreEQ off while using one.
 
 Another tool that re-routes system audio, such as SoundSource, can double the
 sound the same way when both run at once.
+
+* Leaving apps out
+
+Some apps should be heard exactly as they are — a DAW while mixing or
+mastering, for one. Settings → *Exclusions* lists the apps CoreEQ leaves alone:
+their sound goes straight to the output and never passes through CoreEQ, while
+everything else stays equalized. This is not the same as a Flat preset, which
+still takes the sound in and plays it back.
+
+*Add…* chooses an app from the disk, so it can be excluded before it is even
+open. Each listed app has a switch. Switched off, it stays on the list but is
+equalized again, ready to switch back on. Select an app and click *Remove*, or
+press Delete, to take it off the list. A change applies at once, with a
+moment's break in the sound while CoreEQ rebuilds. An excluded app stays
+excluded when it quits and is opened again.
+
+Browsers can't be excluded. They play through a helper process that macOS
+shares between apps, so leaving Safari out would mean leaving out every app
+that shows web content. Apps that play their own sound — DAWs, music players,
+video players — work.
+
+Exclusion needs macOS 26 or later. On earlier versions the tab says so, and
+every app is equalized.
 
 * How it works
 
@@ -281,7 +305,8 @@ What CoreEQ does not do, on purpose:
 - *Not bit-perfect.* CoreEQ works on the system mix, after macOS has mixed and
   resampled every app's audio. At Flat the sound passes through unchanged, and
   switched off CoreEQ leaves the audio path entirely, but it cannot give an app
-  exclusive access to the device.
+  exclusive access to the device. The closest it comes is [[*Leaving apps out][leaving an app out]],
+  which keeps CoreEQ out of that app's path altogether.
 - *One curve for all channels.* On outputs with more than two channels (HDMI,
   DisplayPort, USB interfaces) every channel is equalized, with the same curve.
   There are no per-channel curves and no room correction.

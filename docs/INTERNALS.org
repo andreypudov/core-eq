@@ -15,9 +15,11 @@ Implemented in =AudioEngine.swift=:
 
 1. *Process tap.* The engine creates Core Audio process taps
    (=AudioHardwareCreateProcessTap=, macOS 14.2+) covering every process
-   except CoreEQ itself — excluding itself prevents a feedback loop. One tap
-   per output stream, because a tap binds to a single stream and takes its
-   format. Once capture is proven the taps use
+   except CoreEQ itself — excluding itself prevents a feedback loop — and, on
+   macOS 26 and later, any apps the user excluded, by bundle identifier with
+   process restore on (=AppExclusion=). One tap per output stream, because a
+   tap binds to a single stream and takes its format. Once capture is proven
+   the taps use
    =muteBehavior = .mutedWhenTapped=, so the tapped processes' original audio is
    silenced at the hardware and the only signal reaching the speakers is what
    CoreEQ writes back. Until then they are unmuted — see *Proving the tap*.

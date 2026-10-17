@@ -22,6 +22,8 @@ final class SettingsStore {
         static let lastOutputDeviceUID = "lastOutputDeviceUID"
         static let pausesWhenSilent = "pausesWhenSilent"
         static let pausesWhileRecording = "pausesWhileRecording"
+        static let excludedBundleIDs = "excludedBundleIDs"
+        static let exclusionList = "exclusionListBundleIDs"
     }
 
     private let defaults: UserDefaults
@@ -75,6 +77,45 @@ final class SettingsStore {
     var pausesWhileRecording: Bool {
         get { defaults.object(forKey: Key.pausesWhileRecording) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Key.pausesWhileRecording) }
+    }
+
+    /// Apps CoreEQ leaves alone, by bundle identifier, in the order they were
+    /// added. Empty unless the user has excluded something. Read by the engine
+    /// each time it builds the tap; see `AppExclusion`.
+    ///
+    /// Not per device: it says which apps should never be equalized, and that
+    /// does not change with the headphones.
+    var excludedBundleIDs: [String] {
+        get { defaults.stringArray(forKey: Key.excludedBundleIDs) ?? [] }
+        set {
+            if newValue.isEmpty {
+                defaults.removeObject(forKey: Key.excludedBundleIDs)
+            } else {
+                defaults.set(newValue, forKey: Key.excludedBundleIDs)
+            }
+        }
+    }
+
+    /// Every app on the Exclusions list, switched on or off, in the order they
+    /// were added. `excludedBundleIDs` is the part switched on; this is the
+    /// rest of what the pane shows, so an app can be given its EQ back for a
+    /// while without being forgotten.
+    ///
+    /// Always includes every excluded app, even one missing from the stored
+    /// list, so nothing the engine leaves out can be invisible in the pane —
+    /// the one place it could be switched back.
+    var exclusionListBundleIDs: [String] {
+        get {
+            let listed = defaults.stringArray(forKey: Key.exclusionList) ?? []
+            return listed + excludedBundleIDs.filter { !listed.contains($0) }
+        }
+        set {
+            if newValue.isEmpty {
+                defaults.removeObject(forKey: Key.exclusionList)
+            } else {
+                defaults.set(newValue, forKey: Key.exclusionList)
+            }
+        }
     }
 
     /// Band gains dialed in on top of the active profile by CoreEQ 1.x.

@@ -62,6 +62,13 @@ final class EngineStatusBridge: ObservableObject {
         }
     }
 
+    /// Tells the engine the excluded apps changed, so the tap stops — or
+    /// starts — equalizing them now rather than at the next rebuild. The list
+    /// itself travels through `SettingsStore`, like every other setting.
+    func excludedAppsChanged() {
+        engine?.reloadExcludedApps()
+    }
+
     func follow(_ engine: AudioEngine) {
         self.engine = engine
         engine.$status

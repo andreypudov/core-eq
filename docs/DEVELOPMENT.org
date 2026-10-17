@@ -153,7 +153,7 @@ upstream spelling and are encoded component by component; traversal paths
 are rejected. The app downloads published corrections rather than redistributing
 raw measurements. The repository's MIT license does not override restrictions
 on third-party measurement data. Any future data source needs its own review.
-AutoEq attribution appears in the browser and About; its notice is included in
+AutoEq attribution appears in the browser; its notice is included in
 =CoreEQ/Resources/AutoEq-LICENSE.txt=.
 
 URLProtocol-backed tests cover revision changes, refresh failure, cancellation,

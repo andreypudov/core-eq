@@ -1,3 +1,4 @@
+import CoreAudio
 import Foundation
 
 /// Whether a tap has shown it can capture, and what to conclude when it has
@@ -50,5 +51,49 @@ enum CaptureProof {
         }
         let silent = silentWhilePlaying + interval
         return (silent >= limit ? .notCapturing : .waiting, silent)
+    }
+
+    // MARK: - What counts as playing
+
+    /// A process sending output, as much as `isOtherAudioPlaying` needs.
+    ///
+    /// `isCapturing` and `bundleID` are read only when the question asks about
+    /// them, so a reader that was not asked leaves them false and nil.
+    struct PlayingProcess: Equatable, Sendable {
+        let id: AudioObjectID
+        var isCapturing = false
+        var bundleID: String?
+    }
+
+    /// Whether anything in `playing` is evidence that audio is flowing past
+    /// the tap.
+    ///
+    /// - Parameters:
+    ///   - playing: the processes sending output right now.
+    ///   - ownProcess: CoreEQ's own process, whose playback is not evidence of
+    ///     anything reaching the tap.
+    ///   - ignoringCapturing: leave out processes also capturing input —
+    ///     recorders and call apps, which can hold output open while sending
+    ///     nothing. Measured: QuickTime recording shows as running output.
+    ///   - ignoringApps: the apps the tap leaves out, by bundle identifier,
+    ///     in any case. Their sound never reaches the tap by design, and
+    ///     counting it called a working tap broken: with only an excluded app
+    ///     playing, CoreEQ said it was not processing audio.
+    /// - Returns: whether any process left after those is playing.
+    static func isOtherAudioPlaying(
+        _ playing: [PlayingProcess],
+        ownProcess: AudioObjectID,
+        ignoringCapturing: Bool = false,
+        ignoringApps: Set<String> = []
+    ) -> Bool {
+        let ignored = Set(ignoringApps.map { $0.lowercased() })
+        return playing.contains { process in
+            if process.id == ownProcess { return false }
+            if ignoringCapturing && process.isCapturing { return false }
+            if let bundleID = process.bundleID, ignored.contains(bundleID.lowercased()) {
+                return false
+            }
+            return true
+        }
     }
 }

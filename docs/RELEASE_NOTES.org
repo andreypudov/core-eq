@@ -98,6 +98,41 @@ to their response or preamp. Not yet checked across the whole catalog, or for
 alternative targets against an AutoEq reference; both are noted in
 AUTOEQ_LOCAL.org.
 
+** Leaving apps out
+
+Asked for in #20, by a musician who needs Studio One, Logic Pro and the rest of
+a mastering chain heard as they are while everything else stays corrected. A
+Flat preset is not the answer: the sound still enters the tap and comes back.
+Settings → *Exclusions* now lists apps CoreEQ leaves out of the tap altogether,
+so their sound reaches the output without passing through CoreEQ at all.
+
+It needs macOS 26, because that is where the tap learned to exclude by bundle
+identifier, and measured on hardware, that is what makes it work. Excluded by
+identifier, an app is left out whether or not it is running when the tap is
+built, on the device-bound taps as well as the global one. With the system's
+process restore on, it stays out when it quits and comes back; without it, a
+relaunched app was measured back in the tap. Before macOS 26 the same thing
+would mean following every launch and quit by hand — a second implementation
+for a shrinking set of Macs, so the tab says what it needs instead.
+
+*What it cannot do: browsers.* Safari's sound comes from =com.apple.WebKit.GPU=,
+a helper shared by every app that shows web content. Excluding Safari's
+identifier, or the helper's, left the sound in the tap; only the helper's
+process did, and that would exclude Mail and the rest with it. So the tab
+offers only apps that are apps, never helpers inside one, and the guide says
+browsers cannot be excluded. Chromium-based apps play through helpers too, and
+are expected to behave the same; not measured.
+
+*Found in testing: an excluded app is not evidence.* After a launch, CoreEQ
+waits for the tap's first sound before equalizing, and calls the tap broken if
+it stays silent while something plays. With only an excluded app playing, the
+tap is silent by design, and CoreEQ said it was not processing audio; the
+switches then did nothing, because a change only rebuilt a running engine. The
+check now ignores excluded apps, and a change rebuilds after a failure too.
+
+Nothing changes for anyone who excludes nothing: the tap is built exactly as
+before. The diagnostics report lists excluded apps when there are any.
+
 ** Narrower bells
 
 Asked for in #41. A parametric bell's Q now goes to 16, about a twelfth of an

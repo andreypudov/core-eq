@@ -120,6 +120,9 @@ enum DiagnosticsReport {
         /// engine has seen it deliver audio, so an unmuted tap means CoreEQ is
         /// still proving it can capture — or has concluded that it cannot.
         var isMuting: Bool = false
+        /// Bundle identifiers the tap was told to leave out, as it was built.
+        /// The first thing to check when one app is reported as unequalized.
+        var excludedApps: [String] = []
         /// The widest interval, if any, in which the filters ran at a rate the
         /// device was not using.
         ///
@@ -222,6 +225,10 @@ enum DiagnosticsReport {
                 "  muting others:   "
                     + (engine.isMuting
                         ? "yes" : "no — not proven able to capture, so audio is left alone"))
+            if !engine.excludedApps.isEmpty {
+                lines.append(
+                    "  excluded apps:   " + engine.excludedApps.joined(separator: ", "))
+            }
             // The pause first: it has its own setting and applies even with
             // idling switched off.
             if engine.idling.isPausedForRecording {
