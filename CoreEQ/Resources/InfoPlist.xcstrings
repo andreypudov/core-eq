@@ -1,9 +1,21 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "CoreEQ"
+          }
+        }
+      }
+    },
     "NSAudioCaptureUsageDescription" : {
       "comment" : "The reason macOS shows when it asks for the audio permission. Same text as CoreEQ’s own explanation.",
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
