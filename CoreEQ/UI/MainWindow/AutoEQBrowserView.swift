@@ -79,8 +79,9 @@ struct AutoEQBrowserView: View {
             // checks cache freshness before making an update request.
             await store.loadCatalog()
         }
-        // Changing what is selected drops the preview and any audition with it,
-        // so an action cannot apply a curve that no longer matches the controls.
+        // Changing what is selected drops the preview, so Import cannot save a
+        // curve that no longer matches the controls. The audition keeps
+        // playing until the next one replaces it; see `selectionDidChange`.
         .onChange(of: store.selectedModelName) { _, _ in selectionDidChange() }
         .onChange(of: store.selectedVariant) { _, _ in selectionDidChange() }
         .onChange(of: store.selectedTargetLabel) { _, _ in selectionDidChange() }
@@ -95,7 +96,15 @@ struct AutoEQBrowserView: View {
             if !auditionHeld { profileManager.beginAudition(profile) }
         }
         .onChange(of: store.selectedModelName) { _, name in
-            if name == nil { displayedProfile = nil }
+            guard name == nil else { return }
+            displayedProfile = nil
+            // Nothing selected, so nothing will replace what is playing.
+            profileManager.endAudition()
+        }
+        .onChange(of: store.previewState) { _, state in
+            // Neither will a correction that couldn't be loaded. Hearing the
+            // previous model's curve under this one's error would be wrong.
+            if case .failed = state { profileManager.endAudition() }
         }
         // The preview is the window's own. Leaving takes it down rather than
         // leaving a curve playing that the user can no longer see — a window's
@@ -573,7 +582,10 @@ struct AutoEQBrowserView: View {
                 Button("Play Preview") { playHeldPreview() }
                     .controlSize(.small)
             }
-        } else if profileManager.isAuditioning {
+        } else if profileManager.isAuditioning && store.previewState == .ready {
+            // Only once this selection's preview is the one playing. While the
+            // next loads, the previous keeps playing and the status below says
+            // what is happening.
             if store.previewWouldAdjust, let disclosure = store.previewCandidates?.disclosure {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -756,10 +768,17 @@ struct AutoEQBrowserView: View {
         store.cancelPreview()
     }
 
-    /// A change of model, variant, or target restores the original sound and
-    /// schedules a debounced preview for the new selection.
+    /// A change of model, variant, or target schedules a debounced preview
+    /// for the new selection, and leaves the current one playing until it
+    /// arrives.
+    ///
+    /// Not a return to the original sound in between. Ending the audition here
+    /// put the user's own preset back for the length of the debounce and the
+    /// download, so every step through the list was heard as two changes —
+    /// to the original sound and its preamp, then to the next correction.
+    /// `beginAudition` swaps one preview for the next directly. Import stays
+    /// unavailable meanwhile, because scheduling drops the old preview.
     private func selectionDidChange() {
-        stopAuditionIfNeeded()
         store.schedulePreview(sampleRate: audioEngine.sampleRate)
     }
 
