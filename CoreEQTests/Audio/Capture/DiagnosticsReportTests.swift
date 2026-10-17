@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 /// The report a user pastes into an issue.
@@ -36,11 +37,13 @@ struct DiagnosticsReportTests {
         permission: TapAccess = .granted,
         devices: [DiagnosticsReport.Device] = [],
         engine: DiagnosticsReport.Engine? = nil,
-        profiles: DiagnosticsReport.Profiles? = nil
+        profiles: DiagnosticsReport.Profiles? = nil,
+        autoEQ: DiagnosticsReport.AutoEQ? = nil,
+        now: Date = Date()
     ) -> String {
         DiagnosticsReport.text(
             appVersion: "1.8 (1)", systemVersion: "Version 15.0", permission: permission,
-            devices: devices, engine: engine, profiles: profiles)
+            devices: devices, engine: engine, profiles: profiles, autoEQ: autoEQ, now: now)
     }
 
     private func profiles(
@@ -430,4 +433,51 @@ struct DiagnosticsReportTests {
         #expect(text(engine: pinned).contains("idling:          off"))
     }
 
+    // MARK: - AutoEq catalog
+
+    private let revision = "3f2a9c1e5b7d9f0a2c4e6a8b0d2f4a6c8e0b2d4f"
+
+    /// Someone who never opened the catalog sends a report without it, not a
+    /// section of "none".
+    @Test func aCatalogNeverOpenedAddsNoSection() {
+        #expect(!text(autoEQ: DiagnosticsReport.AutoEQ()).contains("AutoEq catalog"))
+        #expect(!text(autoEQ: nil).contains("AutoEq catalog"))
+    }
+
+    /// The revision is what lets a correction be compared with autoeq.app at
+    /// the same commit, and its age says whether the user is on old data.
+    @Test func aCachedCatalogReportsItsRevisionAgeAndCache() {
+        let now = Date(timeIntervalSince1970: 1_792_000_000)
+        let autoEQ = DiagnosticsReport.AutoEQ(
+            revision: revision, checkedAt: now.addingTimeInterval(-5 * 86_400),
+            modelCount: 4_812, session: .loaded(isStale: false), cachedCorrections: 38,
+            cacheBytes: 2_100_000)
+
+        let report = text(autoEQ: autoEQ, now: now)
+
+        #expect(report.contains("AutoEq catalog"))
+        #expect(report.contains("revision:        3f2a9c1, checked "))
+        #expect(report.contains("5.0 days ago"))
+        #expect(report.contains("models:          4812"))
+        #expect(report.contains("this session:    loaded"))
+        #expect(report.contains("cache:           38 correction(s), 2.1 MB"))
+    }
+
+    @Test func aStaleCatalogSaysTheUpdateCheckFailed() {
+        let autoEQ = DiagnosticsReport.AutoEQ(
+            revision: revision, checkedAt: Date(), modelCount: 3, session: .loaded(isStale: true))
+
+        #expect(
+            text(autoEQ: autoEQ).contains(
+                "this session:    loaded from cache; the update check failed"))
+    }
+
+    /// The report a "won't load" issue needs: nothing cached, and why.
+    @Test func aFailedLoadSaysWhyEvenWithNothingCached() {
+        let report = text(autoEQ: DiagnosticsReport.AutoEQ(session: .failed("HTTP 429")))
+
+        #expect(report.contains("revision:        none cached"))
+        #expect(report.contains("this session:    FAILED: HTTP 429"))
+        #expect(!report.contains("models:"))
+    }
 }

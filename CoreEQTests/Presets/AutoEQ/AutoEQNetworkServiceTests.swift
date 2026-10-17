@@ -39,6 +39,48 @@ extension AutoEQIntegrationTests {
                     atPath: cache.appendingPathComponent("catalog-v1.json").path))
         }
 
+        /// The diagnostics report's half that comes from disk: the cached
+        /// revision and model count, and the corrections kept, counted apart
+        /// from the measurement inputs that sit beside them.
+        @Test func cacheDiagnosticsReportsWhatIsCached() throws {
+            let cache = AutoEQTestFixtures.makeCacheDirectory()
+            defer { AutoEQTestFixtures.remove(cache) }
+            let checkedAt = Date(timeIntervalSince1970: 1_792_000_000)
+            try AutoEQTestFixtures.writeCache(into: cache, checkedAt: checkedAt)
+            let files = [
+                "profiles/\(AutoEQTestFixtures.revision)/a.txt",
+                "profiles/\(AutoEQTestFixtures.revision)/b.txt",
+                "computed-v\(AutoEQLocalSolver.version)/c.json",
+                "inputs/\(AutoEQTestFixtures.revision)/measurement",
+            ]
+            for file in files {
+                let url = cache.appendingPathComponent(file)
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data(repeating: 0, count: 1_000).write(to: url)
+            }
+
+            let report = service(cache).cacheDiagnostics()
+
+            #expect(report.revision == AutoEQTestFixtures.revision)
+            #expect(report.checkedAt == checkedAt)
+            #expect(report.modelCount == 3)
+            #expect(report.cachedCorrections == 3)
+            #expect(report.cacheBytes > 4_000, "the snapshot and all four files count")
+        }
+
+        @Test func cacheDiagnosticsOfAnEmptyCacheIsEmpty() {
+            let cache = AutoEQTestFixtures.makeCacheDirectory()
+            defer { AutoEQTestFixtures.remove(cache) }
+
+            let report = service(cache).cacheDiagnostics()
+
+            #expect(report.revision == nil)
+            #expect(report.modelCount == nil)
+            #expect(report.cachedCorrections == 0)
+            #expect(!report.hasBeenUsed)
+        }
+
         @Test func freshDiskCacheWorksAcrossServiceInstancesWithoutNetwork() async throws {
             let cache = AutoEQTestFixtures.makeCacheDirectory()
             defer { AutoEQTestFixtures.remove(cache) }

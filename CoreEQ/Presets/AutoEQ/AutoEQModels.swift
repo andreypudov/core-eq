@@ -198,6 +198,21 @@ enum AutoEQError: Error, LocalizedError, Equatable, Sendable {
         }
     }
 
+    /// The error in a few English words, for the diagnostics report, which
+    /// stays in English whatever language the app is in.
+    var diagnosticReason: String {
+        switch self {
+        case .offline: return "offline"
+        case .httpStatus(let code): return "HTTP \(code)"
+        case .invalidResponse: return "unexpected response"
+        case .emptyCatalog: return "empty catalog"
+        case .noMatchingTarget: return "no matching target"
+        case .unsupportedVariant: return "unsupported measurement"
+        case .malformedData: return "unreadable data"
+        case .unsupportedFilter(let type): return "unsupported filter \(type)"
+        }
+    }
+
     var recoverySuggestion: String? {
         switch self {
         case .offline:

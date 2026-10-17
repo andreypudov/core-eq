@@ -79,7 +79,8 @@ struct DiagnosticsSettingsView: View {
             canAskMacOS: AudioCapturePermission.isAvailable,
             devices: AudioDevices.deviceReports(),
             engine: Self.liveEngine(bridge.diagnostics),
-            profiles: Self.profiles(live: profiles)
+            profiles: Self.profiles(live: profiles),
+            autoEQ: AutoEQStatusBridge.shared.diagnostics
         )
     }
 

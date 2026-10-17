@@ -346,7 +346,9 @@ quit and reopen it — so a change takes effect on the next launch.
 *The fastest route to an answer is the diagnostics report*, in Settings →
 Diagnostics → Copy. It names the output device and what CoreEQ built around
 it, whether audio is reaching CoreEQ, how often the engine has restarted and
-why, and whether the output clipped. Attach it to any bug report.
+why, and whether the output clipped. Once you have opened the AutoEq catalog,
+it also names the catalog version CoreEQ has cached and why the last load
+failed, if it did. Attach it to any bug report.
 
 - *CoreEQ says it isn’t allowed to reach the sound.* Allow CoreEQ under Screen &
   System Audio Recording in System Settings → Privacy & Security, then choose

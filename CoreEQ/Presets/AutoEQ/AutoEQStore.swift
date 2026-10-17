@@ -44,6 +44,9 @@ final class AutoEQStore: ObservableObject {
 
     private let service: AutoEQNetworkService
     private var catalog: AutoEQCatalog?
+    /// Why the last catalog load failed, in English, for the diagnostics
+    /// report. Nil once a load succeeds.
+    private var lastFailureReason: String?
     /// Invalidates responses from preview requests that no longer match the
     /// current selection (or have been explicitly cleared).
     private var previewRequestID = UUID()
@@ -118,6 +121,7 @@ final class AutoEQStore: ObservableObject {
             updateSearchResults()
             catalogRevision = loaded.revision
             catalogIsStale = loaded.isStale
+            lastFailureReason = nil
             customTargetsTask = nil
             customTargetsToken = UUID()
             catalogState = .loaded
@@ -132,6 +136,7 @@ final class AutoEQStore: ObservableObject {
                 catalogState = catalog == nil ? .idle : .loaded
             } else {
                 catalogState = .failed(Self.message(for: error))
+                lastFailureReason = Self.diagnosticReason(for: error)
             }
         }
         if catalogRequestID == requestID { catalogTask = nil }
@@ -356,6 +361,25 @@ final class AutoEQStore: ObservableObject {
 
     private func updateSearchResults() {
         searchResults = catalog?.models(matching: searchText) ?? []
+    }
+
+    /// The catalog for the diagnostics report: what is cached, from the
+    /// service, and how loading went this session.
+    func diagnostics() -> DiagnosticsReport.AutoEQ {
+        var report = service.cacheDiagnostics()
+        switch catalogState {
+        case .idle: report.session = .notOpened
+        case .loading: report.session = .loading
+        case .loaded: report.session = .loaded(isStale: catalogIsStale)
+        case .failed: report.session = .failed(lastFailureReason ?? "unknown")
+        }
+        return report
+    }
+
+    private static func diagnosticReason(for error: any Error) -> String {
+        if let error = error as? AutoEQError { return error.diagnosticReason }
+        if let error = error as? URLError { return "network error \(error.code.rawValue)" }
+        return String(describing: type(of: error))
     }
 
     private static func message(for error: any Error) -> String {

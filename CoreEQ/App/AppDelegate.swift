@@ -67,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // engine, so the one fact it needs crosses on its own.
         EngineStatusBridge.shared.follow(audioEngine)
         ProfileStatusBridge.shared.follow(profileManager)
+        AutoEQStatusBridge.shared.follow(autoEQStore)
 
         audioEngine.start()
 
