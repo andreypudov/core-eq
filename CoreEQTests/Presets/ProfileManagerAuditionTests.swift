@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Testing
 
@@ -63,6 +64,25 @@ import Testing
         #expect(
             manager.activeProfileName == BuiltInProfiles.defaultProfileName,
             "a preview must not move the active selection")
+    }
+
+    /// A preview whose trim is computed tells the engine one preamp, the
+    /// computed one. It used to publish the stored trim first and then the
+    /// computed one: two moves of the output level for one change of preview,
+    /// the first of them to a level the preview never asked for.
+    @Test func aComputedTrimPreviewPublishesOnePreamp() {
+        let manager = makeManager(device: device)
+        var profile = catalogProfile(preamp: 0)
+        profile.autoGain = true
+        var published: [Double] = []
+        let subscription = manager.$currentPreamp.dropFirst().sink { published.append($0) }
+        defer { subscription.cancel() }
+
+        manager.beginAudition(profile)
+
+        let trim = AutoGain.trim(for: FilterChain.normalized(profile.filters))
+        #expect(published == [trim])
+        #expect(manager.currentPreamp == trim)
     }
 
     @Test func beginAuditionDoesNotTouchPresetsOrTheDeviceSlot() {

@@ -388,13 +388,18 @@ final class ProfileManager: ObservableObject {
         }
         auditionedProfileName = profile.name
 
-        currentFilters = FilterChain.normalized(profile.filters)
-        currentPreamp = profile.preamp
+        // The trim is settled before anything is published, so the engine is
+        // told one preamp per preview. Assigning the stored trim and then the
+        // computed one sent two, and the first was the wrong one to hear.
+        let filters = FilterChain.normalized(profile.filters)
+        let preamp = profile.autoGain ? AutoGain.trim(for: filters) : profile.preamp
         // A preset carries whether its trim is computed, exactly as selecting
         // one does.
         isAutoGain = profile.autoGain
         tone = ToneControls()
         isAuditioning = true
+        currentPreamp = preamp
+        currentFilters = filters
         chainDidChange()
     }
 
@@ -851,7 +856,10 @@ final class ProfileManager: ObservableObject {
     /// so a new way to edit the chain cannot forget to keep the trim in step.
     private func chainDidChange() {
         if isAutoGain {
-            currentPreamp = AutoGain.trim(for: currentFilters)
+            // Published only when it moves: every assignment reaches the
+            // engine, even one that changes nothing.
+            let trim = AutoGain.trim(for: currentFilters)
+            if trim != currentPreamp { currentPreamp = trim }
         }
         persistDeviceState()
     }
