@@ -826,13 +826,39 @@ final class ProfileManager: ObservableObject {
 
     // MARK: - Output trim
 
-    /// Sets the trim by hand. Ignored while the trim is being computed — the
-    /// control is disabled then, so this can only be reached by a caller that
-    /// has not looked.
+    /// Sets the trim by hand. Ignored while the trim is being computed: a
+    /// caller that means to override Auto says so with `takeOverPreamp`.
     func setPreamp(_ dB: Double) {
         guard !isAutoGain else { return }
         currentPreamp = dB.clamped(to: BuiltInProfiles.preampRange)
         persistDeviceState()
+    }
+
+    /// The slider's way in: a hand on the trim takes it over from Auto.
+    ///
+    /// The slider used to be disabled while Auto was on, and looked no
+    /// different, so someone new to it found a control that would not move and
+    /// no reason why. Now dragging it turns Auto off and sets the value, as
+    /// touching a fader overrides its automation; the Auto switch shows the
+    /// change, and one click on it gives the trim back to the computation.
+    func takeOverPreamp(_ dB: Double) {
+        isAutoGain = false
+        setPreamp(dB)
+    }
+
+    /// Puts the trim back to what the active preset asks for, as a band's
+    /// double-click puts its gain back: the computed trim when the preset uses
+    /// Auto, its stored number when it doesn't.
+    ///
+    /// For a computed preset that means switching Auto back on, which is also
+    /// the quick way back after a drag took the trim over.
+    func resetPreamp() {
+        let profile = activeProfile
+        if profile.autoGain {
+            setAutoGain(true)
+        } else {
+            takeOverPreamp(profile.preamp)
+        }
     }
 
     /// Turns the computed trim on or off.

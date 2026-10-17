@@ -193,8 +193,10 @@ the chain on average, so most arrive with a small trim already applied.
 The correction only ever attenuates. Cancelling a *cut* would mean raising
 every frequency the preset deliberately left alone, which is a way to make
 something clip that would not have clipped otherwise — so a preset that mostly
-cuts is left quieter, as it was meant to be. Switch *Auto* off, below the
-preamp slider, to set the trim by hand.
+cuts is left quieter, as it was meant to be. To set the trim by hand,
+drag the preamp slider: that switches *Auto* off, below it. Click *Auto* to
+hand the trim back, or double-click the slider to return to the preset’s own
+trim, as a band’s double-click returns it to the preset.
 
 CoreEQ has no volume control. Its one level control is the *preamp*, which is
 the same thing a hardware equalizer calls Level: makeup gain for what the curve

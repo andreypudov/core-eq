@@ -371,8 +371,8 @@ import Testing
             manager.currentPreamp == -2, "the slider did not come back under the user's control")
     }
 
-    /// While auto is on the slider is disabled, so a write can only arrive from
-    /// a caller that has not looked — and it must not be honoured.
+    /// A plain write must not override the computed trim. Only the slider,
+    /// through `takeOverPreamp`, says it means to.
     @Test func theTrimCannotBeSetByHandWhileAutoIsOn() {
         let manager = makeManager()
         manager.setGain(6, forBandAt: 0)
@@ -381,6 +381,69 @@ import Testing
 
         manager.setPreamp(11)
         #expect(manager.currentPreamp == computed)
+    }
+
+    /// Dragging the slider while Auto is on takes the trim over: Auto turns
+    /// off and the dragged value is the one heard. It used to be a disabled
+    /// slider that looked live and would not move.
+    @Test func draggingTheSliderTakesTheTrimOverFromAuto() {
+        let manager = makeManager()
+        manager.setGain(6, forBandAt: 0)
+        manager.setAutoGain(true)
+
+        manager.takeOverPreamp(-3)
+
+        #expect(!manager.isAutoGain, "Auto should be off once the trim is set by hand")
+        #expect(manager.currentPreamp == -3)
+
+        // And the next edit leaves it alone, because it is no longer computed.
+        manager.setGain(9, forBandAt: 0)
+        #expect(manager.currentPreamp == -3)
+    }
+
+    /// Double-clicking the slider returns the trim to the preset, as a band's
+    /// double-click returns its gain: for a computed preset, that is Auto.
+    @Test func resettingTheTrimOfAComputedPresetTurnsAutoBackOn() {
+        let manager = makeManager()
+        manager.setActiveProfile(name: "Flat")
+        manager.setGain(6, forBandAt: 0)
+        manager.setAutoGain(true)
+        let presetName = manager.addProfile(named: "Computed")
+        manager.setActiveProfile(name: presetName)
+        let computed = manager.currentPreamp
+        manager.takeOverPreamp(-9)
+
+        manager.resetPreamp()
+
+        #expect(manager.isAutoGain)
+        #expect(manager.currentPreamp == computed)
+    }
+
+    /// For a preset with a fixed trim, it is that number, by hand.
+    @Test func resettingTheTrimOfAFixedPresetReturnsItsNumber() {
+        let manager = makeManager()
+        manager.setAutoGain(false)
+        let presetName = manager.addProfile(named: "Fixed", preamp: -2.5)
+        manager.setActiveProfile(name: presetName)
+        manager.takeOverPreamp(-9)
+
+        manager.resetPreamp()
+
+        #expect(!manager.isAutoGain)
+        #expect(manager.currentPreamp == -2.5)
+    }
+
+    /// Taking over is remembered with the rest of the device's state.
+    @Test func aTakenOverTrimIsKeptForTheDevice() {
+        let manager = makeManager()
+        manager.setGain(6, forBandAt: 0)
+        manager.setAutoGain(true)
+
+        manager.takeOverPreamp(-4.5)
+
+        let reopened = makeManager()
+        #expect(!reopened.isAutoGain)
+        #expect(reopened.currentPreamp == -4.5)
     }
 
     /// The mode belongs to the sound, so it saves into the preset and comes back

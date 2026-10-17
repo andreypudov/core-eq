@@ -662,6 +662,9 @@
     "Drag or scroll to set; double-click the knob to return to the default width" : {
       "comment" : "Q knob help tag"
     },
+    "Drag to set; double-click to return to the preset’s value" : {
+      "comment" : "Preamp slider help tag"
+    },
     "Dropped" : {
       "comment" : "Import sheet status: filter not imported"
     },
@@ -1144,6 +1147,9 @@
     },
     "Search headphones" : {
 
+    },
+    "Set automatically while Auto is on; drag to set it by hand" : {
+      "comment" : "Preamp slider help tag, while automatic gain is on"
     },
     "Settings" : {
 
