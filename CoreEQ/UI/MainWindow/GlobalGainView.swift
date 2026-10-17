@@ -86,7 +86,10 @@ struct GlobalGainView: View {
                     .onHover { isHovering = $0 }
                     .accessibilityLabel("Preamp")
                     .accessibilityValue(
-                        String(format: "%+.1f decibels", profileManager.currentPreamp))
+                        String(
+                            localized:
+                                "\(String(format: "%+.1f", profileManager.currentPreamp)) decibels",
+                            comment: "Gain, for VoiceOver, such as “+2.5 decibels”"))
 
                     // The row a band column spends on its frequency. This
                     // column has no frequency to name, which is what makes room
@@ -112,7 +115,7 @@ struct GlobalGainView: View {
         }
         .opacity(isEnabled ? 1.0 : 0.5)
         .help(
-            "Output trim applied after the whole chain — use it to give back headroom a boosted preset takes"
+            "Output trim applied after the whole chain; use it to give back the headroom a boosted preset takes"
         )
     }
 
@@ -130,7 +133,7 @@ struct GlobalGainView: View {
         Button {
             profileManager.setAutoGain(!profileManager.isAutoGain)
         } label: {
-            Text("AUTO")
+            Text("AUTO", comment: "Automatic gain switch, written in capitals as a badge")
                 .font(Theme.Font.labelEmphasized)
                 .kerning(0.6)
                 // Sized to the word, not to the column: a switch stretched the
@@ -160,12 +163,22 @@ struct GlobalGainView: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled)
         .accessibilityLabel("Automatic gain")
-        .accessibilityValue(profileManager.isAutoGain ? "On" : "Off")
+        .accessibilityValue(
+            profileManager.isAutoGain
+                ? String(localized: "On", comment: "Switch state, for VoiceOver")
+                : String(localized: "Off", comment: "Switch state, for VoiceOver")
+        )
         .accessibilityAddTraits(profileManager.isAutoGain ? [.isSelected] : [])
         .help(
             profileManager.isAutoGain
-                ? "The trim is computed from the chain — switch off to set it by hand"
-                : "Compute the trim from the chain, so a boosted preset stays at the loudness it started from"
+                ? String(
+                    localized:
+                        "The trim is computed from the chain; turn this off to set it by hand",
+                    comment: "Automatic gain help tag, while on")
+                : String(
+                    localized:
+                        "Compute the trim from the chain, so a boosted preset stays at the loudness it started from",
+                    comment: "Automatic gain help tag, while off")
         )
     }
 

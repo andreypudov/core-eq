@@ -115,7 +115,7 @@ final class SpectrumAnalyzer: ObservableObject {
         points = displayFrequencies.map { Point(frequency: $0, level: 0) }
 
         if fftSetup == nil {
-            logger.error("Failed to create FFT setup; spectrum analyzer disabled.")
+            logger.error("Failed to create FFT setup; spectrum analyzer disabled")
         }
     }
 

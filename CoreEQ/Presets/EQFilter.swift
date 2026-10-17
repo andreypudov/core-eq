@@ -19,11 +19,11 @@ struct EQFilter: Codable, Equatable, Identifiable {
 
         var title: String {
             switch self {
-            case .bell: return "Bell"
-            case .lowShelf: return "Low Shelf"
-            case .highShelf: return "High Shelf"
-            case .highPass: return "High Pass"
-            case .lowPass: return "Low Pass"
+            case .bell: return String(localized: "Bell", comment: "Filter type")
+            case .lowShelf: return String(localized: "Low Shelf", comment: "Filter type")
+            case .highShelf: return String(localized: "High Shelf", comment: "Filter type")
+            case .highPass: return String(localized: "High Pass", comment: "Filter type")
+            case .lowPass: return String(localized: "Low Pass", comment: "Filter type")
             }
         }
 

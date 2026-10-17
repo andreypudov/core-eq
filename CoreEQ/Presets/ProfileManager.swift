@@ -272,7 +272,7 @@ final class ProfileManager: ObservableObject {
     /// `name` made unique against the existing profiles.
     @discardableResult
     func addProfile(
-        named name: String = "New Preset",
+        named name: String = ProfileManager.newPresetName,
         filters: [EQFilter]? = nil,
         preamp: Double? = nil
     ) -> String {
@@ -303,7 +303,10 @@ final class ProfileManager: ObservableObject {
     func duplicateProfile(named name: String) -> String? {
         guard let source = profile(named: name) else { return nil }
         return addProfile(
-            named: "\(source.name) copy", filters: source.filters, preamp: source.preamp)
+            named: String(
+                localized: "\(source.name) copy",
+                comment: "Name of a duplicated preset, such as “Jazz copy”"),
+            filters: source.filters, preamp: source.preamp)
     }
 
     /// Renames a user preset. Built-in profiles and empty names are ignored, and
@@ -418,7 +421,7 @@ final class ProfileManager: ObservableObject {
         let filters = currentFilters
         let preamp = currentPreamp
         // Read before `clearAudition`, which drops the auditioned name.
-        let storedName = name ?? auditionedProfileName ?? "New Preset"
+        let storedName = name ?? auditionedProfileName ?? Self.newPresetName
 
         // Not `endAudition`: restoring first would overwrite the chain being
         // saved. `addProfile` re-activates and persists from here.
@@ -465,13 +468,21 @@ final class ProfileManager: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .presetNotFound(let name):
-                return "The preset “\(name)” no longer exists."
+                return String(
+                    localized: "The preset “\(name)” no longer exists.", comment: "Export error")
             }
         }
     }
 
     /// What an import is called until the user names it.
-    static let untitledImportName = "Imported Preset"
+    nonisolated static var untitledImportName: String {
+        String(localized: "Imported Preset", comment: "Name of an imported preset with no name")
+    }
+
+    /// What a new preset is called until the user names it.
+    nonisolated static var newPresetName: String {
+        String(localized: "New Preset", comment: "Name of a newly created preset")
+    }
 
     /// Parses preset text — EqualizerAPO / AutoEQ or `.coreeq` — without
     /// touching the library. Nothing is added until `commitImport`.

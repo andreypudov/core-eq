@@ -25,16 +25,21 @@ struct TapUnavailable: Error, LocalizedError {
     let status: OSStatus
 
     var errorDescription: String? {
-        "CoreEQ could not capture system audio (OSStatus \(status)). Check that "
-            + "System Audio Recording is allowed in Privacy & Security."
+        String(
+            localized:
+                "CoreEQ couldn’t capture system audio (error \(status)). Make sure CoreEQ is turned on in System Settings > Privacy & Security > Screen & System Audio Recording.",
+            comment:
+                "Engine failure: the audio tap couldn’t be created; the number is its error code")
     }
 }
 
 /// The tap delivered samples the render path cannot read.
 struct UnrenderableTapFormat: Error, LocalizedError {
     var errorDescription: String? {
-        "The audio tap did not deliver 32-bit float samples, which is the "
-            + "only format CoreEQ renders."
+        String(
+            localized:
+                "The system audio arrived in a format CoreEQ can’t equalize: it needs 32-bit floating-point samples.",
+            comment: "Engine failure: the audio tap delivered an unsupported sample format")
     }
 }
 

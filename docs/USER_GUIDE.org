@@ -41,7 +41,7 @@ locked to the ladder, and an added band is one that is not. Nothing is
 converted, approximated, or reconciled between the two views, so a change made
 in either is exact and reversible.
 
-Right-click a band slider for *Edit as Filter…*, which moves that band into the
+Right-click a band slider for *Edit as Filter*, which moves that band into the
 parametric editor without changing the sound.
 
 ** The response graph
@@ -63,8 +63,8 @@ shaping.
 CoreEQ runs as a menu bar application with no Dock icon. The status menu carries
 the master switch, output device, the preset list, a live response preview, and
 three Quick EQ tone controls (bass, mid, treble) layered over the active preset
-— all without opening a window. It also holds *Open Equalizer…*, *Settings…*,
-and *Quit*: CoreEQ has no menu bar of its own, so this is where those live.
+— all without opening a window. It also holds *Open Equalizer*, *Settings…*,
+and *Quit CoreEQ*: CoreEQ has no menu bar of its own, so this is where those live.
 
 * Presets
 
@@ -103,7 +103,7 @@ sheet shows what that would cost. Nothing is written until you confirm.
 
 From EqualizerAPO text, CoreEQ reads =Preamp:= and =PK=, =LSC=, =HSC=, =HP= and
 =LP= filters, with Q or bandwidth in octaves. It reads UTF-8, UTF-16 and
-Windows-1252 files. A preset holds up to sixteen free filters with gain within
+Windows-1252 files. A preset holds up to sixteen parametric bands with gain within
 ±20 dB, frequency 20 Hz–20 kHz, and Q 0.1–16 for a bell or 0.1–10 for shelves and
 pass filters. Graphic bands and preamp stay within
 ±12 dB. A longer file keeps its pass filters and its strongest bands, and any
@@ -171,8 +171,8 @@ been downloaded still needs a connection; saved presets work independently.
 CoreEQ checks for catalog updates when the sheet opens if the cache is at least
 seven days old. The catalog and its profiles use the same Git commit so an
 update cannot mix old and new corrections. If an update fails, CoreEQ keeps
-the saved catalog and offers Retry. With no network and no cached catalog,
-the sheet offers Retry or manual import.
+the saved catalog and offers *Try Again*. With no network and no cached
+catalog, the sheet offers *Try Again* or manual import.
 
 Correction data comes from AutoEq by Jaakko Pasanen, used under the MIT licence;
 each result names the measurement source it came from.
@@ -331,7 +331,7 @@ General, and as a row in the menu bar.
 | What CoreEQ says                              | What it means                                         | The button                                                                                       |
 |-----------------------------------------------+-------------------------------------------------------+--------------------------------------------------------------------------------------------------|
 | CoreEQ needs to reach the sound to change it   | macOS has not asked yet, or CoreEQ was just updated   | *Allow…* shows the macOS prompt                                                                  |
-| CoreEQ is not allowed to process audio         | The permission was refused                            | *Open System Settings…*; turn CoreEQ on there, then choose *Quit & Reopen* (or *Relaunch CoreEQ*) |
+| CoreEQ isn’t allowed to reach the sound        | The permission was refused                            | *Open System Settings*; turn CoreEQ on there, then choose *Quit & Reopen* (or *Relaunch CoreEQ*)  |
 
 CoreEQ never builds its audio path before the answer is yes.
 
@@ -346,7 +346,7 @@ Diagnostics → Copy. It names the output device and what CoreEQ built around
 it, whether audio is reaching CoreEQ, how often the engine has restarted and
 why, and whether the output clipped. Attach it to any bug report.
 
-- *CoreEQ says it is not allowed to process audio.* Allow CoreEQ under Screen &
+- *CoreEQ says it isn’t allowed to reach the sound.* Allow CoreEQ under Screen &
   System Audio Recording in System Settings → Privacy & Security, then choose
   *Quit & Reopen* when macOS asks, or *Relaunch CoreEQ* on the card.
 - *The permission is on in System Settings and CoreEQ still hears nothing.*

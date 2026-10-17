@@ -32,6 +32,9 @@ Read these in order the first time.
    sample rate changes, the DSP, threading, resilience, persistence, and the
    traps that cost time to find.
 5. [[file:RELEASING.org][RELEASING.org]] — what CI runs and when, and how a release is cut.
+6. [[file:STRINGS.org][STRINGS.org]] — how interface text is written, following Apple's style, and
+   where it lives: the String Catalog, =make strings=, plurals, and what stays
+   out of it.
 
 Documentation is written in Org, except =CONTRIBUTING.md= and =SECURITY.md=,
 which GitHub looks for by name.

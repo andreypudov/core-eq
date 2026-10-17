@@ -23,8 +23,12 @@ enum ImportSummary {
     static func message(for preview: ProfileManager.ImportPreview) -> String {
         var lines = [
             preview.name,
-            "\(preview.filterCount) \(preview.filterCount == 1 ? "filter" : "filters")",
-            "Preamp: \(BandFormat.gain(preview.preamp))",
+            String(
+                localized: "\(preview.filterCount) filters", bundle: .coreEQ,
+                comment: "Import alert: how many filters the preset brings in"),
+            String(
+                localized: "Preamp: \(BandFormat.gain(preview.preamp))",
+                comment: "Import alert: the preset’s output trim, such as “Preamp: −6.0 dB”"),
         ]
 
         if preview.droppedFilterCount > 0 {
@@ -40,12 +44,18 @@ enum ImportSummary {
         if !preview.unparsedLines.isEmpty {
             let total = preview.unparsedLines.count
             lines.append("")
-            lines.append(total == 1 ? "1 line was skipped:" : "\(total) lines were skipped:")
+            lines.append(
+                String(
+                    localized: "\(total) lines were skipped:", bundle: .coreEQ,
+                    comment: "Import alert: introduces the quoted lines the parser couldn’t read"))
             for line in preview.unparsedLines.prefix(quotedLineLimit) {
                 lines.append(clipped(line))
             }
             if total > quotedLineLimit {
-                lines.append("… and \(total - quotedLineLimit) more")
+                lines.append(
+                    String(
+                        localized: "… and \(total - quotedLineLimit) more",
+                        comment: "Import alert: how many skipped lines are not quoted"))
             }
         }
 
@@ -56,29 +66,37 @@ enum ImportSummary {
 
     /// "1 value was adjusted …" — the count the alert shows.
     static func adjustedValuesSentence(_ count: Int) -> String {
-        let subject = count == 1 ? "value was" : "values were"
-        return "\(count) \(subject) adjusted to fit CoreEQ’s limits."
+        String(
+            localized: "\(count) values were adjusted to fit CoreEQ’s limits.", bundle: .coreEQ,
+            comment: "Import alert: how many values CoreEQ changed")
     }
 
     /// "1 filter was dropped …" — the count the alert shows.
     static func droppedFiltersSentence(_ count: Int) -> String {
-        let subject = count == 1 ? "filter was" : "filters were"
-        return "\(count) \(subject) dropped to fit CoreEQ’s "
-            + "\(BuiltInProfiles.maxFreeFilters)-filter limit."
+        String(
+            localized:
+                "\(count) filters were dropped to fit CoreEQ’s \(BuiltInProfiles.maxFreeFilters)-filter limit.",
+            bundle: .coreEQ,
+            comment: "Import alert: how many filters didn’t fit, and how many CoreEQ holds")
     }
 
     /// "2 lines were skipped." — the compact note the sheet shows for an import
     /// that both changes values and leaves lines unmodelled, where the alert's
     /// quoted list would be out of place.
     static func skippedLinesSentence(_ count: Int) -> String {
-        count == 1 ? "1 line was skipped." : "\(count) lines were skipped."
+        String(
+            localized: "\(count) lines were skipped.", bundle: .coreEQ,
+            comment: "Import sheet: how many lines of the file the parser couldn’t read")
     }
 
     /// A preset named in one line: its name, how many filters it carries, and
     /// its trim. The heading of the confirmation sheet.
     static func presetSummary(_ preview: ProfileManager.ImportPreview) -> String {
-        let filters = preview.filterCount == 1 ? "1 filter" : "\(preview.filterCount) filters"
-        return "\(preview.name) · \(filters) · Preamp \(BandFormat.gain(preview.preamp))"
+        String(
+            localized:
+                "\(preview.name) · \(preview.filterCount) filters · Preamp \(BandFormat.gain(preview.preamp))",
+            bundle: .coreEQ,
+            comment: "Import sheet heading: preset name, filter count, and output trim")
     }
 
     // MARK: - One adjustment, concretely
@@ -89,9 +107,14 @@ enum ImportSummary {
     /// `FilterIdentity.index` counts from zero — it is the position in the
     /// parsed list — so the source's own "Filter 1" is shown by adding one.
     static func filterName(_ identity: ImportAdjustment.FilterIdentity?) -> String {
-        guard let identity else { return "Output trim" }
-        return "Filter \(identity.index + 1) · \(identity.kind.title), "
-            + "\(frequencyValue(identity.frequency)) Hz, Q \(qValue(identity.q))"
+        guard let identity else {
+            return String(
+                localized: "Output trim", comment: "Import sheet: the adjusted value is the preamp")
+        }
+        return String(
+            localized:
+                "Filter \(identity.index + 1) · \(identity.kind.title), \(frequencyValue(identity.frequency)) Hz, Q \(qValue(identity.q))",
+            comment: "Import sheet: which filter of the file, its type, frequency, and Q")
     }
 
     /// The original value and the value CoreEQ will store, or that a filter was
@@ -100,7 +123,8 @@ enum ImportSummary {
     static func change(_ adjustment: ImportAdjustment) -> String {
         switch adjustment.kind {
         case .droppedFilter:
-            return "dropped"
+            return String(
+                localized: "dropped", comment: "Import sheet: a filter that won’t be imported")
         case .gain, .preamp:
             return valueChange(adjustment, format: BandFormat.gain)
         case .q:
@@ -116,9 +140,13 @@ enum ImportSummary {
     /// change, a filter it had to drop, or a value it kept exactly.
     static func status(_ adjustment: ImportAdjustment) -> String {
         switch adjustment.kind {
-        case .droppedFilter: return "Dropped"
-        case .keptBeyondBandRange: return "Kept exact"
-        default: return "Adjusted"
+        case .droppedFilter:
+            return String(localized: "Dropped", comment: "Import sheet status: filter not imported")
+        case .keptBeyondBandRange:
+            return String(
+                localized: "Kept exact", comment: "Import sheet status: value imported unchanged")
+        default:
+            return String(localized: "Adjusted", comment: "Import sheet status: value changed")
         }
     }
 
@@ -131,7 +159,10 @@ enum ImportSummary {
     /// The whole adjustment as one sentence: which filter, what changed, and the
     /// CoreEQ limit responsible.
     static func adjustmentLine(_ adjustment: ImportAdjustment) -> String {
-        "\(filterName(adjustment.filter)) — \(change(adjustment)) · \(adjustment.limit)"
+        String(
+            localized:
+                "\(filterName(adjustment.filter)): \(change(adjustment)) · \(adjustment.limit)",
+            comment: "Import: which filter, what changed, and the CoreEQ limit responsible")
     }
 
     // MARK: - Impact
@@ -140,13 +171,18 @@ enum ImportSummary {
     /// measured — never a fabricated zero.
     static func impactSummary(_ impact: ImportImpact) -> String {
         guard let rms = impact.rmsDB, let max = impact.maxDB else {
-            return "Not measurable — the correction has a value CoreEQ can’t render."
+            return String(
+                localized: "Not measurable: the correction has a value CoreEQ can’t render.",
+                comment: "Import sheet: why the change to the response can’t be measured")
         }
         if max < 0.005, rms < 0.005 {
-            return "No audible change."
+            return String(
+                localized: "No audible change.", comment: "Import sheet: the response is unchanged")
         }
         return String(
-            format: "Up to %.2f dB difference, %.2f dB RMS, across 20 Hz–20 kHz.", max, rms)
+            localized:
+                "Up to \(decibels(max)) dB difference, \(decibels(rms)) dB RMS, across 20 Hz–20 kHz.",
+            comment: "Import sheet: the largest and the average change to the response")
     }
 
     // MARK: - The catalog's notice
@@ -158,21 +194,34 @@ enum ImportSummary {
 
         let adjusted = disclosure.adjustments.filter { $0.kind.isLossy }.count
         if adjusted > 0 {
-            let values = adjusted == 1 ? "value" : "values"
-            parts.append("Saving will adjust \(adjusted) \(values) to fit CoreEQ’s limits.")
+            parts.append(
+                String(
+                    localized: "Saving will adjust \(adjusted) values to fit CoreEQ’s limits.",
+                    bundle: .coreEQ,
+                    comment: "AutoEq catalog notice: how many values importing would change"))
         }
 
         if disclosure.clippableCount > 0 {
-            let kept = disclosure.clippableCount
-            let subject = kept == 1 ? "1 value is" : "\(kept) values are"
-            parts.append("\(subject) beyond the ±12 dB graphic range.")
+            parts.append(
+                String(
+                    localized:
+                        "\(disclosure.clippableCount) values are beyond the ±12 dB graphic range.",
+                    bundle: .coreEQ,
+                    comment: "AutoEq catalog notice: values kept outside the graphic sliders’ range"
+                ))
         }
 
         if let max = disclosure.impact.maxDB, let rms = disclosure.impact.rmsDB, max >= 0.05 {
             parts.append(
-                String(format: "Response changes by up to %.2f dB (%.2f dB RMS).", max, rms))
+                String(
+                    localized:
+                        "Response changes by up to \(decibels(max)) dB (\(decibels(rms)) dB RMS).",
+                    comment: "AutoEq catalog notice: the largest and the average change"))
         } else if !disclosure.impact.isMeasurable {
-            parts.append("The change can’t be measured.")
+            parts.append(
+                String(
+                    localized: "The change can’t be measured.",
+                    comment: "AutoEq catalog notice: the change to the response is unknown"))
         }
 
         return parts.joined(separator: " ")
@@ -193,6 +242,11 @@ enum ImportSummary {
     /// has one: "125", "1000", "70.8". The same shape the filter rows use.
     static func frequencyValue(_ hertz: Double) -> String {
         hertz == hertz.rounded() ? String(format: "%.0f", hertz) : String(format: "%.1f", hertz)
+    }
+
+    /// A difference in decibels to two decimals: "0.25".
+    private static func decibels(_ value: Double) -> String {
+        String(format: "%.2f", value)
     }
 
     /// A filter Q to two decimals: "1.41".

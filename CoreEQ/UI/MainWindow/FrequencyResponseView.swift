@@ -220,7 +220,7 @@ struct FrequencyResponseView: View {
                 .fill(.quaternary.opacity(showsBackground ? (minimal ? 0.35 : 0.5) : 0))
         )
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .accessibilityLabel("Equalizer frequency response curve")
+        .accessibilityLabel("Frequency response")
         .accessibilityHidden(minimal)
     }
 
@@ -594,7 +594,7 @@ struct FrequencyResponseView: View {
                 lineWidth: isHighlighted || isSelected ? 3 : 2
             )
 
-            let number = Text("\(index + 1)")
+            let number = Text(verbatim: "\(index + 1)")
                 .font(Theme.Font.valueEmphasized)
                 .foregroundStyle(Color.black.opacity(isActive ? 0.75 : 0.3))
             context.draw(number, at: center, anchor: .center)

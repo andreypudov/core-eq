@@ -17,7 +17,7 @@ struct ImportSummaryTests {
 
     @Test func cleanImportIsNameCountAndPreamp() throws {
         let text = "Preamp: -3.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00"
-        #expect(try summary(text) == "HD 600\n1 filter\nPreamp: -3.0 dB")
+        #expect(try summary(text) == "HD 600\n1 filter\nPreamp: \u{2212}3.0 dB")
     }
 
     @Test func countsInThePluralAndSignsABoost() throws {
@@ -109,7 +109,7 @@ struct ImportSummaryTests {
     @Test func showsOriginalAndNewValuePerKind() throws {
         let gain = try adjustment(
             .gain, in: preview("Filter 1: ON PK Fc 1000 Hz Gain -25 dB Q 1.00"))
-        #expect(ImportSummary.change(gain) == "-25.0 dB → -20.0 dB")
+        #expect(ImportSummary.change(gain) == "\u{2212}25.0 dB → \u{2212}20.0 dB")
         #expect(ImportSummary.status(gain) == "Adjusted")
         #expect(ImportSummary.isLoss(gain))
 
@@ -123,7 +123,7 @@ struct ImportSummaryTests {
         let preamp = try adjustment(
             .preamp,
             in: preview("Preamp: -20 dB\nFilter 1: ON PK Fc 1000 Hz Gain 3 dB Q 1.00"))
-        #expect(ImportSummary.change(preamp) == "-20.0 dB → -12.0 dB")
+        #expect(ImportSummary.change(preamp) == "\u{2212}20.0 dB → \u{2212}12.0 dB")
     }
 
     @Test func reportsADroppedFilter() throws {
@@ -154,7 +154,7 @@ struct ImportSummaryTests {
             .gain, in: preview("Filter 1: ON PK Fc 1000 Hz Gain -25 dB Q 1.00"))
         #expect(
             ImportSummary.adjustmentLine(gain)
-                == "Filter 1 · Bell, 1000 Hz, Q 1.00 — -25.0 dB → -20.0 dB · ±20 dB")
+                == "Filter 1 · Bell, 1000 Hz, Q 1.00: \u{2212}25.0 dB → \u{2212}20.0 dB · ±20 dB")
     }
 
     @Test func aMixedImportCountsItsSkippedLines() {
@@ -165,7 +165,7 @@ struct ImportSummaryTests {
     @Test func summaryNamesThePresetInOneLine() throws {
         let preview = try preview(
             "Preamp: -3.0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.00")
-        #expect(ImportSummary.presetSummary(preview) == "HD 600 · 1 filter · Preamp -3.0 dB")
+        #expect(ImportSummary.presetSummary(preview) == "HD 600 · 1 filter · Preamp \u{2212}3.0 dB")
     }
 
     // MARK: - Impact
@@ -184,7 +184,7 @@ struct ImportSummaryTests {
     @Test func unmeasurableImpactSaysSoRatherThanZero() {
         #expect(
             ImportSummary.impactSummary(.unmeasurable)
-                == "Not measurable — the correction has a value CoreEQ can’t render.")
+                == "Not measurable: the correction has a value CoreEQ can’t render.")
     }
 
     // MARK: - The Catalog's Notice

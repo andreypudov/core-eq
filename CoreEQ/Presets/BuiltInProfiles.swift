@@ -170,28 +170,72 @@ enum BuiltInProfiles {
     /// shape means reading its line again; `BuiltInProfilesTests` holds every
     /// built-in to having exactly one.
     static let descriptions: [String: String] = [
-        "Flat":           "No change: the sound exactly as it arrives.",
-        "Acoustic":       "Fuller low end and a brighter, more present top, for acoustic guitar and unplugged recordings.",
-        "Bass Booster":   "More weight below 250 Hz, held all the way down to 20 Hz. The rest is untouched.",
-        "Bass Reducer":   "Less weight below 500 Hz, for boomy rooms or bass-heavy headphones.",
-        "Classical":      "A gentle lift at both ends and a slightly recessed midrange, for orchestral and chamber music.",
-        "Dance":          "Strong low bass and forward upper mids, for club music.",
-        "Deep":           "More bass and lower midrange, softer treble: a darker, warmer sound.",
-        "Electronic":     "Deep bass, a dip around 500 Hz, and crisp highs, for synth-driven music.",
-        "Hip-Hop":        "A heavy low end with slightly pulled-back mids and a little air on top.",
-        "Jazz":           "Warm bass, slightly recessed mids, and an airy top, for small-group recordings.",
-        "Latin":          "Bass and treble up, mids back, so percussion and brass come forward.",
-        "Loudness":       "More deep bass and high treble, to keep music full at low volume.",
-        "Lounge":         "A softened bottom and a warm midrange, for relaxed background listening.",
-        "Piano":          "More body and a brighter, more present top, for solo piano.",
-        "Pop":            "Midrange forward, bass and treble lighter, so vocals lead.",
-        "R&B":            "Big, round low bass, a recessed lower midrange, and smooth highs.",
-        "Rock":           "Punchy low end, bright upper treble, and slightly scooped mids.",
-        "Small Speakers": "More bass and less treble, for laptop and small speakers that sound thin or harsh.",
-        "Spoken Word":    "Rumble cut and the speech range lifted, for podcasts and audiobooks.",
-        "Treble Booster": "More brightness above 1 kHz, most around 8 kHz.",
-        "Treble Reducer": "Everything above 1 kHz softened, for harsh or sibilant recordings.",
-        "Vocal Booster":  "Low bass trimmed and the voice range lifted, so singers and speakers stand out.",
+        "Flat": String(
+            localized: "No change: the sound exactly as it arrives.",
+            comment: "Built-in preset description: Flat"),
+        "Acoustic": String(
+            localized: "Fuller low end and a brighter, more present top, for acoustic guitar and unplugged recordings.",
+            comment: "Built-in preset description: Acoustic"),
+        "Bass Booster": String(
+            localized: "More weight below 250 Hz, held all the way down to 20 Hz. The rest is untouched.",
+            comment: "Built-in preset description: Bass Booster"),
+        "Bass Reducer": String(
+            localized: "Less weight below 500 Hz, for boomy rooms or bass-heavy headphones.",
+            comment: "Built-in preset description: Bass Reducer"),
+        "Classical": String(
+            localized: "A gentle lift at both ends and a slightly recessed midrange, for orchestral and chamber music.",
+            comment: "Built-in preset description: Classical"),
+        "Dance": String(
+            localized: "Strong low bass and forward upper mids, for club music.",
+            comment: "Built-in preset description: Dance"),
+        "Deep": String(
+            localized: "More bass and lower midrange, softer treble: a darker, warmer sound.",
+            comment: "Built-in preset description: Deep"),
+        "Electronic": String(
+            localized: "Deep bass, a dip around 500 Hz, and crisp highs, for synth-driven music.",
+            comment: "Built-in preset description: Electronic"),
+        "Hip-Hop": String(
+            localized: "A heavy low end with slightly pulled-back mids and a little air on top.",
+            comment: "Built-in preset description: Hip-Hop"),
+        "Jazz": String(
+            localized: "Warm bass, slightly recessed mids, and an airy top, for small-group recordings.",
+            comment: "Built-in preset description: Jazz"),
+        "Latin": String(
+            localized: "Bass and treble up, mids back, so percussion and brass come forward.",
+            comment: "Built-in preset description: Latin"),
+        "Loudness": String(
+            localized: "More deep bass and high treble, to keep music full at low volume.",
+            comment: "Built-in preset description: Loudness"),
+        "Lounge": String(
+            localized: "A softened bottom and a warm midrange, for relaxed background listening.",
+            comment: "Built-in preset description: Lounge"),
+        "Piano": String(
+            localized: "More body and a brighter, more present top, for solo piano.",
+            comment: "Built-in preset description: Piano"),
+        "Pop": String(
+            localized: "Midrange forward, bass and treble lighter, so vocals lead.",
+            comment: "Built-in preset description: Pop"),
+        "R&B": String(
+            localized: "Big, round low bass, a recessed lower midrange, and smooth highs.",
+            comment: "Built-in preset description: R&B"),
+        "Rock": String(
+            localized: "Punchy low end, bright upper treble, and slightly scooped mids.",
+            comment: "Built-in preset description: Rock"),
+        "Small Speakers": String(
+            localized: "More bass and less treble, for laptop and small speakers that sound thin or harsh.",
+            comment: "Built-in preset description: Small Speakers"),
+        "Spoken Word": String(
+            localized: "Rumble cut and the speech range lifted, for podcasts and audiobooks.",
+            comment: "Built-in preset description: Spoken Word"),
+        "Treble Booster": String(
+            localized: "More brightness above 1 kHz, most around 8 kHz.",
+            comment: "Built-in preset description: Treble Booster"),
+        "Treble Reducer": String(
+            localized: "Everything above 1 kHz softened, for harsh or sibilant recordings.",
+            comment: "Built-in preset description: Treble Reducer"),
+        "Vocal Booster": String(
+            localized: "Low bass trimmed and the voice range lifted, so singers and speakers stand out.",
+            comment: "Built-in preset description: Vocal Booster"),
     ]
 
     /// A chain of eleven ladder filters at 0 dB — the shape every preset starts

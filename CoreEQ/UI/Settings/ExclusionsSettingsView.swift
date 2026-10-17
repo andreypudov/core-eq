@@ -45,7 +45,7 @@ struct ExclusionsSettingsView: View {
 
     private var pane: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Apps switched on below play straight to the output, without EQ.")
+            Text("Apps turned on below play straight to the output, without EQ.")
                 .foregroundStyle(.secondary)
 
             List(selection: $selection) {
@@ -80,8 +80,7 @@ struct ExclusionsSettingsView: View {
             }
 
             Text(
-                "Browsers can't be excluded: they play through a helper process that "
-                    + "macOS shares between apps."
+                "Browsers can’t be excluded: they play through a helper process that macOS shares between apps."
             )
             .font(Theme.Font.label)
             .foregroundStyle(.secondary)
@@ -160,7 +159,8 @@ struct ExclusionsSettingsView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
-        panel.prompt = "Add"
+        panel.prompt = String(
+            localized: "Add", comment: "Open panel button: excludes the chosen apps")
         Task {
             let response: NSApplication.ModalResponse
             if let window = NSApp.keyWindow {

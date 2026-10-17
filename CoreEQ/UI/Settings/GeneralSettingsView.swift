@@ -47,14 +47,14 @@ struct GeneralSettingsView: View {
 
                 if loginItemFailed {
                     Label(
-                        "macOS refused the change. Open System Settings → General → Login Items to set it there.",
+                        "CoreEQ couldn’t change its login item. Open System Settings > General > Login Items to change it there.",
                         systemImage: "exclamationmark.triangle"
                     )
                     .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
                 }
             } footer: {
-                Text("CoreEQ has no window at login — it waits in the menu bar.")
+                Text("At login, CoreEQ opens in the menu bar, without a window.")
                     .font(Theme.Font.label)
                     .foregroundStyle(.secondary)
             }
@@ -64,9 +64,7 @@ struct GeneralSettingsView: View {
                     .help("Lets the Mac sleep on schedule while CoreEQ is running")
             } footer: {
                 Text(
-                    "Holding the audio device keeps a Mac awake. CoreEQ lets go after half a "
-                        + "minute of silence and takes it back the moment something plays. Turn "
-                        + "this off if your audio misbehaves."
+                    "Holding the audio device keeps a Mac awake. CoreEQ lets go after half a minute of silence and takes it back the moment something plays. Turn this off if your audio misbehaves."
                 )
                 .font(Theme.Font.label)
                 .foregroundStyle(.secondary)
@@ -158,10 +156,16 @@ struct GeneralSettingsView: View {
 
         var title: String {
             switch self {
-            case .granted: return "Granted"
-            case .notAsked: return "Not asked yet"
-            case .refused: return "Not granted"
-            case .notRunning: return "Not running"
+            case .granted:
+                return String(localized: "Granted", comment: "Audio permission status")
+            case .notAsked:
+                return String(localized: "Not asked yet", comment: "Audio permission status")
+            case .refused:
+                return String(localized: "Not granted", comment: "Audio permission status")
+            case .notRunning:
+                return String(
+                    localized: "Not running",
+                    comment: "Audio permission status: CoreEQ hasn’t needed it yet")
             }
         }
 
@@ -189,10 +193,14 @@ struct GeneralSettingsView: View {
         if let prompt { return prompt.explanation }
         switch permission {
         case .granted:
-            return
-                "CoreEQ processes the sound you hear. Nothing is recorded, stored, or transmitted."
+            return String(
+                localized:
+                    "CoreEQ equalizes the sound you hear. Nothing is recorded, stored, or sent anywhere.",
+                comment: "Audio permission explanation, when it’s granted")
         default:
-            return "CoreEQ has not needed the permission yet, so there is nothing to report."
+            return String(
+                localized: "CoreEQ hasn’t needed the permission yet, so there’s nothing to report.",
+                comment: "Audio permission explanation, before CoreEQ has asked")
         }
     }
 

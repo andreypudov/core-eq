@@ -41,19 +41,29 @@ struct FilterListView: View {
     /// same tokens, so the two can't drift apart.
     private var columnTitles: some View {
         HStack(spacing: 0) {
-            title("#", width: Theme.FilterRow.Column.index, alignment: .leading)
+            title(Text(verbatim: "#"), width: Theme.FilterRow.Column.index, alignment: .leading)
             ColumnGap()
-            title("Enable", width: Theme.FilterRow.Column.enable)
+            title(
+                Text("On", comment: "Band list column: band turned on"),
+                width: Theme.FilterRow.Column.enable)
             ColumnGap()
-            title("Type", width: Theme.FilterRow.Column.type)
+            title(
+                Text("Type", comment: "Band list column: filter type"),
+                width: Theme.FilterRow.Column.type)
             ColumnGap()
-            title("Frequency", width: Theme.FilterRow.Column.frequency)
+            title(
+                Text("Frequency", comment: "Band list column"),
+                width: Theme.FilterRow.Column.frequency)
             ColumnGap()
-            title("Gain", width: Theme.FilterRow.Column.gain)
+            title(Text("Gain", comment: "Band list column"), width: Theme.FilterRow.Column.gain)
             ColumnGap()
-            title("Q", width: Theme.FilterRow.Column.q)
+            title(
+                Text("Q", comment: "Band list column: the band’s width"),
+                width: Theme.FilterRow.Column.q)
             Spacer(minLength: Theme.FilterRow.columnSpacing)
-            title("Actions", width: Theme.FilterRow.Column.actions, alignment: .trailing)
+            title(
+                Text("Actions", comment: "Band list column: the row’s buttons"),
+                width: Theme.FilterRow.Column.actions, alignment: .trailing)
         }
         .frame(height: Theme.FilterRow.headerHeight)
         .padding(.horizontal, 8)
@@ -64,9 +74,8 @@ struct FilterListView: View {
     /// full length if it is the wider of the two: the columns are sized for the
     /// controls in them, and "Actions" over a 24-point button would otherwise
     /// arrive as "Ac…".
-    private func title(_ text: String, width: CGFloat, alignment: Alignment = .center) -> some View
-    {
-        Text(text)
+    private func title(_ text: Text, width: CGFloat, alignment: Alignment = .center) -> some View {
+        text
             // The size the Preamp readout and the band captions use, so the
             // window has one voice for the small print rather than a different
             // one per section.
@@ -101,8 +110,11 @@ struct FilterListView: View {
             .padding(.leading, 8)
             .help(
                 profileManager.canAddFilter
-                    ? "Add a parametric band"
-                    : "CoreEQ holds up to \(BuiltInProfiles.maxFreeFilters) parametric bands"
+                    ? String(localized: "Add a parametric band", comment: "Add Band help tag")
+                    : String(
+                        localized:
+                            "CoreEQ holds up to \(BuiltInProfiles.maxFreeFilters) parametric bands",
+                        comment: "Add Band help tag, when the band limit is reached")
             )
         }
     }
@@ -226,7 +238,7 @@ struct FilterListView: View {
     /// hasn't is not reading an empty box.
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("No bands yet.")
+            Text("No Bands")
                 .font(Theme.Font.label)
                 .foregroundStyle(.secondary)
 

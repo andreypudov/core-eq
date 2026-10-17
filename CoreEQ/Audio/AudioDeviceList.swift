@@ -47,7 +47,7 @@ final class AudioDeviceList: ObservableObject {
     var defaultDeviceName: String {
         defaultDeviceID.flatMap { id in devices.first { $0.id == id }?.name }
             ?? defaultDeviceID.flatMap(AudioDevices.name(of:))
-            ?? "No Output Device"
+            ?? String(localized: "No Output Device", comment: "Shown when the Mac has no output")
     }
 
     /// The icon of the current default output. Falls back to the crossed-out

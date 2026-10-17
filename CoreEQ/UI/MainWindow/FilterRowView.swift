@@ -80,8 +80,9 @@ struct FilterRowView: View {
             }
             .buttonStyle(.plain)
             .disabled(!isEnabled)
-            .help("Change this band's colour")
-            .accessibilityLabel("Band \(index) colour, \(BandColor.at(filter.colorIndex).name)")
+            .help("Change the band’s color")
+            .accessibilityLabel("Band \(index) color")
+            .accessibilityValue(BandColor.at(filter.colorIndex).name)
             .popover(isPresented: $isChoosingColor, arrowEdge: .bottom) {
                 ColorPalettePicker(selected: filter.colorIndex) { choice in
                     profileManager.setFilterColor(choice, id: filter.id)
@@ -89,7 +90,7 @@ struct FilterRowView: View {
                 }
             }
 
-            Text("\(index)")
+            Text(verbatim: "\(index)")
                 .font(Theme.Font.valueEmphasized)
                 .foregroundStyle(.secondary)
                 // A band number is two glyphs at most and must stay on one line.
@@ -103,16 +104,15 @@ struct FilterRowView: View {
     }
 
     private var enableCell: some View {
-        Toggle("", isOn: enabledBinding)
+        Toggle("Band \(index)", isOn: enabledBinding)
             .toggleStyle(.bandPower)
             .labelsHidden()
             .disabled(!isEnabled)
-            .accessibilityLabel("Band \(index) enabled")
             .frame(width: Theme.FilterRow.Column.enable)
     }
 
     private var typeCell: some View {
-        Picker("", selection: kindBinding) {
+        Picker("Band \(index) type", selection: kindBinding) {
             ForEach(EQFilter.Kind.allCases) { kind in
                 Text(kind.title).tag(kind)
             }
@@ -121,7 +121,6 @@ struct FilterRowView: View {
         .controlSize(.small)
         .labelsHidden()
         .disabled(!isEnabled)
-        .accessibilityLabel("Band \(index) type")
         .frame(width: Theme.FilterRow.Column.type)
     }
 
@@ -135,8 +134,11 @@ struct FilterRowView: View {
             // not how anyone writes one. One decimal when there is one, so an
             // imported 70.8 Hz is shown as itself rather than as 71.
             format: .number.precision(.fractionLength(0...1)).grouping(.never),
-            label: "Band \(index) frequency",
-            help: "Drag or scroll to set; double-click the knob to return to 1 kHz"
+            label: String(
+                localized: "Band \(index) frequency", comment: "Band knob, for VoiceOver"),
+            help: String(
+                localized: "Drag or scroll to set; double-click the knob to return to 1 kHz",
+                comment: "Frequency knob help tag")
         )
     }
 
@@ -153,8 +155,11 @@ struct FilterRowView: View {
                 // Gain is the one parameter with a meaningful centre, so its arc
                 // grows out of the middle the way the sliders' fill does.
                 isBipolar: true,
-                label: "Band \(index) gain",
-                help: "Drag or scroll to set; double-click the knob to return to 0 dB"
+                label: String(
+                    localized: "Band \(index) gain", comment: "Band knob, for VoiceOver"),
+                help: String(
+                    localized: "Drag or scroll to set; double-click the knob to return to 0 dB",
+                    comment: "Gain knob help tag")
             )
         } else {
             // High and low pass cut by slope alone, so there is no gain to show
@@ -171,8 +176,12 @@ struct FilterRowView: View {
             parameter: .q,
             unit: nil,
             format: .number.precision(.fractionLength(2)),
-            label: "Band \(index) Q",
-            help: "Drag or scroll to set; double-click the knob to return to the default width"
+            label: String(
+                localized: "Band \(index) Q", comment: "Band knob, for VoiceOver: the band’s width"),
+            help: String(
+                localized:
+                    "Drag or scroll to set; double-click the knob to return to the default width",
+                comment: "Q knob help tag")
         )
     }
 

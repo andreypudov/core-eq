@@ -18,13 +18,11 @@ struct DiagnosticsSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Audio diagnostics")
+            Text("Audio Diagnostics")
                 .font(Theme.Font.heading)
 
             Text(
-                "What CoreEQ sees on this Mac. Include this with a bug report — it "
-                    + "answers most questions about audio problems. It lists your audio "
-                    + "device names and contains nothing else about you."
+                "What CoreEQ sees on this Mac. Include it with a bug report: it answers most questions about audio problems. It lists your audio devices by name and contains nothing else about you."
             )
             .font(Theme.Font.label)
             .foregroundStyle(.secondary)
@@ -45,7 +43,11 @@ struct DiagnosticsSettingsView: View {
             .clipShape(RoundedRectangle(cornerRadius: 5))
 
             HStack {
-                Button(didCopy ? "Copied" : "Copy") {
+                Button(
+                    didCopy
+                        ? String(localized: "Copied", comment: "Diagnostics: the report was copied")
+                        : String(localized: "Copy", comment: "Diagnostics: copies the report")
+                ) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(report, forType: .string)
                     didCopy = true

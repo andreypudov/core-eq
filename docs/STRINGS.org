@@ -1,0 +1,168 @@
+#+TITLE: CoreEQ — Writing Strings
+#+OPTIONS: toc:nil num:nil
+
+How CoreEQ's interface text is written, and where it lives. The rules follow
+the way Apple writes for macOS and its own apps — the Human Interface
+Guidelines and the Apple Style Guide — so CoreEQ reads like part of the system
+rather than a guest on it. When this guide is silent, do what System Settings,
+Music, or Finder does.
+
+* Where strings live
+
+Every string a person sees is in the String Catalog,
+=CoreEQ/Resources/Localizable.xcstrings=, in English. It is the one place to
+review all of them, and the file a translation would start from. The
+permission prompt macOS shows is in =CoreEQ/Resources/InfoPlist.xcstrings=.
+
+The catalog is filled from the code, not by hand:
+
+- SwiftUI literals are extracted as they are: =Text("No Bands")=,
+  =Button("Remove")=, =.help("Remove this band")=, =.accessibilityLabel(...)=.
+- A string built anywhere else — a model, an error, an AppKit menu item, a
+  status — is written as =String(localized: "…", comment: "…")=, or passed as
+  a =LocalizedStringResource=. A plain =String= literal never reaches the
+  catalog, and a translation would never reach it.
+- =make strings= builds the app and merges what it extracted into the catalog,
+  so the catalog stays current without opening Xcode. Run it after changing
+  any string, and commit the catalog with the change.
+
+Three things are deliberately not in the catalog:
+
+- *Log messages* (=Logger=). They are for whoever is reading a bug report, stay
+  in English, and stay next to the code they describe. See [[*Log messages][Log messages]].
+- *The Diagnostics report*. It is sent to the developer and read alongside the
+  source, so it stays in English.
+- *Names*: CoreEQ, AutoEq, EqualizerAPO, the built-in preset names (they are
+  also the keys presets are stored under), file extensions, and URLs.
+
+* Writing for the catalog
+
+- *Whole sentences.* A translation cannot be assembled from pieces, because
+  word order differs between languages. Never join fragments with =+=, and
+  never pick one word with a ternary inside a sentence. Two sentences that are
+  each complete may be joined with a space.
+- *Placeholders, not concatenation.* Interpolate values into one string —
+  =String(localized: "Version \(version)")= — so a translator can move them.
+- *Plurals in the catalog.* A count is interpolated once, and the catalog
+  holds the forms: “%lld filter” for one, “%lld filters” for other. Pass
+  =bundle: .coreEQ= to these, so the tests, which do not run from the app's
+  bundle, find the same catalog. Don't choose between singular and plural in
+  code.
+- *A comment when the text alone is ambiguous.* “Mid” is a band; “Preset” is a
+  menu section; “Q” is a filter's width. Say where it appears and what it
+  means.
+- *No case changes in code.* Don't =lowercased()= or =capitalized= a
+  localized string; write the form that is needed as a string of its own.
+
+* Voice
+
+- *Plain and direct.* Say what is happening and what to do, in the fewest
+  words that are still friendly. Prefer the word a person would use: “sound”
+  over “audio signal”, “turn on” over “enable”.
+- *Talk to the person as “you”.* Refer to the app as CoreEQ, never “the app”,
+  “we”, or “I”.
+- *No blame, no drama.* Never suggest the person did something wrong. No
+  “please”, no exclamation marks, no “oops”. Say what CoreEQ couldn't do, then
+  how to fix it.
+- *Contractions for negatives* — can't, couldn't, doesn't, isn't, won't, and
+  it's. Apple writes them in interface text; “cannot” reads stiff.
+- *US English* — color, catalog, behavior, recognize.
+
+* Capitalization
+
+*Title-style* for the names of things a person acts on or goes to:
+
+- buttons, menu items, menu titles, and pop-up menu items;
+- window, sheet, and tab titles, and toolbar items;
+- section headings and sidebar sections;
+- empty-state titles (“No Bands”, “No Results for “Jazz””);
+- alert titles that are fragments (“Couldn't Import Preset”).
+
+In title style, capitalize every word except articles (a, an, the),
+coordinating conjunctions (and, but, or, nor, for, so, yet), and prepositions
+of four letters or fewer (as, at, by, for, from, in, into, of, on, to, with)
+— unless the word is first or last, or part of a verb (“Set Up”, “Turn Off”).
+Hyphenated compounds capitalize both parts (“Built-In”).
+
+*Sentence-style* for everything that reads as text:
+
+- checkbox, switch, and radio button labels (“Open CoreEQ at login”);
+- form labels, which end with a colon (“Target curve:”);
+- help tags, placeholders, and accessibility labels;
+- explanations, footers, status text, and error messages;
+- alert titles that are complete sentences, and alert messages.
+
+* Punctuation
+
+- *Curly quotes and apostrophes*: “ ” ‘ ’ — never =" "= or ='=.
+- *Ellipsis*, the single character …, on a button or menu item only when the
+  command needs more input before it completes: =Add…= opens a file dialog,
+  =Settings…= opens a window to change things. Not when the command acts at
+  once or merely asks for confirmation: =Delete=, =Rename= (edited in place),
+  =Open System Settings=. In progress text it means “still working”:
+  “Loading correction…”.
+- *Periods* end sentences. Labels, titles, buttons, menu items, help tags,
+  and other fragments have none.
+- *Em dash* — closed up, no spaces — sparingly. Usually a period or a colon
+  is better.
+- *En dash* for ranges: 20 Hz–20 kHz.
+- *Paths through settings* use “>”: System Settings > General > Login Items.
+
+* Numbers and units
+
+- Numerals for every count and value: “3 filters”, “16 bands”.
+- A space between a value and its unit: 12 dB, 1 kHz, 48 kHz, 6 s.
+- Signs are real symbols: + and − (U+2212) for gains, ± for ranges.
+
+* Words
+
+| Use                         | Not                          | Notes                                                   |
+|-----------------------------+------------------------------+---------------------------------------------------------|
+| equalize, equalizer, EQ     | process, processing          | “Process” only where macOS's own wording is quoted      |
+| preset                      | profile                      | Profile is a type name in the code, never on screen     |
+| band                        | filter                       | In the editors; “filter” only for lines in an imported file |
+| output device               | output, speaker              |                                                         |
+| exclude, excluded           | blacklist, ignore            | “Leave out” is fine in prose                            |
+| turn on, turn off           | enable, disable, switch on   |                                                         |
+| choose                      | select, pick                 | From a menu or pop-up menu                              |
+| select                      | choose                       | An item in a list, or a checkbox                        |
+| click                       | press, tap                   | Buttons; “press” only for keys                          |
+| try again                   | retry                        | Also the button: Try Again                              |
+| couldn't                    | failed, unable to            | “CoreEQ couldn't import the preset.”                     |
+| Settings                    | Preferences                  | CoreEQ's own and System Settings both                   |
+| quit                        | exit, close                  | For the app; “close” is for windows                     |
+| Mac, macOS                  | computer, OS X               |                                                         |
+| AutoEq, EqualizerAPO        | AutoEQ, Equalizer APO        | As their authors spell them                             |
+
+Settings in System Settings are named exactly as macOS shows them: Privacy &
+Security, Screen & System Audio Recording, Login Items.
+
+* Elements
+
+- *Buttons* are verbs or short verb phrases, title-style: Add…, Remove, Try
+  Again, Import and Clip to ±12 dB. Cancel and OK are the only exceptions to
+  “verb”.
+- *Menu items* name the command; status rows in the menu bar extra name the
+  state, title-style: Paused While Recording, Audio Permission Needed.
+- *Alerts* say what happened in the title and what to do in the message. Use
+  “Couldn't …” rather than “… Failed”, and name the thing. A destructive
+  button names the action (Delete), never OK.
+- *Help tags* describe what a control does, starting with a verb, as a
+  sentence-style fragment: “Remove this band”.
+- *Accessibility labels* name the element, not its type — “Remove band 3”,
+  not “Remove band 3 button” — and put state in the value (On, Off, Edited),
+  not the label.
+- *Empty states* have a title-style title (“No Bands”) and, when there is
+  something to do, one sentence saying what.
+- *Errors* say what CoreEQ couldn't do, then the fix: “CoreEQ couldn't
+  download AutoEq data. Check your internet connection and try again.”
+
+* Log messages
+
+Not in the catalog and never shown in the interface, but read in bug reports:
+
+- English, sentence case, no ending period.
+- Say what happened, with the values that explain it: “Tap is delivering
+  audio; muting and restarting to process it”.
+- Mark every interpolated value's privacy. Device names and bundle IDs are
+  =.public=; anything from the person's files is not.

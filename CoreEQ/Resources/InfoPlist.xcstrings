@@ -1,0 +1,30 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSAudioCaptureUsageDescription" : {
+      "comment" : "The reason macOS shows when it asks for the audio permission. Same text as CoreEQ’s own explanation.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "An equalizer has to reach the sound to change it. CoreEQ reads audio on its way to your speakers, adjusts it, and plays it straight back. Nothing is recorded, stored, or sent anywhere, and quitting CoreEQ hands the audio back immediately."
+          }
+        }
+      }
+    },
+    "NSHumanReadableCopyright" : {
+      "comment" : "Copyright line in the About tab. Names and the license title stay as they are.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "© 2026 Andrey Pudov · Apache License 2.0"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

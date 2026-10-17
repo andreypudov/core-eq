@@ -1,0 +1,1053 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@ copy" : {
+      "comment" : "Name of a duplicated preset, such as “Jazz copy”"
+    },
+    "%@ decibels" : {
+      "comment" : "Gain, for VoiceOver, such as “+2.5 decibels”"
+    },
+    "%@ downloaded" : {
+      "comment" : "AutoEq catalog download progress, size unknown, such as “2 MB downloaded”"
+    },
+    "%@ hertz" : {},
+    "%@ of %@" : {
+      "comment" : "AutoEq catalog download progress, such as “2 MB of 5 MB”",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@"
+          }
+        }
+      }
+    },
+    "%@ · %lld filters · Preamp %@" : {
+      "comment" : "Import sheet heading: preset name, filter count, and output trim",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %#@filters@ · Preamp %3$@"
+          },
+          "substitutions" : {
+            "filters" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg filter"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg filters"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%@, playing %@" : {
+      "comment" : "Output device, for VoiceOver: device name and its preset",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, playing %2$@"
+          }
+        }
+      }
+    },
+    "%@, playing %@, edited" : {
+      "comment" : "Output device, for VoiceOver: device name and its edited preset",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, playing %2$@, edited"
+          }
+        }
+      }
+    },
+    "%@: %@" : {
+      "comment" : "Import sheet effect row, for VoiceOver: its label and the effect",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@"
+          }
+        }
+      }
+    },
+    "%@: %@ · %@" : {
+      "comment" : "Import: which filter, what changed, and the CoreEQ limit responsible",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@ · %3$@"
+          }
+        }
+      }
+    },
+    "%lld filters" : {
+      "comment" : "Import alert: how many filters the preset brings in",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld filter"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld filters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld filters were dropped to fit CoreEQ’s %lld-filter limit." : {
+      "comment" : "Import alert: how many filters didn’t fit, and how many CoreEQ holds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@filters@ dropped to fit CoreEQ’s %2$lld-filter limit."
+          },
+          "substitutions" : {
+            "filters" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg filter was"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg filters were"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld lines were skipped." : {
+      "comment" : "Import sheet: how many lines of the file the parser couldn’t read",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld line was skipped."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld lines were skipped."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld lines were skipped:" : {
+      "comment" : "Import alert: introduces the quoted lines the parser couldn’t read",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld line was skipped:"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld lines were skipped:"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld matches" : {
+      "comment" : "AutoEq catalog search: how many models match",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld match"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld matches"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld measurements" : {
+      "comment" : "AutoEq model row: how many measurements the model has",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld measurement"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld measurements"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld models" : {
+      "comment" : "AutoEq catalog: how many headphone models it has",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld model"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld models"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld parametric bands" : {
+      "comment" : "Import limit: how many parametric bands CoreEQ holds",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld parametric band"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld parametric bands"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld values are beyond the ±12 dB graphic range." : {
+      "comment" : "AutoEq catalog notice: values kept outside the graphic sliders’ range",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld value is beyond the ±12 dB graphic range."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld values are beyond the ±12 dB graphic range."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld values were adjusted to fit CoreEQ’s limits." : {
+      "comment" : "Import alert: how many values CoreEQ changed",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld value was adjusted to fit CoreEQ’s limits."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld values were adjusted to fit CoreEQ’s limits."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "A band boosts or cuts one frequency, on top of the Graphic sliders. Add one below, or double-click the graph where you want it." : {},
+    "A gentle lift at both ends and a slightly recessed midrange, for orchestral and chamber music." : {
+      "comment" : "Built-in preset description: Classical"
+    },
+    "A heavy low end with slightly pulled-back mids and a little air on top." : {
+      "comment" : "Built-in preset description: Hip-Hop"
+    },
+    "A softened bottom and a warm midrange, for relaxed background listening." : {
+      "comment" : "Built-in preset description: Lounge"
+    },
+    "AUTO" : {
+      "comment" : "Automatic gain switch, written in capitals as a badge"
+    },
+    "About" : {},
+    "About CoreEQ" : {},
+    "Actions" : {
+      "comment" : "Band list column: the row’s buttons"
+    },
+    "Add" : {
+      "comment" : "Open panel button: excludes the chosen apps"
+    },
+    "Add Band" : {},
+    "Add Preset" : {},
+    "Add a parametric band" : {
+      "comment" : "Add Band help tag"
+    },
+    "Add…" : {},
+    "Adjusted" : {
+      "comment" : "Import sheet status: value changed"
+    },
+    "Allow Audio Access" : {
+      "comment" : "Menu bar extra row: opens Settings to give the audio permission"
+    },
+    "Allow…" : {
+      "comment" : "Button: asks macOS for the audio permission, which shows its prompt"
+    },
+    "An equalizer has to reach the sound to change it. CoreEQ reads audio on its way to your speakers, adjusts it, and plays it straight back. Nothing is recorded, stored, or sent anywhere, and quitting CoreEQ hands the audio back immediately." : {
+      "comment" : "What the audio permission is for, shown before macOS asks"
+    },
+    "Another copy of CoreEQ is running." : {
+      "comment" : "Alert title at launch, when CoreEQ is already running"
+    },
+    "Apps turned on below play straight to the output, without EQ." : {},
+    "At login, CoreEQ opens in the menu bar, without a window." : {},
+    "Audio Diagnostics" : {},
+    "Audio Permission Needed" : {
+      "comment" : "Menu bar extra row: the permission was refused; opens Settings"
+    },
+    "AutoEq" : {},
+    "AutoEq publishes correction curves for a large catalog of headphones and earphones. Its web app can write a correction as an EqualizerAPO parametric EQ, which CoreEQ imports." : {},
+    "AutoEq sent an unexpected response." : {
+      "comment" : "AutoEq error"
+    },
+    "AutoEq sent data CoreEQ couldn’t read." : {
+      "comment" : "AutoEq error"
+    },
+    "Automatic gain" : {},
+    "Band %lld" : {},
+    "Band %lld Q" : {
+      "comment" : "Band knob, for VoiceOver: the band’s width"
+    },
+    "Band %lld color" : {},
+    "Band %lld frequency" : {
+      "comment" : "Band knob, for VoiceOver"
+    },
+    "Band %lld gain" : {
+      "comment" : "Band knob, for VoiceOver"
+    },
+    "Band %lld type" : {},
+    "Bass" : {
+      "comment" : "Quick EQ slider: low frequencies"
+    },
+    "Bass and treble up, mids back, so percussion and brass come forward." : {
+      "comment" : "Built-in preset description: Latin"
+    },
+    "Bell" : {
+      "comment" : "Filter type"
+    },
+    "Big, round low bass, a recessed lower midrange, and smooth highs." : {
+      "comment" : "Built-in preset description: R&B"
+    },
+    "Blue" : {
+      "comment" : "Band color name"
+    },
+    "Browse AutoEq Catalog" : {},
+    "Browse AutoEq headphone corrections" : {},
+    "Browsers can’t be excluded: they play through a helper process that macOS shares between apps." : {},
+    "Built-In" : {},
+    "Cancel" : {},
+    "Change the band’s color" : {},
+    "Changes CoreEQ Will Make" : {},
+    "Check your internet connection and try again." : {
+      "comment" : "AutoEq recovery suggestion"
+    },
+    "Checking for AutoEq updates…" : {
+      "comment" : "AutoEq progress"
+    },
+    "Choose EqualizerAPO" : {},
+    "Choose a Target" : {},
+    "Choose a different measurement source, or import a correction by hand." : {
+      "comment" : "AutoEq recovery suggestion"
+    },
+    "Choose a different measurement." : {
+      "comment" : "AutoEq recovery suggestion"
+    },
+    "Choose a different target or measurement." : {
+      "comment" : "AutoEq recovery suggestion"
+    },
+    "Choose a measurement first" : {
+      "comment" : "Target pop-up, before a measurement"
+    },
+    "Choose a model first" : {
+      "comment" : "Measurement pop-up, before a model"
+    },
+    "Choose a model to get started." : {},
+    "Choose an EqualizerAPO (.txt) or CoreEQ (.coreeq, .json) preset file." : {
+      "comment" : "Open panel message"
+    },
+    "Choose the sound you want the correction to aim for, and adjust it if you like." : {},
+    "Choose whether CoreEQ pauses while recording" : {},
+    "Clear search" : {},
+    "Click “Paste from Clipboard” below, or drop the .txt file onto the preset list." : {},
+    "Clip every gain beyond ±12 dB, and use a graphic slider where one fits" : {},
+    "Collapsed" : {
+      "comment" : "Menu row, for VoiceOver: list hidden"
+    },
+    "Comparison" : {},
+    "Comparison slot" : {},
+    "Compute the trim from the chain, so a boosted preset stays at the loudness it started from" : {
+      "comment" : "Automatic gain help tag, while off"
+    },
+    "Computing correction in CoreEQ…" : {},
+    "Copied" : {
+      "comment" : "Diagnostics: the report was copied"
+    },
+    "Copy" : {
+      "comment" : "Diagnostics: copies the report"
+    },
+    "Copy or Download" : {},
+    "Copy the generated filters to the clipboard, or download them as a .txt file." : {},
+    "CoreEQ" : {
+      "comment" : "Menu bar extra heading: the app name\nMenu bar extra tooltip: the app name\nMenu bar icon, for VoiceOver: equalizing"
+    },
+    "CoreEQ couldn’t capture system audio (error %d). Make sure CoreEQ is turned on in System Settings > Privacy & Security > Screen & System Audio Recording." : {
+      "comment" : "Engine failure: the audio tap couldn’t be created; the number is its error code"
+    },
+    "CoreEQ couldn’t change its login item. Open System Settings > General > Login Items to change it there." : {},
+    "CoreEQ couldn’t download AutoEq data (HTTP %lld). Try again." : {
+      "comment" : "AutoEq error: the number is the HTTP status code"
+    },
+    "CoreEQ couldn’t download AutoEq data from GitHub. Check your internet connection and try again." : {
+      "comment" : "AutoEq error"
+    },
+    "CoreEQ couldn’t identify its own audio output, so it can’t leave itself out of what it captures. It’s leaving your sound alone and will try again." : {
+      "comment" : "Engine failure: CoreEQ couldn’t find its own audio process"
+    },
+    "CoreEQ couldn’t set up the audio path (error %d)." : {
+      "comment" : "Engine failure: a Core Audio call failed; the number is its error code"
+    },
+    "CoreEQ equalizes the sound you hear. Nothing is recorded, stored, or sent anywhere." : {
+      "comment" : "Audio permission explanation, when it’s granted"
+    },
+    "CoreEQ hasn’t needed the permission yet, so there’s nothing to report." : {
+      "comment" : "Audio permission explanation, before CoreEQ has asked"
+    },
+    "CoreEQ holds up to %lld parametric bands" : {
+      "comment" : "Add Band help tag, when the band limit is reached"
+    },
+    "CoreEQ isn’t allowed to reach the sound" : {
+      "comment" : "Permission heading, after the permission was refused"
+    },
+    "CoreEQ isn’t receiving any audio, so it’s leaving your sound alone instead of replacing it." : {
+      "comment" : "Engine failure: sound is playing but none reaches CoreEQ"
+    },
+    "CoreEQ isn’t receiving any audio, so it’s leaving your sound alone instead of replacing it. This is what a refused permission looks like." : {
+      "comment" : "Engine failure, when the permission seems to be refused"
+    },
+    "CoreEQ isn’t running" : {
+      "comment" : "Warning icon, for VoiceOver"
+    },
+    "CoreEQ isn’t running." : {
+      "comment" : "Engine status"
+    },
+    "CoreEQ needs to reach the sound to change it" : {
+      "comment" : "Permission heading, before macOS has asked"
+    },
+    "CoreEQ, equalizer off" : {
+      "comment" : "Menu bar icon, for VoiceOver: the equalizer is turned off"
+    },
+    "CoreEQ, not equalizing" : {
+      "comment" : "Menu bar icon, for VoiceOver: audio isn’t reaching CoreEQ"
+    },
+    "CoreEQ, paused while recording" : {
+      "comment" : "Menu bar icon, for VoiceOver: stepped aside for a screen recording"
+    },
+    "CoreEQ…" : {},
+    "Couldn’t Export Preset" : {},
+    "Couldn’t Import Preset" : {},
+    "Couldn’t Load the AutoEq Catalog" : {},
+    "Create or import a preset" : {},
+    "Data from AutoEq · MIT, Jaakko Pasanen" : {
+      "comment" : "AutoEq catalog credit: the data’s source and license"
+    },
+    "Deep bass, a dip around 500 Hz, and crisp highs, for synth-driven music." : {
+      "comment" : "Built-in preset description: Electronic"
+    },
+    "Delete" : {},
+    "Delete “%@”?" : {},
+    "Details" : {},
+    "Diagnostics" : {},
+    "Discard changes and return to the saved preset" : {},
+    "Done" : {},
+    "Downloading the AutoEq catalog…" : {
+      "comment" : "AutoEq progress"
+    },
+    "Drag or scroll to set; double-click the knob to return to 0 dB" : {
+      "comment" : "Gain knob help tag"
+    },
+    "Drag or scroll to set; double-click the knob to return to 1 kHz" : {
+      "comment" : "Frequency knob help tag"
+    },
+    "Drag or scroll to set; double-click the knob to return to the default width" : {
+      "comment" : "Q knob help tag"
+    },
+    "Dropped" : {
+      "comment" : "Import sheet status: filter not imported"
+    },
+    "Duplicate" : {},
+    "Edit as Filter" : {},
+    "Edited" : {
+      "comment" : "Preset row, for VoiceOver: has unsaved changes"
+    },
+    "Editor" : {},
+    "Effect on the Response" : {},
+    "Equalizer" : {
+      "comment" : "Menu bar extra switch, for VoiceOver"
+    },
+    "Equalizer Unavailable" : {
+      "comment" : "Menu bar extra row: CoreEQ couldn’t start equalizing"
+    },
+    "Equalizer unavailable" : {
+      "comment" : "Warning icon, for VoiceOver"
+    },
+    "EqualizerAPO…" : {},
+    "Equalizes everything you hear, with no driver and nothing left behind." : {},
+    "Equalizing the sound on “%@”." : {
+      "comment" : "Engine status: the output device being equalized"
+    },
+    "Everything above 1 kHz softened, for harsh or sibilant recordings." : {
+      "comment" : "Built-in preset description: Treble Reducer"
+    },
+    "Exclude %@" : {},
+    "Exclusions" : {},
+    "Expanded" : {
+      "comment" : "Menu row, for VoiceOver: list shown"
+    },
+    "Export Preset" : {
+      "comment" : "Save panel title"
+    },
+    "Extra change from clipping" : {
+      "comment" : "Import sheet: what clipping to ±12 dB adds to the effect"
+    },
+    "Filter %lld · %@, %@ Hz, Q %@" : {
+      "comment" : "Import sheet: which filter of the file, its type, frequency, and Q",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Filter %1$lld · %2$@, %3$@ Hz, Q %4$@"
+          }
+        }
+      }
+    },
+    "First %lld matches" : {
+      "comment" : "AutoEq catalog search: only the first page of matches is shown"
+    },
+    "Frequency" : {
+      "comment" : "Band list column"
+    },
+    "Frequency response" : {},
+    "Fuller low end and a brighter, more present top, for acoustic guitar and unplugged recordings." : {
+      "comment" : "Built-in preset description: Acoustic"
+    },
+    "Gain" : {
+      "comment" : "Band list column"
+    },
+    "General" : {},
+    "GitHub is limiting downloads. Try again later." : {
+      "comment" : "AutoEq error: GitHub refused because of too many requests"
+    },
+    "Granted" : {
+      "comment" : "Audio permission status"
+    },
+    "Graphic" : {},
+    "Green" : {
+      "comment" : "Band color name"
+    },
+    "High Pass" : {
+      "comment" : "Filter type"
+    },
+    "High Shelf" : {
+      "comment" : "Filter type"
+    },
+    "Holding the audio device keeps a Mac awake. CoreEQ lets go after half a minute of silence and takes it back the moment something plays. Turn this off if your audio misbehaves." : {},
+    "Import" : {
+      "comment" : "Import sheet: the import’s effect"
+    },
+    "Import Preset" : {
+      "comment" : "Open panel title"
+    },
+    "Import Preset?" : {},
+    "Import Preset…" : {},
+    "Import adjustments" : {},
+    "Import and Clip to ±12 dB" : {},
+    "Import by Hand…" : {},
+    "Import from AutoEq by Hand" : {},
+    "Import from AutoEq by hand" : {},
+    "Import into CoreEQ" : {},
+    "Import with Adjustments" : {},
+    "Imported Preset" : {
+      "comment" : "Name of an imported preset with no name"
+    },
+    "Indigo" : {
+      "comment" : "Band color name"
+    },
+    "Keep every value CoreEQ can represent, exactly as written" : {},
+    "Keeps screen recordings from capturing the sound twice" : {},
+    "Kept Beyond the Graphic Range" : {},
+    "Kept exact" : {
+      "comment" : "Import sheet status: value imported unchanged"
+    },
+    "Last selection, not playing." : {},
+    "Leaving apps out needs macOS 26 or later. On this Mac, CoreEQ equalizes every app." : {},
+    "Less weight below 500 Hz, for boomy rooms or bass-heavy headphones." : {
+      "comment" : "Built-in preset description: Bass Reducer"
+    },
+    "Lets the Mac sleep on schedule while CoreEQ is running" : {},
+    "Loading correction…" : {},
+    "Low Pass" : {
+      "comment" : "Filter type"
+    },
+    "Low Shelf" : {
+      "comment" : "Filter type"
+    },
+    "Low bass trimmed and the voice range lifted, so singers and speakers stand out." : {
+      "comment" : "Built-in preset description: Vocal Booster"
+    },
+    "Measurement source" : {
+      "comment" : "Measurement pop-up, for VoiceOver"
+    },
+    "Measurement source:" : {},
+    "Mid" : {
+      "comment" : "Quick EQ slider: middle frequencies"
+    },
+    "Midrange forward, bass and treble lighter, so vocals lead." : {
+      "comment" : "Built-in preset description: Pop"
+    },
+    "More bass and less treble, for laptop and small speakers that sound thin or harsh." : {
+      "comment" : "Built-in preset description: Small Speakers"
+    },
+    "More bass and lower midrange, softer treble: a darker, warmer sound." : {
+      "comment" : "Built-in preset description: Deep"
+    },
+    "More body and a brighter, more present top, for solo piano." : {
+      "comment" : "Built-in preset description: Piano"
+    },
+    "More brightness above 1 kHz, most around 8 kHz." : {
+      "comment" : "Built-in preset description: Treble Booster"
+    },
+    "More deep bass and high treble, to keep music full at low volume." : {
+      "comment" : "Built-in preset description: Loudness"
+    },
+    "More weight below 250 Hz, held all the way down to 20 Hz. The rest is untouched." : {
+      "comment" : "Built-in preset description: Bass Booster"
+    },
+    "My Presets" : {},
+    "New Preset" : {
+      "comment" : "Name of a newly created preset"
+    },
+    "No Bands" : {},
+    "No Models" : {},
+    "No Output Device" : {
+      "comment" : "Shown when the Mac has no output"
+    },
+    "No Output Devices" : {
+      "comment" : "Menu bar extra row: the Mac has no output device"
+    },
+    "No Results for “%@”" : {},
+    "No apps are excluded." : {},
+    "No audible change." : {
+      "comment" : "Import sheet: the response is unchanged"
+    },
+    "No change: the sound exactly as it arrives." : {
+      "comment" : "Built-in preset description: Flat"
+    },
+    "No correction target matches this model." : {
+      "comment" : "AutoEq error"
+    },
+    "No matches" : {
+      "comment" : "AutoEq catalog search: nothing found"
+    },
+    "None" : {
+      "comment" : "Pop-up value, for VoiceOver"
+    },
+    "Not Equalizing" : {},
+    "Not Receiving Audio" : {
+      "comment" : "Menu bar extra row: sound is playing but none reaches CoreEQ"
+    },
+    "Not asked yet" : {
+      "comment" : "Audio permission status"
+    },
+    "Not granted" : {
+      "comment" : "Audio permission status"
+    },
+    "Not measurable: the correction has a value CoreEQ can’t render." : {
+      "comment" : "Import sheet: why the change to the response can’t be measured"
+    },
+    "Not running" : {
+      "comment" : "Audio permission status: CoreEQ hasn’t needed it yet"
+    },
+    "OK" : {},
+    "Off" : {
+      "comment" : "Switch state, for VoiceOver"
+    },
+    "On" : {
+      "comment" : "Band list column: band turned on\nSwitch state, for VoiceOver"
+    },
+    "Only targets compatible with this measurement source, rig, and form are available" : {},
+    "Open CoreEQ at login" : {},
+    "Open CoreEQ settings" : {},
+    "Open Equalizer" : {
+      "comment" : "Menu item: shows the main window"
+    },
+    "Open System Settings" : {
+      "comment" : "Button: opens Privacy & Security in System Settings"
+    },
+    "Open autoeq.app" : {},
+    "Open autoeq.app in Browser" : {},
+    "Open the diagnostics report" : {},
+    "Orange" : {
+      "comment" : "Band color name"
+    },
+    "Output" : {
+      "comment" : "Menu bar extra section: output device"
+    },
+    "Output device" : {},
+    "Output trim" : {
+      "comment" : "Import sheet: the adjusted value is the preamp"
+    },
+    "Output trim applied after the whole chain; use it to give back the headroom a boosted preset takes" : {},
+    "Parametric" : {},
+    "Paste Preset" : {},
+    "Paste a preset from the clipboard (⌘V)" : {},
+    "Paste from Clipboard" : {},
+    "Pause while recording system audio" : {},
+    "Paused While Recording" : {
+      "comment" : "Heading and menu bar extra row: CoreEQ stepped aside for a screen recording"
+    },
+    "Pink" : {
+      "comment" : "Band color name"
+    },
+    "Play Preview" : {},
+    "Playing preview" : {},
+    "Point at a handle to read its value; drag it to adjust; double-click to reset it" : {},
+    "Preamp" : {},
+    "Preamp: %@" : {
+      "comment" : "Import alert: the preset’s output trim, such as “Preamp: −6.0 dB”"
+    },
+    "Preparing the AutoEq catalog…" : {
+      "comment" : "AutoEq progress"
+    },
+    "Preset" : {
+      "comment" : "Menu bar extra section: active preset"
+    },
+    "Preset name" : {},
+    "Preview follows your selection." : {},
+    "Preview response curve" : {},
+    "Punchy low end, bright upper treble, and slightly scooped mids." : {
+      "comment" : "Built-in preset description: Rock"
+    },
+    "Purple" : {
+      "comment" : "Band color name"
+    },
+    "Q" : {
+      "comment" : "Band list column: the band’s width"
+    },
+    "Quick EQ" : {
+      "comment" : "Menu bar extra section: bass, mid, and treble controls"
+    },
+    "Quit CoreEQ" : {
+      "comment" : "Menu item"
+    },
+    "Quit This Copy" : {
+      "comment" : "Alert button"
+    },
+    "Quit the Other Copy" : {
+      "comment" : "Alert button"
+    },
+    "Red" : {
+      "comment" : "Band color name"
+    },
+    "Refresh" : {},
+    "Relaunch CoreEQ" : {
+      "comment" : "Button: quits and reopens CoreEQ"
+    },
+    "Release Notes" : {},
+    "Release the audio device when nothing is playing" : {},
+    "Remove" : {},
+    "Remove Band" : {},
+    "Remove band %lld" : {},
+    "Remove this band" : {},
+    "Rename" : {},
+    "Requires macOS 26" : {},
+    "Reset Band" : {},
+    "Reset Gain" : {},
+    "Reset to Preset" : {},
+    "Response changes by up to %@ dB (%@ dB RMS)." : {
+      "comment" : "AutoEq catalog notice: the largest and the average change",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Response changes by up to %1$@ dB (%2$@ dB RMS)."
+          }
+        }
+      }
+    },
+    "Revert" : {},
+    "Rumble cut and the speech range lifted, for podcasts and audiobooks." : {
+      "comment" : "Built-in preset description: Spoken Word"
+    },
+    "Save Changes" : {},
+    "Saving will adjust %lld values to fit CoreEQ’s limits." : {
+      "comment" : "AutoEq catalog notice: how many values importing would change",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Saving will adjust %lld value to fit CoreEQ’s limits."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Saving will adjust %lld values to fit CoreEQ’s limits."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Screen recordings capture both your apps’ sound and CoreEQ’s equalized copy, which sounds doubled. CoreEQ steps aside until the recording stops." : {
+      "comment" : "Why CoreEQ pauses while a screen recording captures system audio"
+    },
+    "Search" : {},
+    "Search for your headphone or earphone model in your browser." : {},
+    "Search headphones" : {},
+    "Settings" : {},
+    "Settings…" : {
+      "comment" : "Menu item: opens CoreEQ’s Settings window"
+    },
+    "Show Diagnostics" : {},
+    "Source Code" : {},
+    "Start CoreEQ automatically, in the menu bar, when you log in" : {},
+    "Strong low bass and forward upper mids, for club music." : {
+      "comment" : "Built-in preset description: Dance"
+    },
+    "System Audio Not Allowed" : {
+      "comment" : "Menu bar extra row: CoreEQ couldn’t capture system audio"
+    },
+    "System Audio Recording" : {},
+    "System-wide equalizer" : {},
+    "Target curve" : {
+      "comment" : "Target pop-up, for VoiceOver"
+    },
+    "Target curve:" : {},
+    "Teal" : {
+      "comment" : "Band color name"
+    },
+    "The AutoEq catalog is empty." : {
+      "comment" : "AutoEq error"
+    },
+    "The CoreEQ preset is damaged and can’t be read." : {
+      "comment" : "Import error"
+    },
+    "The audio device CoreEQ built around “%@” reported no output channels, so there’s nowhere to send the equalized sound." : {
+      "comment" : "Engine failure: the output device has no channels"
+    },
+    "The change can’t be measured." : {
+      "comment" : "AutoEq catalog notice: the change to the response is unknown"
+    },
+    "The clipboard doesn’t contain a preset." : {
+      "comment" : "Paste Preset error message"
+    },
+    "The correction uses filters CoreEQ can’t apply (%@)." : {
+      "comment" : "AutoEq error: the filter type code follows in parentheses"
+    },
+    "The file is too large to be a preset." : {
+      "comment" : "Import error"
+    },
+    "The file isn’t a text preset." : {
+      "comment" : "Import error"
+    },
+    "The other copy is at:\n%@" : {
+      "comment" : "Alert message: where the other copy of CoreEQ is installed"
+    },
+    "The preset contains a filter type CoreEQ doesn’t support." : {
+      "comment" : "Import error"
+    },
+    "The preset doesn’t contain any filters CoreEQ can read." : {
+      "comment" : "Import error"
+    },
+    "The preset is empty." : {
+      "comment" : "Import error"
+    },
+    "The preset “%@” no longer exists." : {
+      "comment" : "Export error"
+    },
+    "The system audio arrived in a format CoreEQ can’t equalize: it needs 32-bit floating-point samples." : {
+      "comment" : "Engine failure: the audio tap delivered an unsupported sample format"
+    },
+    "The trim is computed from the chain; turn this off to set it by hand" : {
+      "comment" : "Automatic gain help tag, while on"
+    },
+    "There’s no published correction CoreEQ supports for this measurement." : {
+      "comment" : "AutoEq error"
+    },
+    "These are kept exactly, as parametric bands beyond the sliders’ ±12 dB range. You can clip their gains to ±12 dB instead." : {},
+    "Treble" : {
+      "comment" : "Quick EQ slider: high frequencies"
+    },
+    "Try Again" : {},
+    "Try again in a moment. AutoEq may be temporarily unavailable." : {
+      "comment" : "AutoEq recovery suggestion"
+    },
+    "Turn on CoreEQ under Screen & System Audio Recording, then choose Quit & Reopen when macOS asks." : {
+      "comment" : "Permission instructions. “Quit & Reopen” is the button macOS shows; use its translation."
+    },
+    "Turn on CoreEQ under Screen & System Audio Recording. If it’s already on, turn it off and on again: an update gives CoreEQ a new signature, and macOS keeps the old entry. Then relaunch CoreEQ." : {
+      "comment" : "Permission instructions, when macOS can’t say whether it was refused"
+    },
+    "Turn the equalizer off" : {
+      "comment" : "Power button help tag"
+    },
+    "Turn the equalizer on" : {
+      "comment" : "Power button help tag"
+    },
+    "Two copies would each silence the other’s sound, so only one can run." : {
+      "comment" : "Alert message: why two copies of CoreEQ can’t run together"
+    },
+    "Two versions of this preset; switch between them to compare" : {},
+    "Type" : {
+      "comment" : "Band list column: filter type"
+    },
+    "Unknown Device" : {
+      "comment" : "An output device without a name"
+    },
+    "Unsupported Output Device" : {
+      "comment" : "Menu bar extra row: CoreEQ can’t equalize this device"
+    },
+    "Up to %@ dB difference, %@ dB RMS, across 20 Hz–20 kHz." : {
+      "comment" : "Import sheet: the largest and the average change to the response",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Up to %1$@ dB difference, %2$@ dB RMS, across 20 Hz–20 kHz."
+          }
+        }
+      }
+    },
+    "Using a saved catalog. Couldn’t check for updates." : {},
+    "Version %@" : {
+      "comment" : "About: the app’s version number"
+    },
+    "Waiting for permission to reach the sound." : {
+      "comment" : "Engine status"
+    },
+    "Waiting for the audio permission" : {
+      "comment" : "Warning icon, for VoiceOver"
+    },
+    "Warm bass, slightly recessed mids, and an airy top, for small-group recordings." : {
+      "comment" : "Built-in preset description: Jazz"
+    },
+    "What CoreEQ sees on this Mac. Include it with a bug report: it answers most questions about audio problems. It lists your audio devices by name and contains nothing else about you." : {},
+    "Where AutoEq asks which equalizer you use, choose EqualizerAPO’s parametric EQ." : {},
+    "You can’t undo this action." : {},
+    "computed by CoreEQ" : {
+      "comment" : "AutoEq catalog credit: CoreEQ computed this correction itself"
+    },
+    "dropped" : {
+      "comment" : "Import sheet: a filter that won’t be imported"
+    },
+    "measurement by %@" : {
+      "comment" : "AutoEq catalog credit: who measured the headphones, such as “oratory1990”"
+    },
+    "±12 dB graphic range" : {
+      "comment" : "Import limit: the graphic sliders’ range"
+    },
+    "“%@” is an aggregate or multi-output device, which CoreEQ can’t equalize. Choose a single output device." : {
+      "comment" : "Engine failure: the output device is made of several devices"
+    },
+    "… and %lld more" : {
+      "comment" : "Import alert: how many skipped lines are not quoted"
+    }
+  },
+  "version" : "1.0"
+}

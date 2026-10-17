@@ -78,7 +78,7 @@ struct ImportDisclosureTests {
 
         #expect(preamp.original == -20)
         #expect(preamp.adjusted == -12)
-        #expect(preamp.limit == "−12…+12 dB")
+        #expect(preamp.limit == "±12 dB")
         #expect(preamp.filter == nil)
     }
 
@@ -93,7 +93,7 @@ struct ImportDisclosureTests {
 
         #expect(dropped.original == nil)
         #expect(dropped.adjusted == nil)
-        #expect(dropped.limit == "16 free filters")
+        #expect(dropped.limit == "16 parametric bands")
         #expect(dropped.filter?.index == BuiltInProfiles.maxFreeFilters)
         #expect(parsed.droppedFilterCount == 1)
     }
@@ -106,7 +106,7 @@ struct ImportDisclosureTests {
 
         #expect(kept.original == 15)
         #expect(kept.adjusted == 15)
-        #expect(kept.limit == "±12 dB graphic bands")
+        #expect(kept.limit == "±12 dB graphic range")
         #expect(kept.filter?.index == 0)
         #expect(kept.filter?.frequency == 125)
         #expect(!kept.kind.isLossy)

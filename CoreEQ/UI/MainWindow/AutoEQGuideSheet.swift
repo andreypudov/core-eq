@@ -29,7 +29,7 @@ struct AutoEQGuideSheet: View {
             }
 
             Text(
-                "AutoEq publishes correction curves for a large catalogue of headphones and earphones. Its web app can write a correction as an EqualizerAPO parametric EQ, which CoreEQ imports."
+                "AutoEq publishes correction curves for a large catalog of headphones and earphones. Its web app can write a correction as an EqualizerAPO parametric EQ, which CoreEQ imports."
             )
             .font(Theme.Font.body)
             .foregroundStyle(.secondary)
@@ -48,14 +48,14 @@ struct AutoEQGuideSheet: View {
                     number: "2",
                     title: "Choose a Target",
                     detail:
-                        "Pick the sound you want the correction to aim for, and adjust it if you like."
+                        "Choose the sound you want the correction to aim for, and adjust it if you like."
                 )
 
                 stepRow(
                     number: "3",
                     title: "Choose EqualizerAPO",
                     detail:
-                        "Where the app asks which equalizer you use, choose EqualizerAPO's parametric EQ."
+                        "Where AutoEq asks which equalizer you use, choose EqualizerAPO’s parametric EQ."
                 )
 
                 stepRow(
@@ -99,9 +99,11 @@ struct AutoEQGuideSheet: View {
         .frame(width: 480)
     }
 
-    private func stepRow(number: String, title: String, detail: String) -> some View {
+    private func stepRow(
+        number: String, title: LocalizedStringKey, detail: LocalizedStringKey
+    ) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Text(number)
+            Text(verbatim: number)
                 .font(Theme.Font.valueEmphasized)
                 .foregroundStyle(.white)
                 .frame(width: 20, height: 20)

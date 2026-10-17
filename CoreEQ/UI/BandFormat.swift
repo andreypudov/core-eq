@@ -12,9 +12,13 @@ enum BandFormat {
     }
 
     /// Gain readouts: signed only when the sign carries information, so an
-    /// untouched band reads "0.0 dB" rather than "+0.0 dB".
+    /// untouched band reads "0.0 dB" rather than "+0.0 dB", and with a true
+    /// minus sign, as every other gain in the app. The sign follows the value
+    /// as shown, so −0.04 reads "0.0 dB", not "−0.0 dB".
     static func gain(_ gain: Double) -> String {
-        String(format: "%@%.1f dB", gain > 0 ? "+" : "", gain)
+        let magnitude = String(format: "%.1f", abs(gain))
+        let sign = magnitude == "0.0" ? "" : (gain > 0 ? "+" : "\u{2212}")
+        return "\(sign)\(magnitude) dB"
     }
 
     /// Scale marks without the unit, for a scale narrow enough that "dB" three

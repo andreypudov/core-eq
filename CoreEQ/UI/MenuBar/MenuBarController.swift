@@ -76,7 +76,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         super.init()
 
         if let button = statusItem.button {
-            button.toolTip = "CoreEQ"
+            button.toolTip = String(
+                localized: "CoreEQ", comment: "Menu bar extra tooltip: the app name")
             settingsOpener.install(in: button)
         }
         updateStatusItemIcon()
@@ -134,20 +135,31 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // Where the sound is going comes first, right under the switch that
         // decides whether it is being shaped at all. Both are questions about
         // the audio path; everything below them is about how it sounds.
-        menu.addItem(.sectionHeader(title: "Output"))
+        menu.addItem(
+            .sectionHeader(
+                title: String(localized: "Output", comment: "Menu bar extra section: output device")
+            ))
         menu.addItem(outputItem())
         menu.addItem(.separator())
 
-        menu.addItem(.sectionHeader(title: "Preset"))
+        menu.addItem(
+            .sectionHeader(
+                title: String(localized: "Preset", comment: "Menu bar extra section: active preset")
+            ))
         menu.addItem(presetItem())
         menu.addItem(.separator())
 
-        menu.addItem(.sectionHeader(title: "Quick EQ"))
+        menu.addItem(
+            .sectionHeader(
+                title: String(
+                    localized: "Quick EQ",
+                    comment: "Menu bar extra section: bass, mid, and treble controls")))
         menu.addItem(quickEQItem())
         menu.addItem(.separator())
 
         let openItem = NSMenuItem(
-            title: "Open Equalizer…", action: #selector(openWindow(_:)), keyEquivalent: "")
+            title: String(localized: "Open Equalizer", comment: "Menu item: shows the main window"),
+            action: #selector(openWindow(_:)), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
 
@@ -166,7 +178,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // No key equivalents: a status menu's shortcuts only fire while the menu
         // is open, so ⌘, here would be a promise the app cannot keep.
         let settingsItem = NSMenuItem(
-            title: "Settings…", action: #selector(openSettingsItem(_:)), keyEquivalent: ""
+            title: String(
+                localized: "Settings…", comment: "Menu item: opens CoreEQ’s Settings window"),
+            action: #selector(openSettingsItem(_:)), keyEquivalent: ""
         )
         settingsItem.target = self
         menu.addItem(settingsItem)
@@ -174,7 +188,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
-            title: "Quit CoreEQ", action: #selector(quit(_:)), keyEquivalent: "")
+            title: String(localized: "Quit CoreEQ", comment: "Menu item"),
+            action: #selector(quit(_:)), keyEquivalent: "")
         quitItem.target = self
         menu.addItem(quitItem)
     }
@@ -239,10 +254,21 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         /// reasons applies, and the icon does not.
         var label: String {
             switch self {
-            case .shaping: return "CoreEQ"
-            case .off: return "CoreEQ, equalizer off"
-            case .paused: return "CoreEQ, \(Theme.recordingPauseTitle.lowercased())"
-            case .unavailable: return "CoreEQ, not processing audio"
+            case .shaping:
+                return String(
+                    localized: "CoreEQ", comment: "Menu bar icon, for VoiceOver: equalizing")
+            case .off:
+                return String(
+                    localized: "CoreEQ, equalizer off",
+                    comment: "Menu bar icon, for VoiceOver: the equalizer is turned off")
+            case .paused:
+                return String(
+                    localized: "CoreEQ, paused while recording",
+                    comment: "Menu bar icon, for VoiceOver: stepped aside for a screen recording")
+            case .unavailable:
+                return String(
+                    localized: "CoreEQ, not equalizing",
+                    comment: "Menu bar icon, for VoiceOver: audio isn’t reaching CoreEQ")
             }
         }
     }
@@ -384,7 +410,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         guard let current else {
             // No usable output at all: no name to state, and nothing to open.
-            let item = NSMenuItem(title: "No output devices", action: nil, keyEquivalent: "")
+            let item = NSMenuItem(
+                title: String(
+                    localized: "No Output Devices",
+                    comment: "Menu bar extra row: the Mac has no output device"),
+                action: nil, keyEquivalent: "")
             item.isEnabled = false
             return item
         }

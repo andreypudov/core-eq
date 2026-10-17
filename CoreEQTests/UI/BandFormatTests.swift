@@ -34,7 +34,7 @@ struct BandFormatTests {
     @Test func gainIsSignedOnlyWhenTheSignMeansSomething() {
         #expect(BandFormat.gain(4) == "+4.0 dB")
         #expect(BandFormat.gain(0) == "0.0 dB")
-        #expect(BandFormat.gain(-3.5) == "-3.5 dB")
+        #expect(BandFormat.gain(-3.5) == "\u{2212}3.5 dB")
 
         // Every value the controls can produce lands on a tenth or a half, so
         // the only rounding that happens here is on a value typed into a field.

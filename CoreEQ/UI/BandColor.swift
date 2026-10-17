@@ -50,14 +50,14 @@ enum BandColor: Int, CaseIterable, Identifiable {
     /// without seeing it.
     var name: String {
         switch self {
-        case .green: return "Green"
-        case .blue: return "Blue"
-        case .purple: return "Purple"
-        case .pink: return "Pink"
-        case .orange: return "Orange"
-        case .teal: return "Teal"
-        case .indigo: return "Indigo"
-        case .red: return "Red"
+        case .green: return String(localized: "Green", comment: "Band color name")
+        case .blue: return String(localized: "Blue", comment: "Band color name")
+        case .purple: return String(localized: "Purple", comment: "Band color name")
+        case .pink: return String(localized: "Pink", comment: "Band color name")
+        case .orange: return String(localized: "Orange", comment: "Band color name")
+        case .teal: return String(localized: "Teal", comment: "Band color name")
+        case .indigo: return String(localized: "Indigo", comment: "Band color name")
+        case .red: return String(localized: "Red", comment: "Band color name")
         }
     }
 }
