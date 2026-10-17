@@ -415,24 +415,22 @@ final class AudioEngine: ObservableObject {
     /// Builds the audio path again, so the tap takes the excluded apps as they
     /// now are.
     ///
-    /// While running, and after a failure. Idle counts as running. Going idle
-    /// only stops the device — the tap stays, and a resume restarts it as it
-    /// was — so skipping the rebuild there would bring the old list back with
-    /// the next sound. A failure is included because the list can be its
-    /// cause: a tap that has not yet heard anything, with only excluded apps
-    /// playing, was judged not capturing, and a switch that then did nothing
-    /// left no way out short of quitting. Stopped, or waiting for permission,
-    /// there is nothing to rebuild, and the next start reads the list anyway.
+    /// When is decided, and tested, in `AppExclusion.rebuildsOnChange`.
     ///
     /// A rebuild is the tested route, the same one an output change takes, and
     /// costs a moment of audio only when someone has just edited the list.
     func reloadExcludedApps() {
+        var isRunning = false
+        var hasFailed = false
         switch status {
-        case .running, .failed:
-            scheduleRestart(after: 0, reason: "excluded apps changed")
-        case .stopped, .awaitingPermission:
+        case .running: isRunning = true
+        case .failed: hasFailed = true
+        case .stopped, .awaitingPermission: break
+        }
+        guard AppExclusion.rebuildsOnChange(isRunning: isRunning, hasFailed: hasFailed) else {
             return
         }
+        scheduleRestart(after: 0, reason: "excluded apps changed")
     }
 
     func apply(filters: [EQFilter]) {
@@ -458,7 +456,7 @@ final class AudioEngine: ObservableObject {
         try refuseUnusableDevice(device)
 
         let excludedApps = AppExclusion.isAvailable ? settings.excludedBundleIDs : []
-        tapExcludedApps = Set(excludedApps.map { $0.lowercased() })
+        tapExcludedApps = Set(excludedApps)
         let taps = try makeTaps(for: device, excludingApps: excludedApps)
         tapIDs = taps.map(\.id)
 
@@ -969,7 +967,7 @@ final class AudioEngine: ObservableObject {
         (try? processObjectID(for: getpid())) ?? AudioObjectID(kAudioObjectUnknown)
     }
 
-    /// The apps the current tap leaves out, lowercased, for the same reason:
+    /// The apps the current tap leaves out, for the same reason:
     /// their sound is not evidence of anything about the tap.
     ///
     /// Only the capture proof ignores them, not the idle decision. Idle, an

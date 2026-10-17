@@ -68,6 +68,19 @@ enum AppExclusion {
         }
     }
 
+    /// Whether a change to the list should rebuild the audio path now.
+    ///
+    /// While running — idle included, since an idle engine keeps its tap and
+    /// would bring the old list back with the next sound — and after a
+    /// failure, because the list can be its cause. With only excluded apps
+    /// playing, a tap that had not yet heard anything was judged not
+    /// capturing, and a switch that then did nothing left no way out short of
+    /// quitting. Stopped, or waiting for permission, there is nothing to
+    /// rebuild, and the next start reads the list anyway.
+    static func rebuildsOnChange(isRunning: Bool, hasFailed: Bool) -> Bool {
+        isRunning || hasFailed
+    }
+
     /// Whether `url` is an application someone would recognise, rather than a
     /// helper living inside one.
     ///

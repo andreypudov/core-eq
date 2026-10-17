@@ -98,4 +98,24 @@ struct AppExclusionTests {
     @Test func somethingThatIsNotAnAppIsNotOffered() {
         #expect(!AppExclusion.isStandaloneApp(at: URL(fileURLWithPath: "/usr/bin/afplay")))
     }
+
+    // MARK: - Rebuilding
+
+    /// Running includes idle: the tap outlives going idle, and would play the
+    /// old list again with the next sound.
+    @Test func aChangeRebuildsARunningEngine() {
+        #expect(AppExclusion.rebuildsOnChange(isRunning: true, hasFailed: false))
+    }
+
+    /// The defect: after a tap was wrongly judged not capturing, a switch did
+    /// nothing, and quitting was the only way out.
+    @Test func aChangeRebuildsAFailedEngine() {
+        #expect(AppExclusion.rebuildsOnChange(isRunning: false, hasFailed: true))
+    }
+
+    /// Stopped, or waiting for permission: nothing to rebuild, and the next
+    /// start reads the list.
+    @Test func aChangeLeavesAStoppedEngineAlone() {
+        #expect(!AppExclusion.rebuildsOnChange(isRunning: false, hasFailed: false))
+    }
 }

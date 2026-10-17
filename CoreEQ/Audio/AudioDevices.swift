@@ -337,17 +337,9 @@ enum AudioDevices {
     /// silence sounds like. A tap that delivers nothing *while something else is
     /// playing* is a tap that is not receiving.
     ///
-    /// `ignoringCapturing` leaves out processes that are also capturing input —
-    /// recorders and call apps. Those can hold output open while sending
-    /// nothing: measured, QuickTime recording shows as running output, and
-    /// CoreEQ launched beside it read its silence as a refused permission. For
-    /// the permission verdict that is the right trade, because leaving one out
-    /// only makes the verdict wait, never wrong.
-    ///
-    /// `ignoringApps` leaves out apps the tap was told to leave alone, by
-    /// lowercased bundle identifier. Their sound never reaches the tap by
-    /// design, so counting it as evidence called a working tap broken: with only
-    /// an excluded app playing, CoreEQ said it was not capturing audio.
+    /// Only reads the processes; what counts is decided, and tested, in
+    /// `CaptureProof.isOtherAudioPlaying`, along with what `ignoringCapturing`
+    /// and `ignoringApps` leave out and why.
     static func isAnyProcessPlayingOutput(
         excluding excluded: AudioObjectID, ignoringCapturing: Bool = false,
         ignoringApps: Set<String> = []
@@ -368,39 +360,40 @@ enum AudioDevices {
                 &processes) == noErr
         else { return false }
 
-        for process in processes where process != excluded {
+        let playing = processes.compactMap { process -> CaptureProof.PlayingProcess? in
             var runningAddress = address(kAudioProcessPropertyIsRunningOutput)
             var isRunning: UInt32 = 0
             var size = UInt32(MemoryLayout<UInt32>.size)
             guard
+                process != excluded,
                 AudioObjectGetPropertyData(process, &runningAddress, 0, nil, &size, &isRunning)
                     == noErr, isRunning != 0
-            else { continue }
+            else { return nil }
+
+            var reading = CaptureProof.PlayingProcess(id: process)
             if ignoringCapturing {
                 var inputAddress = address(kAudioProcessPropertyIsRunningInput)
                 var isCapturing: UInt32 = 0
                 size = UInt32(MemoryLayout<UInt32>.size)
-                if AudioObjectGetPropertyData(process, &inputAddress, 0, nil, &size, &isCapturing)
-                    == noErr, isCapturing != 0
-                {
-                    continue
-                }
+                reading.isCapturing =
+                    AudioObjectGetPropertyData(process, &inputAddress, 0, nil, &size, &isCapturing)
+                    == noErr && isCapturing != 0
             }
             if !ignoringApps.isEmpty {
                 var bundleAddress = address(kAudioProcessPropertyBundleID)
                 var bundleID: Unmanaged<CFString>?
                 size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
                 if AudioObjectGetPropertyData(process, &bundleAddress, 0, nil, &size, &bundleID)
-                    == noErr,
-                    let id = bundleID?.takeRetainedValue() as String?,
-                    ignoringApps.contains(id.lowercased())
+                    == noErr
                 {
-                    continue
+                    reading.bundleID = bundleID?.takeRetainedValue() as String?
                 }
             }
-            return true
+            return reading
         }
-        return false
+        return CaptureProof.isOtherAudioPlaying(
+            playing, ownProcess: excluded, ignoringCapturing: ignoringCapturing,
+            ignoringApps: ignoringApps)
     }
 
     /// Every audio process, as much as `RecordingDetection` needs to know.

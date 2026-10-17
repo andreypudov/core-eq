@@ -1,3 +1,4 @@
+import CoreAudio
 import Foundation
 import Testing
 
@@ -99,5 +100,82 @@ struct CaptureProofTests {
     @Test(arguments: [0.0, 1.0, 10.0, 600.0])
     func onlyPlaybackCanCondemnATap(silent: TimeInterval) {
         #expect(evaluate(playing: false, silent: silent).verdict != .notCapturing)
+    }
+
+    // MARK: - What counts as playing
+
+    private let own: AudioObjectID = 1
+    private func playing(
+        _ id: AudioObjectID, _ bundleID: String? = nil, capturing: Bool = false
+    ) -> CaptureProof.PlayingProcess {
+        CaptureProof.PlayingProcess(id: id, isCapturing: capturing, bundleID: bundleID)
+    }
+
+    @Test func anotherAppPlayingIsEvidence() {
+        #expect(
+            CaptureProof.isOtherAudioPlaying(
+                [playing(2, "com.apple.Music")], ownProcess: own))
+    }
+
+    @Test func coreEQsOwnPlaybackIsNotEvidence() {
+        #expect(!CaptureProof.isOtherAudioPlaying([playing(own)], ownProcess: own))
+        #expect(!CaptureProof.isOtherAudioPlaying([], ownProcess: own))
+    }
+
+    /// The defect: with only an excluded app playing, the silent tap was
+    /// judged not capturing, and CoreEQ said it was not processing audio.
+    @Test func anExcludedAppPlayingIsNotEvidence() {
+        #expect(
+            !CaptureProof.isOtherAudioPlaying(
+                [playing(2, "com.colliderli.iina")], ownProcess: own,
+                ignoringApps: ["com.colliderli.iina"]))
+    }
+
+    /// Identifiers are compared without case: the stored list comes from the
+    /// app's bundle, the process's from Core Audio, and nothing promises the
+    /// two spell it alike.
+    @Test func anExcludedAppIsRecognisedInAnyCase() {
+        #expect(
+            !CaptureProof.isOtherAudioPlaying(
+                [playing(2, "com.apple.QuickTimePlayerX")], ownProcess: own,
+                ignoringApps: ["com.apple.quicktimeplayerx"]))
+    }
+
+    /// Excluding one app says nothing about the rest.
+    @Test func anotherAppBesideAnExcludedOneIsEvidence() {
+        #expect(
+            CaptureProof.isOtherAudioPlaying(
+                [playing(2, "com.colliderli.iina"), playing(3, "com.spotify.client")],
+                ownProcess: own, ignoringApps: ["com.colliderli.iina"]))
+    }
+
+    /// A process whose identifier could not be read is counted: an unknown
+    /// player is still a player.
+    @Test func aProcessWithoutAnIdentifierIsEvidence() {
+        #expect(
+            CaptureProof.isOtherAudioPlaying(
+                [playing(2)], ownProcess: own, ignoringApps: ["com.colliderli.iina"]))
+    }
+
+    @Test func aRecorderIsLeftOutOnlyWhenAsked() {
+        let recorder = [playing(2, "com.apple.QuickTimePlayerX", capturing: true)]
+        #expect(
+            !CaptureProof.isOtherAudioPlaying(recorder, ownProcess: own, ignoringCapturing: true))
+        #expect(CaptureProof.isOtherAudioPlaying(recorder, ownProcess: own))
+    }
+
+    /// The whole defect end to end: a fresh tap, nothing received, only an
+    /// excluded app playing, for far longer than the limit. It must keep
+    /// waiting, never conclude it is not capturing.
+    @Test func aTapSilentWhileOnlyExcludedAppsPlayIsNeverCalledBroken() {
+        let onlyExcluded = CaptureProof.isOtherAudioPlaying(
+            [playing(own), playing(2, "com.colliderli.iina")], ownProcess: own,
+            ignoringCapturing: true, ignoringApps: ["com.colliderli.iina"])
+        var silent: TimeInterval = 0
+        for _ in 0..<Int(limit * 10 / interval) {
+            let result = evaluate(playing: onlyExcluded, silent: silent)
+            #expect(result.verdict == .waiting)
+            silent = result.silentWhilePlaying
+        }
     }
 }
