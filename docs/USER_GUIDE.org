@@ -75,7 +75,7 @@ instantaneous and glitch-free. Hover a built-in preset, in the sidebar or the
 menu, for a one-line description of what it is for.
 
 The =+= at the bottom of the sidebar creates a *New Preset* from the current
-sound, or imports one. Right-click a preset for *Rename*, *Duplicate*, *Save
+sound, opens the AutoEq catalog, or imports one. Right-click a preset for *Rename*, *Duplicate*, *Save
 Changes*, *Reset to Preset*, *Export Preset*, and *Delete*.
 
 Editing the active preset marks it *Edited*; *Save Changes* writes the values
@@ -121,7 +121,7 @@ included.
 
 CoreEQ can fetch a headphone correction from the [[https://github.com/jaakkopasanen/AutoEq][AutoEq project]], without
 downloading a file by hand. The *AutoEq* button beside the =+= opens the catalog
-sheet directly. For corrections AutoEq computes for a target you choose there,
+sheet directly, as does *Browse AutoEq Catalog…* in the =+= menu. For corrections AutoEq computes for a target you choose there,
 use *Import by Hand…* in the sheet's action row: it closes the catalog, opens
 the step-by-step guide on the main window, and the correction you paste lands
 in your preset list.
