@@ -40,6 +40,30 @@ struct ThemeTests {
         )
     }
 
+    /// The longest frequency gets at least the room the longest gain does.
+    ///
+    /// Relative rather than absolute because the field's own insets are the
+    /// text field's, not ours, and the gain column is the one known to show
+    /// its widest value whole. At 94 the frequency column did not: an imported
+    /// "3302.8" was drawn as "3302." with the last digit under "Hz".
+    @Test func theLongestFrequencyFitsItsField() {
+        let value = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        let unit = NSFont.systemFont(ofSize: 11)
+        func width(_ text: String, _ font: NSFont) -> CGFloat {
+            (text as NSString).size(withAttributes: [.font: font]).width
+        }
+        // Both fields are a knob, a value, and a unit in the same layout, so the
+        // room each leaves is its column less the value and the unit.
+        let frequencyRoom =
+            Theme.FilterRow.Column.frequency - width("19999.9", value) - width("Hz", unit)
+        let gainRoom = Theme.FilterRow.Column.gain - width("+12.0", value) - width("dB", unit)
+
+        #expect(
+            frequencyRoom >= gainRoom,
+            "the frequency field leaves \(frequencyRoom) pt around \"19999.9 Hz\"; the gain field leaves \(gainRoom) pt"
+        )
+    }
+
     /// The band number has to fit beside its colour swatch on one line.
     ///
     /// This is measured, not asserted from a comment, because the failure was
@@ -64,8 +88,8 @@ struct ThemeTests {
         )
     }
 
-    /// Rows are sized in whole pitches, and the list divides by that pitch to
-    /// decide how many fit. A zero or negative pitch would divide by zero.
+    /// A row, its hairline, and its knob have sizes that make sense together:
+    /// a knob taller than its row would be clipped by it.
     @Test func aRowHasAPositivePitch() {
         #expect(Theme.FilterRow.height > 0)
         #expect(Theme.FilterRow.height + Theme.FilterRow.separator > Theme.FilterRow.height)

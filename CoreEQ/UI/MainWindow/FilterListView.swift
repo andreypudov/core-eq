@@ -197,10 +197,12 @@ struct FilterListView: View {
                             }
                         }
                     }
-                    // A whole number of rows, never a sliced one. The leftover is
-                    // at most a row's height and sits below the table as padding,
-                    // where it reads as space rather than as a band cut in half.
-                    .frame(height: visibleHeight(in: geometry.size.height))
+                    // Every point the block has, as a system list takes it. The
+                    // height used to be rounded down to whole rows, which left
+                    // up to a row of empty space under the last band even when
+                    // more were waiting below; a row cut off at the edge is
+                    // also what says there is more to scroll.
+                    .frame(height: geometry.size.height)
                     .scrollBounceBehavior(.basedOnSize)
                     // Only a few rows are visible at a time, so a band chosen by
                     // clicking its node on the graph is often one the table isn't
@@ -224,20 +226,6 @@ struct FilterListView: View {
             // keeps every filter's identity.
             .id(profileManager.freeFilters.first?.id)
         }
-    }
-
-    /// The tallest whole number of rows that fits in `available`, plus the
-    /// pinned title row above them.
-    ///
-    /// A row and the hairline under it are one pitch; the last row has no
-    /// hairline, hence the odd point back. Never less than one row, so a very
-    /// short window shows a band rather than a sliver of one.
-    private func visibleHeight(in available: CGFloat) -> CGFloat {
-        let pitch = Theme.FilterRow.height + Theme.FilterRow.separator
-        let forRows = available - Theme.FilterRow.headerHeight
-        let rows = max(1, ((forRows + Theme.FilterRow.separator) / pitch).rounded(.down))
-        return min(
-            rows * pitch - Theme.FilterRow.separator + Theme.FilterRow.headerHeight, available)
     }
 
     /// Says what a band is for and how to make one, and stops.
