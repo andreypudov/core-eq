@@ -214,6 +214,15 @@ struct FilterListView: View {
                     }
                 }
             }
+            // A new list for a new chain. The lazy stack that pins the titles
+            // keeps its scroll offset when the content shrinks, so selecting a
+            // short preset after scrolling down a long one left the offset
+            // past the last row and the table looked empty; scrolling to the
+            // first row did not undo it. The first band's identity changes
+            // exactly when the chain is replaced — a preset, A/B, a device, an
+            // import, a preview — and never while one is edited, since an edit
+            // keeps every filter's identity.
+            .id(profileManager.freeFilters.first?.id)
         }
     }
 
