@@ -15,7 +15,7 @@ part worth having written down.
 
 * 1.10
 
-Not tagged yet.
+Released <2026-10-23 Fri>.
 
 ** Asking for the audio permission, and knowing the answer
 

@@ -1,5 +1,6 @@
 #+TITLE: CoreEQ 1.10 — Leave apps out, find a correction
 #+AUTHOR: Andrey Pudov
+#+DATE: <2026-10-23 Fri>
 #+OPTIONS: toc:nil num:nil
 
 1.10 lets you leave apps out of the equalizer, and finds an AutoEq correction
