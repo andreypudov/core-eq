@@ -54,6 +54,8 @@ tag — =AudioEngine= at about 1,600 lines, =ProfileManager= at 1,000, and the
 AutoEq browser, the main window's detail and sidebar views, and the menu bar
 controller at 750–870 each. Splitting them along the seams they already have
 is the first piece of work after 1.10, before anything new is added to them.
+The first new thing after that is Shortcuts, under *Later*: small, and
+touching none of the audio path.
 
 ** Bluetooth noise at higher volume
 
@@ -159,6 +161,52 @@ What is left is the wake case:
   with neither points somewhere not yet looked at.
 
 * Later — worth doing, not yet scheduled
+
+** Shortcuts
+
+Actions for the Shortcuts app, through App Intents, which macOS also offers in
+Spotlight and as Focus filters at no extra cost. Next after the file split, and
+deliberately small.
+
+Where it earns its place:
+
+- *Turning the EQ off and on from the keyboard.* Shortcuts can bind any
+  shortcut to a global key, so a toggle gives an instant A/B against the
+  untouched sound without opening the menu. The strongest case of the lot.
+- *Focus filters.* A Work focus picks a flat preset, a Gaming one a V shape: a
+  rule CoreEQ does not have, which the system then owns, with no settings pane
+  to build.
+- *Automations.* On macOS 26 Shortcuts runs them on the Mac — at a time, when an
+  app opens, when a display connects — so whatever the actions expose can be
+  scheduled without CoreEQ growing rules of its own.
+- *Scripting.* =shortcuts run= from a shell, Raycast, or Alfred.
+
+Where it adds little, and why the set stays small: a preset per output device
+already covers the commonest automation anyone would build (“when my headphones
+connect, use this”), and leaving an app out is exclusion, which works per
+process and is better than switching the whole EQ when the app opens.
+
+The first set, three actions:
+
+1. *Turn EQ on, off, or toggle.*
+2. *Set preset*, chosen from the user's presets, optionally for a given output
+   device.
+3. *Get the current preset and whether the EQ is on*, so a shortcut can branch.
+
+The A/B slot is a fourth if it is asked for.
+
+What it costs and what it risks:
+
+- App Intents needs macOS 13, inside the 14.2 floor. Actions run inside the
+  running app, which suits a menu bar app, and can launch it in the background
+  when it is not running.
+- The work is the preset list for the picker, and routing each action through
+  the same calls the menu bar makes, so the menu, the window, and Shortcuts
+  cannot disagree about what happened. The actions stay thin; the tests cover
+  the managers they call. Their names go in the String Catalog.
+- None of it touches the audio path. The real risk is that it is public
+  surface: once people have built automations on an action, renaming or
+  removing it breaks them. Another reason to start with three.
 
 ** Per-application EQ and volume
 
