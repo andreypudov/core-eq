@@ -8,8 +8,11 @@ the equalizer is shaped the way it is, in [[file:ARCHITECTURE.org][ARCHITECTURE.
 
 * Toolchain
 
-- Xcode *16 or later* to build and test (the project uses the folder-
-  synchronized project format, =objectVersion 70=).
+- Xcode *26 or later* to build and test. App exclusion sets
+  =CATapDescription.bundleIDs= and =isProcessRestoreEnabled=, which exist only
+  in the macOS 26 SDK; the calls are guarded at runtime, so the app still runs
+  on macOS 14.2. The project also uses the folder-synchronized format
+  (=objectVersion 70=), which needs Xcode 16.
 - Xcode *27* to cut a release. CI and =release.yml= both run it, and the release
   job rejects a binary linked against anything older than the 27 SDK — see “The
   runner image is a user-visible choice” in [[file:RELEASING.org][RELEASING.org]]. Nothing
