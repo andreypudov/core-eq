@@ -59,19 +59,17 @@ struct PresetLibrary: Equatable {
     /// The two groups the sidebar lists, filtered by what was typed into its
     /// search field.
     ///
-    /// Substring rather than prefix matching, so "boost" finds Bass Booster and
+    /// By `SearchQuery`'s rule, the same as the AutoEq catalog's: each typed
+    /// word on its own, anywhere in the name, so "boost" finds Bass Booster and
     /// Treble Booster — a list of twenty-odd names is searched by the word you
-    /// remember, which is rarely the first one. Case and diacritics are ignored,
-    /// so a preset named "Café" answers to "cafe".
+    /// remember, which is rarely the first one. Case, diacritics, and
+    /// punctuation are ignored, so a preset named "Café" answers to "cafe".
     func matching(_ term: String) -> (user: [EQProfile], builtIn: [EQProfile]) {
-        let trimmed = term.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return (user, builtIn) }
+        let search = SearchQuery(term)
+        guard !search.isEmpty else { return (user, builtIn) }
 
         func keep(_ profiles: [EQProfile]) -> [EQProfile] {
-            profiles.filter {
-                $0.name.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive])
-                    != nil
-            }
+            search.ranked(profiles) { SearchableName($0.name) }
         }
         return (keep(user), keep(builtIn))
     }

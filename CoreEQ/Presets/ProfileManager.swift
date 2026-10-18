@@ -215,10 +215,8 @@ final class ProfileManager: ObservableObject {
     /// The two groups the sidebar lists, filtered by what was typed into its
     /// search field.
     ///
-    /// Substring rather than prefix matching, so "boost" finds Bass Booster and
-    /// Treble Booster — a list of twenty-odd names is searched by the word you
-    /// remember, which is rarely the first one. Case and diacritics are ignored
-    /// so a preset named "Café" answers to "cafe".
+    /// Each typed word on its own, anywhere in the name, so "boost" finds Bass
+    /// Booster and Treble Booster; see `SearchQuery` for the whole rule.
     ///
     /// Lives here rather than in the sidebar because it is a question about the
     /// preset library, and because a view is a place tests cannot reach.

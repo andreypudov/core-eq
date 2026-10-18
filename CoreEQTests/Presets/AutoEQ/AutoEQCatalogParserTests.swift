@@ -103,6 +103,25 @@ struct AutoEQCatalogParserTests {
         #expect(catalog.models(matching: "alpha", limit: 0).isEmpty)
     }
 
+    /// The whole catalog is ranked before it is cut to the limit, so a model
+    /// whose name starts with the word is never pushed out by ones that only
+    /// contain it.
+    @Test func searchRanksTheWholeCatalogBeforeLimiting() {
+        let models = ["Moondrop Aria", "HiFiMan Sundara", "HiFiMan Arya", "Sony MDR-M1"].map {
+            AutoEQModel(name: $0, variants: [])
+        }
+        let catalog = AutoEQCatalog(models: models, targets: [], revision: "r")
+        #expect(catalog.models(matching: "sony mdr m1").map(\.name) == ["Sony MDR-M1"])
+        #expect(
+            catalog.models(matching: "ar").map(\.name) == [
+                "Moondrop Aria", "HiFiMan Arya", "HiFiMan Sundara",
+            ])
+        #expect(
+            catalog.models(matching: "ar", limit: 2).map(\.name) == [
+                "Moondrop Aria", "HiFiMan Arya",
+            ])
+    }
+
     @Test func variantDisplayNameReadsAsAMeasurementLabel() {
         let variant = AutoEQVariant(source: "oratory1990", rig: "GRAS 43AG-7", form: "over-ear")
         #expect(variant.displayName == "Oratory1990 · over-ear (GRAS 43AG-7)")
