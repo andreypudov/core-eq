@@ -131,8 +131,8 @@ Spotify equalizer already knows how to operate.
 
 ** Filters
 
-A =Graphic= / =Parametric= tab pair in the window header switches the editing
-area below the graph. The tab changes the controls and nothing else — same
+A =Graphic= / =Parametric= tab pair on the editing area's border switches the
+editing area below the graph. The tab changes the controls and nothing else — same
 preset, same chain, same curve, same audio — and the editing area is a fixed
 height so nothing above it moves when you switch.
 
@@ -148,10 +148,14 @@ height so nothing above it moves when you switch.
  Preamp ──▪── +2.0 dB
 #+end_src
 
+That is the first sketch. As shipped, the tabs sit on the editing area's own
+border, where they double as its title, and the preamp is a vertical column
+beside the editor.
+
 The Graphic tab is the default and is what a user who knows the Apple Music or
-Spotify equalizer already knows how to operate. Each tab keeps its own power
-switch over its half of the chain, so either half can be heard on its own —
-which is what teaches that both feed the one curve above.
+Spotify equalizer already knows how to operate. Each parametric band has its
+own switch; the graphic bands have none, because a band at 0 dB already does
+nothing.
 
 A band is a row in a table, because six parameters across several bands is a
 grid of values and a grid is read down a column. Each parameter has both a knob
@@ -189,6 +193,13 @@ The constraint is the explanation: a band handle physically cannot be dragged
 sideways, so the difference between a locked band and a free filter is learned
 from the mouse rather than from a label. They should look different as well —
 band handles small and on the ladder positions, filter nodes larger and ringed.
+
+Touching a point shows the editor it belongs to. Clicking or dragging a filter
+node shows the Parametric tab with its row selected; a band handle shows the
+Graphic tab. That is the other half of the explanation: the first time anyone
+grabs a point, the window answers where its settings live. Hovering never
+switches — sweeping the pointer across the plot would flip the tabs — and
+neither does a reset, which undoes rather than edits.
 
 ** Creating filters from the graph
 
