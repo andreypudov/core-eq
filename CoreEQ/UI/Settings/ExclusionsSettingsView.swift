@@ -22,10 +22,7 @@ import UniformTypeIdentifiers
 /// A switch that is off keeps the app listed and equalized, so a DAW can have
 /// its EQ back for a moment without being found and added again.
 struct ExclusionsSettingsView: View {
-    /// Every listed app, in the order it was added.
-    @State private var listed: [String] = []
-    /// The listed apps switched on: the ones the tap leaves out.
-    @State private var excluded: [String] = []
+    @State private var list = ExclusionList(listed: [], excluded: [])
     @State private var selection: String?
 
     var body: some View {
@@ -49,7 +46,7 @@ struct ExclusionsSettingsView: View {
                 .foregroundStyle(.secondary)
 
             List(selection: $selection) {
-                ForEach(listed.map(ExcludableApp.init(bundleID:))) { app in
+                ForEach(list.listed.map(ExcludableApp.init(bundleID:))) { app in
                     row(app).tag(app.bundleID)
                 }
             }
@@ -66,7 +63,7 @@ struct ExclusionsSettingsView: View {
             )
             .onDeleteCommand(perform: removeSelection)
             .overlay {
-                if listed.isEmpty {
+                if list.listed.isEmpty {
                     Text("No apps are excluded.")
                         .foregroundStyle(.secondary)
                 }
@@ -109,44 +106,37 @@ struct ExclusionsSettingsView: View {
 
     private func isExcluded(_ bundleID: String) -> Binding<Bool> {
         Binding(
-            get: { excluded.contains(bundleID) },
-            set: { isOn in
-                save(
-                    listed: listed,
-                    excluded: isOn ? excluded + [bundleID] : excluded.filter { $0 != bundleID })
-            })
-    }
-
-    /// Added apps are switched on: adding one is asking for it to be left out.
-    private func add(_ bundleIDs: [String]) {
-        save(listed: listed + bundleIDs, excluded: excluded + bundleIDs)
+            get: { list.excluded.contains(bundleID) },
+            set: { isOn in save(list.setting(bundleID, excluded: isOn)) })
     }
 
     private func removeSelection() {
         guard let bundleID = selection else { return }
         selection = nil
-        save(
-            listed: listed.filter { $0 != bundleID },
-            excluded: excluded.filter { $0 != bundleID })
+        save(list.removing(bundleID))
     }
 
-    private func save(listed newListed: [String], excluded newExcluded: [String]) {
+    /// Writes the list and, when what the tap leaves out changed, tells the
+    /// engine at once. Compared against what is stored rather than what the
+    /// pane last read, so the engine is never left on a list it has not seen.
+    private func save(_ newList: ExclusionList) {
         let settings = SettingsStore()
-        let wasExcluded = settings.excludedBundleIDs
-        settings.exclusionListBundleIDs = AppExclusion.normalized(newListed)
-        settings.excludedBundleIDs = AppExclusion.normalized(newExcluded)
-        // Only a change to what the tap leaves out is worth the break in the
-        // sound a rebuild costs; listing or removing a switched-off app is not.
-        if settings.excludedBundleIDs != wasExcluded {
+        let stored = Self.storedList(in: settings)
+        settings.exclusionListBundleIDs = newList.listed
+        settings.excludedBundleIDs = newList.excluded
+        if newList.changesTap(comparedTo: stored) {
             EngineStatusBridge.shared.excludedAppsChanged()
         }
         reload()
     }
 
     private func reload() {
-        let settings = SettingsStore()
-        listed = settings.exclusionListBundleIDs
-        excluded = settings.excludedBundleIDs
+        list = Self.storedList(in: SettingsStore())
+    }
+
+    private static func storedList(in settings: SettingsStore) -> ExclusionList {
+        ExclusionList(
+            listed: settings.exclusionListBundleIDs, excluded: settings.excludedBundleIDs)
     }
 
     /// Any app on disk, running or not — a DAW is usually excluded before the
@@ -169,9 +159,10 @@ struct ExclusionsSettingsView: View {
                 response = panel.runModal()
             }
             guard response == .OK else { return }
-            add(
-                panel.urls.filter(AppExclusion.isStandaloneApp(at:))
-                    .compactMap { Bundle(url: $0)?.bundleIdentifier })
+            save(
+                list.adding(
+                    panel.urls.filter(AppExclusion.isStandaloneApp(at:))
+                        .compactMap { Bundle(url: $0)?.bundleIdentifier }))
         }
     }
 }
