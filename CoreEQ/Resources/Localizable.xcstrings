@@ -1285,7 +1285,7 @@
     "Warm bass, slightly recessed mids, and an airy top, for small-group recordings." : {
       "comment" : "Built-in preset description: Jazz"
     },
-    "What CoreEQ sees on this Mac. Include it with a bug report: it answers most questions about audio problems. It lists your audio devices by name and contains nothing else about you." : {
+    "What CoreEQ sees on this Mac. Include it with a bug report: it answers most questions about audio problems. It names your audio devices, your presets, and any apps you’ve excluded, and contains nothing else about you." : {
 
     },
     "Where AutoEq asks which equalizer you use, choose EqualizerAPO’s parametric EQ." : {
