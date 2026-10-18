@@ -51,6 +51,11 @@ from the same coefficients the audio path renders with — not an interpolated
 approximation. Drag a handle to change a band, double-click one to reset it,
 or double-click empty space to add a parametric band exactly where you clicked.
 
+The round handles are the graphic bands and the numbered nodes are the
+parametric bands. Clicking or dragging either one shows the editor it belongs
+to: a node opens the Parametric tab with its row selected, and a handle opens
+the Graphic tab.
+
 ** The spectrum analyzer
 
 A Hann-windowed FFT of the audio actually reaching your speakers is drawn
