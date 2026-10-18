@@ -323,12 +323,24 @@ struct EqualizerDetailView: View {
             // lights that handle up and puts the value beside it.
             stripHoveredBand: hoveredBand,
             stripDraggedBand: draggingBand,
-            onBandGainChange: { slot, gain in profileManager.setGain(gain, forBandAt: slot) },
+            // Every point on the plot is a grip on one of the two editors, and
+            // touching it shows that editor: a node's settings are in the table,
+            // a handle's slider is in the strip. This is how the two kinds of
+            // point get explained without a label — the window answers "where
+            // does this live?" the first time anyone grabs one. Hover never
+            // switches, or sweeping the pointer across the plot would flip the
+            // tabs back and forth; nor does a reset, which undoes rather than
+            // edits.
+            onBandGainChange: { slot, gain in
+                profileManager.setGain(gain, forBandAt: slot)
+                show(.graphic)
+            },
             onBandReset: { slot in profileManager.resetBand(at: slot) },
             onFilterMove: { id, frequency, gain in
                 profileManager.setFilterFrequency(frequency, id: id)
                 profileManager.setFilterGain(gain, id: id)
                 selectedFilterID = id
+                show(.parametric)
             },
             onFilterReset: { id in profileManager.resetFilter(id: id) },
             onFilterCreate: { frequency, gain in
@@ -336,7 +348,11 @@ struct EqualizerDetailView: View {
             },
             // The graph and the parametric table share one selection: clicking
             // a node highlights its row, choosing a row rings its node.
-            onFilterSelect: { id in selectedFilterID = id },
+            onFilterSelect: { id in
+                selectedFilterID = id
+                if id != nil { show(.parametric) }
+            },
+            onBandSelect: { _ in show(.graphic) },
             // Only while the Parametric tab is showing, so a stray double-click
             // on the graph can never conjure a band the user cannot see.
             allowsFilterCreation: tab == .parametric,
@@ -503,6 +519,13 @@ struct EqualizerDetailView: View {
             selectedSlot = slot
         }
         .onAppear { selectedSlot = profileManager.abSlot }
+    }
+
+    /// Switches the editor only when it isn't already showing, so a drag —
+    /// which reports every step — writes the remembered tab once rather than
+    /// on every move.
+    private func show(_ editor: EditorTab) {
+        if tab != editor { tab = editor }
     }
 
     /// The tab strip, mounted on the editor block's own border.

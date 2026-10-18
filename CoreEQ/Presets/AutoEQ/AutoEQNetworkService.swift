@@ -294,9 +294,48 @@ actor AutoEQNetworkService {
         return data
     }
 
-    private var snapshotURL: URL { cacheDirectory.appendingPathComponent("catalog-v1.json") }
+    private nonisolated var snapshotURL: URL {
+        cacheDirectory.appendingPathComponent("catalog-v1.json")
+    }
 
-    private func readSnapshot() -> CatalogSnapshot? {
+    /// What is cached, for the diagnostics report: the catalog's revision,
+    /// when it was checked, how many models it lists, and how many corrections
+    /// are kept on disk. The session's own state is the store's to add.
+    ///
+    /// Reads files only, so it needs nothing from the actor and the Settings
+    /// window can ask without waiting on a download in progress.
+    nonisolated func cacheDiagnostics() -> DiagnosticsReport.AutoEQ {
+        var report = DiagnosticsReport.AutoEQ()
+        if let snapshot = readSnapshot() {
+            report.revision = snapshot.revision
+            report.checkedAt = snapshot.checkedAt
+            report.modelCount = (try? snapshot.catalog())?.models.count
+        }
+        // Counted folder by folder rather than by comparing paths: the cache
+        // can be reached through a symbolic link, and an enumerated path need
+        // not start the way the folder's own path does.
+        let corrections = [
+            cacheDirectory.appendingPathComponent("profiles"),
+            cacheDirectory.appendingPathComponent("computed-v\(AutoEQLocalSolver.version)"),
+        ]
+        report.cachedCorrections = corrections.map { Self.regularFiles(in: $0).count }
+            .reduce(0, +)
+        report.cacheBytes = Self.regularFiles(in: cacheDirectory)
+            .reduce(0) { $0 + Int64($1.fileSize ?? 0) }
+        return report
+    }
+
+    /// Every regular file under `directory`, with its size.
+    private nonisolated static func regularFiles(in directory: URL) -> [URLResourceValues] {
+        let keys: Set<URLResourceKey> = [.fileSizeKey, .isRegularFileKey]
+        let urls =
+            FileManager.default.enumerator(at: directory, includingPropertiesForKeys: Array(keys))?
+            .compactMap { $0 as? URL } ?? []
+        return urls.compactMap { try? $0.resourceValues(forKeys: keys) }
+            .filter { $0.isRegularFile == true }
+    }
+
+    private nonisolated func readSnapshot() -> CatalogSnapshot? {
         guard let data = try? Data(contentsOf: snapshotURL),
             let cached = try? JSONDecoder().decode(CatalogSnapshot.self, from: data),
             cached.version == Self.cacheVersion, Self.isRevision(cached.revision),

@@ -954,6 +954,19 @@ import Testing
             "a preset named Café has to answer to cafe")
     }
 
+    /// The sidebar follows the same rule as the AutoEq catalog: words in any
+    /// order, punctuation ignored.
+    @Test func searchMatchesWordsInAnyOrderIgnoringPunctuation() {
+        let manager = makeManager()
+        manager.addProfile(named: "Sony MDR-M1 (Harman)")
+
+        #expect(
+            manager.profiles(matching: "sony mdr m1").user.map(\.name) == ["Sony MDR-M1 (Harman)"])
+        #expect(
+            manager.profiles(matching: "harman mdrm1").user.map(\.name) == ["Sony MDR-M1 (Harman)"])
+        #expect(manager.profiles(matching: "booster bass").builtIn.map(\.name) == ["Bass Booster"])
+    }
+
     @Test func searchKeepsTheUserGroupSeparate() {
         let manager = makeManager()
         manager.addProfile(named: "Rock Loud")

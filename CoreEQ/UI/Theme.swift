@@ -206,7 +206,8 @@ enum Theme {
         /// them.
         ///
         /// Each is sized to its widest content, not to its title: "20000 Hz",
-        /// "+12.0 dB", "10.00", and "High Shelf" are what these have to hold.
+        /// "19999.9 Hz", "+12.0 dB", "16.00", and "High Shelf" are what these have
+        /// to hold.
         enum Column {
             /// Colour swatch and band number, up to two digits.
             ///
@@ -221,7 +222,9 @@ enum Theme {
             static let indexGap: CGFloat = 6
             static let enable: CGFloat = 30
             static let type: CGFloat = 100
-            static let frequency: CGFloat = 94
+            /// Wide enough for a frequency with its decimal, "19999.9 Hz".
+            /// At 94 it held "20000 Hz" and clipped an imported "3302.8".
+            static let frequency: CGFloat = 108
             static let gain: CGFloat = 92
             static let q: CGFloat = 76
             /// Just the delete button: there is no power icon, because the

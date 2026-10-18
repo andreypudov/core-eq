@@ -62,6 +62,10 @@ struct FrequencyResponseView: View {
     /// selection, so clicking the empty plot puts the table back to no row
     /// chosen rather than leaving a stale one behind.
     var onFilterSelect: ((_ id: UUID?) -> Void)?
+    /// A click landed on a band handle. The selection is still cleared — the
+    /// ladder has no row in the table — but the window shows the strip that
+    /// band belongs to.
+    var onBandSelect: ((_ slot: Int) -> Void)?
 
     /// Whether double-clicking empty space creates a filter. Off unless the
     /// user has opened the Filters section.
@@ -269,9 +273,13 @@ struct FrequencyResponseView: View {
     private func selectionGesture(_ size: CGSize) -> some Gesture {
         SpatialTapGesture(count: 1)
             .onEnded { value in
-                if case .filter(let id)? = handle(near: value.location, size) {
+                switch handle(near: value.location, size) {
+                case .filter(let id):
                     onFilterSelect?(id)
-                } else {
+                case .band(let slot):
+                    onFilterSelect?(nil)
+                    onBandSelect?(slot)
+                case nil:
                     onFilterSelect?(nil)
                 }
             }

@@ -40,7 +40,7 @@ struct SettingsView: View {
 
             ExclusionsSettingsView()
                 .frame(width: Self.size.width, height: Self.size.height, alignment: .top)
-                .tabItem { Label("Exclusions", systemImage: "nosign") }
+                .tabItem { Label("Exclusions", systemImage: "square.grid.2x2") }
                 .tag(SettingsTab.exclusions)
 
             DiagnosticsSettingsView()

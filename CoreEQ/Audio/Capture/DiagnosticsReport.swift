@@ -173,6 +173,41 @@ enum DiagnosticsReport {
         }
     }
 
+    /// The AutoEq catalog: which data the user is on, and whether it loaded.
+    ///
+    /// Two halves, because they answer different reports. What is cached
+    /// says which AutoEq revision a correction came from — the one to open on
+    /// GitHub when a correction looks different from autoeq.app — and whether
+    /// corrections are being kept rather than downloaded every time. This
+    /// session's state says why the catalog "won't load". Nothing about what
+    /// was searched or browsed: none of it is needed, and it is the user's.
+    struct AutoEQ: Equatable {
+        enum Session: Equatable {
+            case notOpened
+            case loading
+            /// `isStale` when the cached catalog was used because the update
+            /// check failed.
+            case loaded(isStale: Bool)
+            /// A short reason in English, such as "offline" or "HTTP 429".
+            case failed(String)
+        }
+
+        /// The cached catalog's commit, or nil when nothing is cached.
+        var revision: String?
+        /// When the cached catalog was last confirmed current.
+        var checkedAt: Date?
+        var modelCount: Int?
+        var session: Session = .notOpened
+        /// Downloaded and computed corrections kept on disk.
+        var cachedCorrections = 0
+        /// Everything in the catalog's cache folder.
+        var cacheBytes: Int64 = 0
+
+        /// Whether the catalog has ever been used. A report from someone who
+        /// never opened it carries no section rather than a row of "none".
+        var hasBeenUsed: Bool { revision != nil || session != .notOpened }
+    }
+
     static func text(
         appVersion: String,
         systemVersion: String,
@@ -180,7 +215,9 @@ enum DiagnosticsReport {
         canAskMacOS: Bool = true,
         devices: [Device],
         engine: Engine?,
-        profiles: Profiles? = nil
+        profiles: Profiles? = nil,
+        autoEQ: AutoEQ? = nil,
+        now: Date = Date()
     ) -> String {
         var lines: [String] = []
         lines.append("CoreEQ \(appVersion) on macOS \(systemVersion)")
@@ -337,6 +374,11 @@ enum DiagnosticsReport {
             lines.append("")
         }
 
+        if let autoEQ, autoEQ.hasBeenUsed {
+            lines.append(contentsOf: autoEQLines(autoEQ, now: now))
+            lines.append("")
+        }
+
         lines.append("Output devices")
         for device in devices {
             lines.append("")
@@ -373,6 +415,48 @@ enum DiagnosticsReport {
 
         return lines.joined(separator: "\n")
     }
+
+    /// The AutoEq section, in the report's usual two columns.
+    private static func autoEQLines(_ autoEQ: AutoEQ, now: Date) -> [String] {
+        var lines = ["AutoEq catalog"]
+        if let revision = autoEQ.revision {
+            var line = "  revision:        \(revision.prefix(7))"
+            if let checkedAt = autoEQ.checkedAt {
+                line +=
+                    ", checked \(reportDate.string(from: checkedAt)), "
+                    + "\(describe(duration: max(0, now.timeIntervalSince(checkedAt)))) ago"
+            }
+            lines.append(line)
+        } else {
+            lines.append("  revision:        none cached")
+        }
+        if let models = autoEQ.modelCount {
+            lines.append("  models:          \(models)")
+        }
+        let session: String
+        switch autoEQ.session {
+        case .notOpened: session = "not opened"
+        case .loading: session = "loading"
+        case .loaded(false): session = "loaded"
+        case .loaded(true): session = "loaded from cache; the update check failed"
+        case .failed(let reason): session = "FAILED: \(reason)"
+        }
+        lines.append("  this session:    \(session)")
+        lines.append(
+            "  cache:           \(autoEQ.cachedCorrections) correction(s), "
+                + String(format: "%.1f MB", Double(autoEQ.cacheBytes) / 1_000_000))
+        return lines
+    }
+
+    /// Dates in the report read the same on every Mac, whatever its language,
+    /// because the report is read by the developer, not by the person sending it.
+    private static let reportDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "d MMM yyyy"
+        return formatter
+    }()
 
     /// A rough interval, in the units a reader thinks in.
     ///

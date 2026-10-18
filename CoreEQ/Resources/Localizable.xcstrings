@@ -10,7 +10,9 @@
     "%@ downloaded" : {
       "comment" : "AutoEq catalog download progress, size unknown, such as “2 MB downloaded”"
     },
-    "%@ hertz" : {},
+    "%@ hertz" : {
+
+    },
     "%@ of %@" : {
       "comment" : "AutoEq catalog download progress, such as “2 MB of 5 MB”",
       "localizations" : {
@@ -339,7 +341,9 @@
         }
       }
     },
-    "A band boosts or cuts one frequency, on top of the Graphic sliders. Add one below, or double-click the graph where you want it." : {},
+    "A band boosts or cuts one frequency, on top of the Graphic sliders. Add one below, or double-click the graph where you want it." : {
+
+    },
     "A gentle lift at both ends and a slightly recessed midrange, for orchestral and chamber music." : {
       "comment" : "Built-in preset description: Classical"
     },
@@ -352,20 +356,30 @@
     "AUTO" : {
       "comment" : "Automatic gain switch, written in capitals as a badge"
     },
-    "About" : {},
-    "About CoreEQ" : {},
+    "About" : {
+
+    },
+    "About CoreEQ" : {
+
+    },
     "Actions" : {
       "comment" : "Band list column: the row’s buttons"
     },
     "Add" : {
       "comment" : "Open panel button: excludes the chosen apps"
     },
-    "Add Band" : {},
-    "Add Preset" : {},
+    "Add Band" : {
+
+    },
+    "Add Preset" : {
+
+    },
     "Add a parametric band" : {
       "comment" : "Add Band help tag"
     },
-    "Add…" : {},
+    "Add…" : {
+
+    },
     "Adjusted" : {
       "comment" : "Import sheet status: value changed"
     },
@@ -381,33 +395,51 @@
     "Another copy of CoreEQ is running." : {
       "comment" : "Alert title at launch, when CoreEQ is already running"
     },
-    "Apps turned on below play straight to the output, without EQ." : {},
-    "At login, CoreEQ opens in the menu bar, without a window." : {},
-    "Audio Diagnostics" : {},
+    "Apps turned on below play straight to the output, without EQ." : {
+
+    },
+    "At login, CoreEQ opens in the menu bar, without a window." : {
+
+    },
+    "Audio Diagnostics" : {
+
+    },
     "Audio Permission Needed" : {
       "comment" : "Menu bar extra row: the permission was refused; opens Settings"
     },
-    "AutoEq" : {},
-    "AutoEq publishes correction curves for a large catalog of headphones and earphones. Its web app can write a correction as an EqualizerAPO parametric EQ, which CoreEQ imports." : {},
+    "AutoEq" : {
+
+    },
+    "AutoEq publishes correction curves for a large catalog of headphones and earphones. Its web app can write a correction as an EqualizerAPO parametric EQ, which CoreEQ imports." : {
+
+    },
     "AutoEq sent an unexpected response." : {
       "comment" : "AutoEq error"
     },
     "AutoEq sent data CoreEQ couldn’t read." : {
       "comment" : "AutoEq error"
     },
-    "Automatic gain" : {},
-    "Band %lld" : {},
+    "Automatic gain" : {
+
+    },
+    "Band %lld" : {
+
+    },
     "Band %lld Q" : {
       "comment" : "Band knob, for VoiceOver: the band’s width"
     },
-    "Band %lld color" : {},
+    "Band %lld color" : {
+
+    },
     "Band %lld frequency" : {
       "comment" : "Band knob, for VoiceOver"
     },
     "Band %lld gain" : {
       "comment" : "Band knob, for VoiceOver"
     },
-    "Band %lld type" : {},
+    "Band %lld type" : {
+
+    },
     "Bass" : {
       "comment" : "Quick EQ slider: low frequencies"
     },
@@ -423,21 +455,42 @@
     "Blue" : {
       "comment" : "Band color name"
     },
-    "Browse AutoEq Catalog" : {},
-    "Browse AutoEq headphone corrections" : {},
-    "Browsers can’t be excluded: they play through a helper process that macOS shares between apps." : {},
-    "Built-In" : {},
-    "Cancel" : {},
-    "Change the band’s color" : {},
-    "Changes CoreEQ Will Make" : {},
+    "Browse AutoEq Catalog" : {
+
+    },
+    "Browse AutoEq Catalog…" : {
+
+    },
+    "Browse AutoEq headphone corrections" : {
+
+    },
+    "Browsers can’t be excluded: they play through a helper process that macOS shares between apps." : {
+
+    },
+    "Built-In" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Change the band’s color" : {
+
+    },
+    "Changes CoreEQ Will Make" : {
+
+    },
     "Check your internet connection and try again." : {
       "comment" : "AutoEq recovery suggestion"
     },
     "Checking for AutoEq updates…" : {
       "comment" : "AutoEq progress"
     },
-    "Choose EqualizerAPO" : {},
-    "Choose a Target" : {},
+    "Choose EqualizerAPO" : {
+
+    },
+    "Choose a Target" : {
+
+    },
     "Choose a different measurement source, or import a correction by hand." : {
       "comment" : "AutoEq recovery suggestion"
     },
@@ -453,39 +506,63 @@
     "Choose a model first" : {
       "comment" : "Measurement pop-up, before a model"
     },
-    "Choose a model to get started." : {},
+    "Choose a model to get started." : {
+
+    },
     "Choose an EqualizerAPO (.txt) or CoreEQ (.coreeq, .json) preset file." : {
       "comment" : "Open panel message"
     },
-    "Choose the sound you want the correction to aim for, and adjust it if you like." : {},
-    "Choose whether CoreEQ pauses while recording" : {},
-    "Clear search" : {},
-    "Click “Paste from Clipboard” below, or drop the .txt file onto the preset list." : {},
-    "Clip every gain beyond ±12 dB, and use a graphic slider where one fits" : {},
+    "Choose the sound you want the correction to aim for, and adjust it if you like." : {
+
+    },
+    "Choose whether CoreEQ pauses while recording" : {
+
+    },
+    "Clear search" : {
+
+    },
+    "Click “Paste from Clipboard” below, or drop the .txt file onto the preset list." : {
+
+    },
+    "Clip every gain beyond ±12 dB, and use a graphic slider where one fits" : {
+
+    },
     "Collapsed" : {
       "comment" : "Menu row, for VoiceOver: list hidden"
     },
-    "Comparison" : {},
-    "Comparison slot" : {},
+    "Comparison" : {
+
+    },
+    "Comparison slot" : {
+
+    },
     "Compute the trim from the chain, so a boosted preset stays at the loudness it started from" : {
       "comment" : "Automatic gain help tag, while off"
     },
-    "Computing correction in CoreEQ…" : {},
+    "Computing correction in CoreEQ…" : {
+
+    },
     "Copied" : {
       "comment" : "Diagnostics: the report was copied"
     },
     "Copy" : {
       "comment" : "Diagnostics: copies the report"
     },
-    "Copy or Download" : {},
-    "Copy the generated filters to the clipboard, or download them as a .txt file." : {},
+    "Copy or Download" : {
+
+    },
+    "Copy the generated filters to the clipboard, or download them as a .txt file." : {
+
+    },
     "CoreEQ" : {
       "comment" : "Menu bar extra heading: the app name\nMenu bar extra tooltip: the app name\nMenu bar icon, for VoiceOver: equalizing"
     },
     "CoreEQ couldn’t capture system audio (error %d). Make sure CoreEQ is turned on in System Settings > Privacy & Security > Screen & System Audio Recording." : {
       "comment" : "Engine failure: the audio tap couldn’t be created; the number is its error code"
     },
-    "CoreEQ couldn’t change its login item. Open System Settings > General > Login Items to change it there." : {},
+    "CoreEQ couldn’t change its login item. Open System Settings > General > Login Items to change it there." : {
+
+    },
     "CoreEQ couldn’t download AutoEq data (HTTP %lld). Try again." : {
       "comment" : "AutoEq error: the number is the HTTP status code"
     },
@@ -534,23 +611,45 @@
     "CoreEQ, paused while recording" : {
       "comment" : "Menu bar icon, for VoiceOver: stepped aside for a screen recording"
     },
-    "CoreEQ…" : {},
-    "Couldn’t Export Preset" : {},
-    "Couldn’t Import Preset" : {},
-    "Couldn’t Load the AutoEq Catalog" : {},
-    "Create or import a preset" : {},
+    "CoreEQ…" : {
+
+    },
+    "Couldn’t Export Preset" : {
+
+    },
+    "Couldn’t Import Preset" : {
+
+    },
+    "Couldn’t Load the AutoEq Catalog" : {
+
+    },
+    "Create, find, or import a preset" : {
+
+    },
     "Data from AutoEq · MIT, Jaakko Pasanen" : {
       "comment" : "AutoEq catalog credit: the data’s source and license"
     },
     "Deep bass, a dip around 500 Hz, and crisp highs, for synth-driven music." : {
       "comment" : "Built-in preset description: Electronic"
     },
-    "Delete" : {},
-    "Delete “%@”?" : {},
-    "Details" : {},
-    "Diagnostics" : {},
-    "Discard changes and return to the saved preset" : {},
-    "Done" : {},
+    "Delete" : {
+
+    },
+    "Delete “%@”?" : {
+
+    },
+    "Details" : {
+
+    },
+    "Diagnostics" : {
+
+    },
+    "Discard changes and return to the saved preset" : {
+
+    },
+    "Done" : {
+
+    },
     "Downloading the AutoEq catalog…" : {
       "comment" : "AutoEq progress"
     },
@@ -563,16 +662,27 @@
     "Drag or scroll to set; double-click the knob to return to the default width" : {
       "comment" : "Q knob help tag"
     },
+    "Drag to set; double-click to return to the preset’s value" : {
+      "comment" : "Preamp slider help tag"
+    },
     "Dropped" : {
       "comment" : "Import sheet status: filter not imported"
     },
-    "Duplicate" : {},
-    "Edit as Filter" : {},
+    "Duplicate" : {
+
+    },
+    "Edit as Filter" : {
+
+    },
     "Edited" : {
       "comment" : "Preset row, for VoiceOver: has unsaved changes"
     },
-    "Editor" : {},
-    "Effect on the Response" : {},
+    "Editor" : {
+
+    },
+    "Effect on the Response" : {
+
+    },
     "Equalizer" : {
       "comment" : "Menu bar extra switch, for VoiceOver"
     },
@@ -582,16 +692,24 @@
     "Equalizer unavailable" : {
       "comment" : "Warning icon, for VoiceOver"
     },
-    "EqualizerAPO…" : {},
-    "Equalizes everything you hear, with no driver and nothing left behind." : {},
+    "EqualizerAPO…" : {
+
+    },
+    "Equalizes everything you hear, with no driver and nothing left behind." : {
+
+    },
     "Equalizing the sound on “%@”." : {
       "comment" : "Engine status: the output device being equalized"
     },
     "Everything above 1 kHz softened, for harsh or sibilant recordings." : {
       "comment" : "Built-in preset description: Treble Reducer"
     },
-    "Exclude %@" : {},
-    "Exclusions" : {},
+    "Exclude %@" : {
+
+    },
+    "Exclusions" : {
+
+    },
     "Expanded" : {
       "comment" : "Menu row, for VoiceOver: list shown"
     },
@@ -618,21 +736,27 @@
     "Frequency" : {
       "comment" : "Band list column"
     },
-    "Frequency response" : {},
+    "Frequency response" : {
+
+    },
     "Fuller low end and a brighter, more present top, for acoustic guitar and unplugged recordings." : {
       "comment" : "Built-in preset description: Acoustic"
     },
     "Gain" : {
       "comment" : "Band list column"
     },
-    "General" : {},
+    "General" : {
+
+    },
     "GitHub is limiting downloads. Try again later." : {
       "comment" : "AutoEq error: GitHub refused because of too many requests"
     },
     "Granted" : {
       "comment" : "Audio permission status"
     },
-    "Graphic" : {},
+    "Graphic" : {
+
+    },
     "Green" : {
       "comment" : "Band color name"
     },
@@ -642,41 +766,75 @@
     "High Shelf" : {
       "comment" : "Filter type"
     },
-    "Holding the audio device keeps a Mac awake. CoreEQ lets go after half a minute of silence and takes it back the moment something plays. Turn this off if your audio misbehaves." : {},
+    "Holding the audio device keeps a Mac awake. CoreEQ lets go after half a minute of silence and takes it back the moment something plays. Turn this off if your audio misbehaves." : {
+
+    },
     "Import" : {
       "comment" : "Import sheet: the import’s effect"
     },
     "Import Preset" : {
       "comment" : "Open panel title"
     },
-    "Import Preset?" : {},
-    "Import Preset…" : {},
-    "Import adjustments" : {},
-    "Import and Clip to ±12 dB" : {},
-    "Import by Hand…" : {},
-    "Import from AutoEq by Hand" : {},
-    "Import from AutoEq by hand" : {},
-    "Import into CoreEQ" : {},
-    "Import with Adjustments" : {},
+    "Import Preset?" : {
+
+    },
+    "Import Preset…" : {
+
+    },
+    "Import adjustments" : {
+
+    },
+    "Import and Clip to ±12 dB" : {
+
+    },
+    "Import by Hand…" : {
+
+    },
+    "Import from AutoEq by Hand" : {
+
+    },
+    "Import from AutoEq by hand" : {
+
+    },
+    "Import into CoreEQ" : {
+
+    },
+    "Import with Adjustments" : {
+
+    },
     "Imported Preset" : {
       "comment" : "Name of an imported preset with no name"
     },
     "Indigo" : {
       "comment" : "Band color name"
     },
-    "Keep every value CoreEQ can represent, exactly as written" : {},
-    "Keeps screen recordings from capturing the sound twice" : {},
-    "Kept Beyond the Graphic Range" : {},
+    "Keep every value CoreEQ can represent, exactly as written" : {
+
+    },
+    "Keeps screen recordings from capturing the sound twice" : {
+
+    },
+    "Kept Beyond the Graphic Range" : {
+
+    },
     "Kept exact" : {
       "comment" : "Import sheet status: value imported unchanged"
     },
-    "Last selection, not playing." : {},
-    "Leaving apps out needs macOS 26 or later. On this Mac, CoreEQ equalizes every app." : {},
+    "Last selection, not playing." : {
+
+    },
+    "Leaving apps out needs macOS 26 or later. On this Mac, CoreEQ equalizes every app." : {
+
+    },
     "Less weight below 500 Hz, for boomy rooms or bass-heavy headphones." : {
       "comment" : "Built-in preset description: Bass Reducer"
     },
-    "Lets the Mac sleep on schedule while CoreEQ is running" : {},
-    "Loading correction…" : {},
+    "Lets the Mac sleep on schedule while CoreEQ is running" : {
+
+    },
+    "Loading correction…" : {
+
+    },
     "Low Pass" : {
       "comment" : "Filter type"
     },
@@ -689,7 +847,9 @@
     "Measurement source" : {
       "comment" : "Measurement pop-up, for VoiceOver"
     },
-    "Measurement source:" : {},
+    "Measurement source:" : {
+
+    },
     "Mid" : {
       "comment" : "Quick EQ slider: middle frequencies"
     },
@@ -714,20 +874,30 @@
     "More weight below 250 Hz, held all the way down to 20 Hz. The rest is untouched." : {
       "comment" : "Built-in preset description: Bass Booster"
     },
-    "My Presets" : {},
+    "My Presets" : {
+
+    },
     "New Preset" : {
       "comment" : "Name of a newly created preset"
     },
-    "No Bands" : {},
-    "No Models" : {},
+    "No Bands" : {
+
+    },
+    "No Models" : {
+
+    },
     "No Output Device" : {
       "comment" : "Shown when the Mac has no output"
     },
     "No Output Devices" : {
       "comment" : "Menu bar extra row: the Mac has no output device"
     },
-    "No Results for “%@”" : {},
-    "No apps are excluded." : {},
+    "No Results for “%@”" : {
+
+    },
+    "No apps are excluded." : {
+
+    },
     "No audible change." : {
       "comment" : "Import sheet: the response is unchanged"
     },
@@ -743,7 +913,9 @@
     "None" : {
       "comment" : "Pop-up value, for VoiceOver"
     },
-    "Not Equalizing" : {},
+    "Not Equalizing" : {
+
+    },
     "Not Receiving Audio" : {
       "comment" : "Menu bar extra row: sound is playing but none reaches CoreEQ"
     },
@@ -759,51 +931,87 @@
     "Not running" : {
       "comment" : "Audio permission status: CoreEQ hasn’t needed it yet"
     },
-    "OK" : {},
+    "OK" : {
+
+    },
     "Off" : {
       "comment" : "Switch state, for VoiceOver"
     },
     "On" : {
       "comment" : "Band list column: band turned on\nSwitch state, for VoiceOver"
     },
-    "Only targets compatible with this measurement source, rig, and form are available" : {},
-    "Open CoreEQ at login" : {},
-    "Open CoreEQ settings" : {},
+    "Only targets compatible with this measurement source, rig, and form are available" : {
+
+    },
+    "Open CoreEQ at login" : {
+
+    },
+    "Open CoreEQ settings" : {
+
+    },
     "Open Equalizer" : {
       "comment" : "Menu item: shows the main window"
     },
     "Open System Settings" : {
       "comment" : "Button: opens Privacy & Security in System Settings"
     },
-    "Open autoeq.app" : {},
-    "Open autoeq.app in Browser" : {},
-    "Open the diagnostics report" : {},
+    "Open autoeq.app" : {
+
+    },
+    "Open autoeq.app in Browser" : {
+
+    },
+    "Open the diagnostics report" : {
+
+    },
     "Orange" : {
       "comment" : "Band color name"
     },
     "Output" : {
       "comment" : "Menu bar extra section: output device"
     },
-    "Output device" : {},
+    "Output device" : {
+
+    },
     "Output trim" : {
       "comment" : "Import sheet: the adjusted value is the preamp"
     },
-    "Output trim applied after the whole chain; use it to give back the headroom a boosted preset takes" : {},
-    "Parametric" : {},
-    "Paste Preset" : {},
-    "Paste a preset from the clipboard (⌘V)" : {},
-    "Paste from Clipboard" : {},
-    "Pause while recording system audio" : {},
+    "Output trim applied after the whole chain; use it to give back the headroom a boosted preset takes" : {
+
+    },
+    "Parametric" : {
+
+    },
+    "Paste Preset" : {
+
+    },
+    "Paste a preset from the clipboard (⌘V)" : {
+
+    },
+    "Paste from Clipboard" : {
+
+    },
+    "Pause while recording system audio" : {
+
+    },
     "Paused While Recording" : {
       "comment" : "Heading and menu bar extra row: CoreEQ stepped aside for a screen recording"
     },
     "Pink" : {
       "comment" : "Band color name"
     },
-    "Play Preview" : {},
-    "Playing preview" : {},
-    "Point at a handle to read its value; drag it to adjust; double-click to reset it" : {},
-    "Preamp" : {},
+    "Play Preview" : {
+
+    },
+    "Playing preview" : {
+
+    },
+    "Point at a handle to read its value; drag it to adjust; double-click to reset it" : {
+
+    },
+    "Preamp" : {
+
+    },
     "Preamp: %@" : {
       "comment" : "Import alert: the preset’s output trim, such as “Preamp: −6.0 dB”"
     },
@@ -813,9 +1021,15 @@
     "Preset" : {
       "comment" : "Menu bar extra section: active preset"
     },
-    "Preset name" : {},
-    "Preview follows your selection." : {},
-    "Preview response curve" : {},
+    "Preset name" : {
+
+    },
+    "Preview follows your selection." : {
+
+    },
+    "Preview response curve" : {
+
+    },
     "Punchy low end, bright upper treble, and slightly scooped mids." : {
       "comment" : "Built-in preset description: Rock"
     },
@@ -840,21 +1054,45 @@
     "Red" : {
       "comment" : "Band color name"
     },
-    "Refresh" : {},
+    "Refresh" : {
+
+    },
     "Relaunch CoreEQ" : {
       "comment" : "Button: quits and reopens CoreEQ"
     },
-    "Release Notes" : {},
-    "Release the audio device when nothing is playing" : {},
-    "Remove" : {},
-    "Remove Band" : {},
-    "Remove band %lld" : {},
-    "Remove this band" : {},
-    "Rename" : {},
-    "Requires macOS 26" : {},
-    "Reset Band" : {},
-    "Reset Gain" : {},
-    "Reset to Preset" : {},
+    "Release Notes" : {
+
+    },
+    "Release the audio device when nothing is playing" : {
+
+    },
+    "Remove" : {
+
+    },
+    "Remove Band" : {
+
+    },
+    "Remove band %lld" : {
+
+    },
+    "Remove this band" : {
+
+    },
+    "Rename" : {
+
+    },
+    "Requires macOS 26" : {
+
+    },
+    "Reset Band" : {
+
+    },
+    "Reset Gain" : {
+
+    },
+    "Reset to Preset" : {
+
+    },
     "Response changes by up to %@ dB (%@ dB RMS)." : {
       "comment" : "AutoEq catalog notice: the largest and the average change",
       "localizations" : {
@@ -866,11 +1104,15 @@
         }
       }
     },
-    "Revert" : {},
+    "Revert" : {
+
+    },
     "Rumble cut and the speech range lifted, for podcasts and audiobooks." : {
       "comment" : "Built-in preset description: Spoken Word"
     },
-    "Save Changes" : {},
+    "Save Changes" : {
+
+    },
     "Saving will adjust %lld values to fit CoreEQ’s limits." : {
       "comment" : "AutoEq catalog notice: how many values importing would change",
       "localizations" : {
@@ -897,28 +1139,51 @@
     "Screen recordings capture both your apps’ sound and CoreEQ’s equalized copy, which sounds doubled. CoreEQ steps aside until the recording stops." : {
       "comment" : "Why CoreEQ pauses while a screen recording captures system audio"
     },
-    "Search" : {},
-    "Search for your headphone or earphone model in your browser." : {},
-    "Search headphones" : {},
-    "Settings" : {},
+    "Search" : {
+
+    },
+    "Search for your headphone or earphone model in your browser." : {
+
+    },
+    "Search headphones" : {
+
+    },
+    "Set automatically while Auto is on; drag to set it by hand" : {
+      "comment" : "Preamp slider help tag, while automatic gain is on"
+    },
+    "Settings" : {
+
+    },
     "Settings…" : {
       "comment" : "Menu item: opens CoreEQ’s Settings window"
     },
-    "Show Diagnostics" : {},
-    "Source Code" : {},
-    "Start CoreEQ automatically, in the menu bar, when you log in" : {},
+    "Show Diagnostics" : {
+
+    },
+    "Source Code" : {
+
+    },
+    "Start CoreEQ automatically, in the menu bar, when you log in" : {
+
+    },
     "Strong low bass and forward upper mids, for club music." : {
       "comment" : "Built-in preset description: Dance"
     },
     "System Audio Not Allowed" : {
       "comment" : "Menu bar extra row: CoreEQ couldn’t capture system audio"
     },
-    "System Audio Recording" : {},
-    "System-wide equalizer" : {},
+    "System Audio Recording" : {
+
+    },
+    "System-wide equalizer" : {
+
+    },
     "Target curve" : {
       "comment" : "Target pop-up, for VoiceOver"
     },
-    "Target curve:" : {},
+    "Target curve:" : {
+
+    },
     "Teal" : {
       "comment" : "Band color name"
     },
@@ -970,11 +1235,15 @@
     "There’s no published correction CoreEQ supports for this measurement." : {
       "comment" : "AutoEq error"
     },
-    "These are kept exactly, as parametric bands beyond the sliders’ ±12 dB range. You can clip their gains to ±12 dB instead." : {},
+    "These are kept exactly, as parametric bands beyond the sliders’ ±12 dB range. You can clip their gains to ±12 dB instead." : {
+
+    },
     "Treble" : {
       "comment" : "Quick EQ slider: high frequencies"
     },
-    "Try Again" : {},
+    "Try Again" : {
+
+    },
     "Try again in a moment. AutoEq may be temporarily unavailable." : {
       "comment" : "AutoEq recovery suggestion"
     },
@@ -993,7 +1262,9 @@
     "Two copies would each silence the other’s sound, so only one can run." : {
       "comment" : "Alert message: why two copies of CoreEQ can’t run together"
     },
-    "Two versions of this preset; switch between them to compare" : {},
+    "Two versions of this preset; switch between them to compare" : {
+
+    },
     "Type" : {
       "comment" : "Band list column: filter type"
     },
@@ -1014,7 +1285,9 @@
         }
       }
     },
-    "Using a saved catalog. Couldn’t check for updates." : {},
+    "Using a saved catalog. Couldn’t check for updates." : {
+
+    },
     "Version %@" : {
       "comment" : "About: the app’s version number"
     },
@@ -1027,9 +1300,15 @@
     "Warm bass, slightly recessed mids, and an airy top, for small-group recordings." : {
       "comment" : "Built-in preset description: Jazz"
     },
-    "What CoreEQ sees on this Mac. Include it with a bug report: it answers most questions about audio problems. It lists your audio devices by name and contains nothing else about you." : {},
-    "Where AutoEq asks which equalizer you use, choose EqualizerAPO’s parametric EQ." : {},
-    "You can’t undo this action." : {},
+    "What CoreEQ sees on this Mac. Include it with a bug report: it answers most questions about audio problems. It lists your audio devices by name and contains nothing else about you." : {
+
+    },
+    "Where AutoEq asks which equalizer you use, choose EqualizerAPO’s parametric EQ." : {
+
+    },
+    "You can’t undo this action." : {
+
+    },
     "computed by CoreEQ" : {
       "comment" : "AutoEq catalog credit: CoreEQ computed this correction itself"
     },

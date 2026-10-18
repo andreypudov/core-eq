@@ -668,13 +668,20 @@ struct EqualizerSidebarView: View {
     /// A borderless pull-down, so it is a real `NSPopUpButton` drawn the way
     /// AppKit draws one in a sidebar: a plain glyph, no bezel, no chevron.
     /// Deleting stays on the row's context menu, where the confirmation names
-    /// the preset it removes. The AutoEQ catalog button sits at the other end.
+    /// the preset it removes. The AutoEQ catalog button sits at the other end,
+    /// and the catalog is in the `+` menu too.
     private var bottomBar: some View {
         HStack(spacing: 0) {
             Menu {
                 Button("New Preset") {
                     profileManager.addProfile(filters: profileManager.currentFilters)
                 }
+
+                // Also here, not only on the AutoEq button: this menu is where
+                // someone looks for a new preset, and a correction from the
+                // catalog is one. Making one comes first; bringing in one that
+                // already exists, below the divider.
+                Button("Browse AutoEq Catalog…") { openAutoEQBrowser() }
 
                 Divider()
 
@@ -694,7 +701,7 @@ struct EqualizerSidebarView: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .accessibilityLabel("Add Preset")
-            .help("Create or import a preset")
+            .help("Create, find, or import a preset")
 
             Spacer(minLength: 0)
 

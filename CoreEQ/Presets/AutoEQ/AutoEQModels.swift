@@ -115,31 +115,35 @@ struct AutoEQEqualizedProfile: Sendable, Hashable, Codable {
 /// The full browsable catalog: every model plus the targets they can be
 /// corrected toward.
 struct AutoEQCatalog: Sendable {
-    var models: [AutoEQModel]
+    let models: [AutoEQModel]
     var targets: [AutoEQTarget]
     var revision: String
     var isStale: Bool = false
 
-    /// Models whose full name contains `query`, case- and diacritic-insensitively.
+    /// `models`' names, prepared once rather than on every keystroke.
+    private let searchNames: [SearchableName]
+
+    init(models: [AutoEQModel], targets: [AutoEQTarget], revision: String, isStale: Bool = false) {
+        self.models = models
+        self.targets = targets
+        self.revision = revision
+        self.isStale = isStale
+        searchNames = models.map { SearchableName($0.name) }
+    }
+
+    /// Models whose name has every word of `query` in it, by `SearchQuery`'s
+    /// rule: names where the words start words first, then catalog order.
     ///
     /// An empty query is a browse rather than a search and returns the first
     /// `limit` models in catalog order, which keeps the unfiltered list usable
     /// without materializing thousands of rows.
     func models(matching query: String, limit: Int = 300) -> [AutoEQModel] {
         guard limit > 0 else { return [] }
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return Array(models.prefix(limit)) }
+        let search = SearchQuery(query)
+        guard !search.isEmpty else { return Array(models.prefix(limit)) }
 
-        var result: [AutoEQModel] = []
-        for model in models {
-            if model.name.range(
-                of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-            {
-                result.append(model)
-                if result.count == limit { break }
-            }
-        }
-        return result
+        let ranked = search.ranked(Array(models.indices)) { searchNames[$0] }
+        return ranked.prefix(limit).map { models[$0] }
     }
 }
 
@@ -195,6 +199,21 @@ enum AutoEQError: Error, LocalizedError, Equatable, Sendable {
             return String(
                 localized: "The correction uses filters CoreEQ can’t apply (\(type)).",
                 comment: "AutoEq error: the filter type code follows in parentheses")
+        }
+    }
+
+    /// The error in a few English words, for the diagnostics report, which
+    /// stays in English whatever language the app is in.
+    var diagnosticReason: String {
+        switch self {
+        case .offline: return "offline"
+        case .httpStatus(let code): return "HTTP \(code)"
+        case .invalidResponse: return "unexpected response"
+        case .emptyCatalog: return "empty catalog"
+        case .noMatchingTarget: return "no matching target"
+        case .unsupportedVariant: return "unsupported measurement"
+        case .malformedData: return "unreadable data"
+        case .unsupportedFilter(let type): return "unsupported filter \(type)"
         }
     }
 
