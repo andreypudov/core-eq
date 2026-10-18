@@ -233,7 +233,7 @@ enum Theme {
         }
     }
 
-    /// The vertical rhythm the Band Levels and Preamp blocks share.
+    /// The vertical rhythm the Graphic editor and the Preamp column share.
     ///
     /// Both are a value, a track, and a caption. Driving both from these numbers
     /// is what keeps the preamp track starting and ending exactly level with the
