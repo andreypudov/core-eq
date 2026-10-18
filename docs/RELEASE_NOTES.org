@@ -147,6 +147,66 @@ published corrections stay below 6 and are unaffected. Imported bells up to 16
 now arrive exactly, and the graph samples every filter's centre, so a bell
 narrower than its point spacing is drawn at the height it is heard.
 
+** Smoother previews in the catalog
+
+Moving from one AutoEq model to the next played your own preset for a moment in
+between: each preview was undone before the next one was applied, so for the
+length of a download the sound went back to the preset underneath, with its own
+trim, and then jumped to the new correction. It sounded like two corrections
+applied one after the other. A preview now replaces the previous one directly,
+and the gains and trim move over the same 50 ms ramp as any other change.
+
+** Finding things
+
+Both searches — presets in the sidebar and models in the catalog — now match
+word by word, in any order, ignoring case, accents and punctuation. “sony mdr
+m1” found nothing, because the name is written “Sony MDR-M1” and the search
+looked for the typed text as one piece. It finds it now, and so do “mdrm1”, and
+“600” for both the HD 600 and the HD600: headphone names are model numbers
+written every way at once. Names where the typed words start a word come first.
+
+Deliberately not fuzzy. Every result contains what was typed, punctuation
+aside, so nothing turns up that cannot be explained; letters-in-order matching
+over a few thousand similar names finds mostly noise.
+
+*Browse AutoEq Catalog…* is also in the =+= menu now, beside New Preset and
+Import, for anyone who looks for it there rather than at the button beside it.
+
+** The main window
+
+- *The editor follows the point you click.* The graph carries two kinds of
+  point — round handles for the graphic bands, numbered nodes for the
+  parametric ones — and nothing said where each one's settings were. Clicking
+  or dragging a node now shows the Parametric tab with its row selected; a
+  handle shows the Graphic tab. Hovering never switches.
+- *The preamp can be dragged with AUTO on.* It sat greyed out with no sign why.
+  Dragging it now turns AUTO off and takes the trim over; double-clicking puts
+  it back to the preset's own value, or back to AUTO for a preset that uses it,
+  the way a double-click on a graphic band returns it to the preset.
+- *The band list no longer comes up empty.* Scrolled down a long parametric
+  preset, then switched to a shorter one, the list kept its old position past
+  the end of the new content and showed nothing. It starts from the top on a
+  preset change.
+- The band list fills the editor's height, and the frequency field is wide
+  enough for “19999.9 Hz”.
+
+** Interface text in one place
+
+Every string the interface shows is now in a String Catalog, written to one
+guide modelled on how Apple writes for macOS ([[file:STRINGS.org][STRINGS.org]]), and every existing
+string was reviewed against it. Nothing is translated yet; this is what a
+translation would start from, and what keeps the wording consistent in the
+meantime. Log messages and the diagnostics report stay in English, because they
+are read alongside the source.
+
+** Diagnostics
+
+The report has a short AutoEq section once the catalog has been used: the
+catalog's revision and when it was last checked, how many models it lists, how
+loading went this session — with the reason, when it failed — and the size of
+the cache. A “the catalog won't load” report now says why without a second
+round of questions.
+
 * 1.9.2
 
 Released <2026-10-02 Fri>.
