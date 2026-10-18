@@ -86,11 +86,6 @@ final class AutoEQStore: ObservableObject {
         }
     }
 
-    /// Whether upstream supplies an alternative target for this measurement.
-    var supportsCustomTargets: Bool {
-        availableTargets.contains { $0.fr != nil }
-    }
-
     // MARK: - Loading
 
     func loadCatalog(forceRefresh: Bool = false) async {

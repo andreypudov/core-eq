@@ -216,28 +216,4 @@ enum AutoEQError: Error, LocalizedError, Equatable, Sendable {
         case .unsupportedFilter(let type): return "unsupported filter \(type)"
         }
     }
-
-    var recoverySuggestion: String? {
-        switch self {
-        case .offline:
-            return String(
-                localized: "Check your internet connection and try again.",
-                comment: "AutoEq recovery suggestion")
-        case .httpStatus, .invalidResponse, .malformedData, .emptyCatalog:
-            return String(
-                localized: "Try again in a moment. AutoEq may be temporarily unavailable.",
-                comment: "AutoEq recovery suggestion")
-        case .noMatchingTarget:
-            return String(
-                localized: "Choose a different measurement.", comment: "AutoEq recovery suggestion")
-        case .unsupportedVariant:
-            return String(
-                localized: "Choose a different measurement source, or import a correction by hand.",
-                comment: "AutoEq recovery suggestion")
-        case .unsupportedFilter:
-            return String(
-                localized: "Choose a different target or measurement.",
-                comment: "AutoEq recovery suggestion")
-        }
-    }
 }
