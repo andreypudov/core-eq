@@ -98,3 +98,70 @@ enum AppExclusion {
         }
     }
 }
+
+/// The Exclusions pane's list: every app on it, and the ones switched on.
+///
+/// Each edit returns the list as it should be stored, normalised the way
+/// `AppExclusion.normalized` stores it, so the pane cannot write a list with
+/// repeats or with CoreEQ itself on it.
+struct ExclusionList: Equatable {
+    /// Every listed app, in the order it was added.
+    var listed: [String]
+    /// The listed apps switched on: the ones the tap leaves out.
+    var excluded: [String]
+
+    /// Adds apps, switched on: adding one is asking for it to be left out. An
+    /// app already listed with its switch off is switched back on.
+    func adding(
+        _ bundleIDs: [String], ownBundleID: String? = Bundle.main.bundleIdentifier
+    )
+        -> ExclusionList
+    {
+        normalized(listed: listed + bundleIDs, excluded: excluded + bundleIDs, own: ownBundleID)
+    }
+
+    /// Takes an app off the list altogether.
+    func removing(
+        _ bundleID: String, ownBundleID: String? = Bundle.main.bundleIdentifier
+    )
+        -> ExclusionList
+    {
+        normalized(
+            listed: listed.filter { $0 != bundleID },
+            excluded: excluded.filter { $0 != bundleID }, own: ownBundleID)
+    }
+
+    /// Switches one listed app on or off. Off keeps it listed, so it can have
+    /// its EQ back for a while without being forgotten.
+    func setting(
+        _ bundleID: String, excluded isOn: Bool,
+        ownBundleID: String? = Bundle.main.bundleIdentifier
+    ) -> ExclusionList {
+        normalized(
+            listed: listed,
+            excluded: isOn ? excluded + [bundleID] : excluded.filter { $0 != bundleID },
+            own: ownBundleID)
+    }
+
+    /// Whether going from `self` to `other` changes what the tap leaves out.
+    /// Only that is worth the break in the sound a rebuild costs; listing or
+    /// removing a switched-off app is not.
+    func changesTap(comparedTo other: ExclusionList) -> Bool {
+        excluded != other.excluded
+    }
+
+    /// Identifiers are compared without case, so an excluded app takes the
+    /// spelling of its row. Otherwise the same app added as `com.apple.Logic10`
+    /// beside a listed `com.apple.logic10` would be left out while its switch,
+    /// which looks for the row's spelling, showed it off.
+    private func normalized(listed: [String], excluded: [String], own: String?) -> ExclusionList {
+        let rows = AppExclusion.normalized(listed, ownBundleID: own)
+        let spelling = Dictionary(
+            rows.map { ($0.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
+        return ExclusionList(
+            listed: rows,
+            excluded: AppExclusion.normalized(excluded, ownBundleID: own).map {
+                spelling[$0.lowercased()] ?? $0
+            })
+    }
+}

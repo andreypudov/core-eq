@@ -29,8 +29,10 @@ Read these in order the first time.
    and what the graph is allowed to do. Read it before changing anything about
    the graphic and parametric editors.
 4. [[file:INTERNALS.org][INTERNALS.org]] — how the app is put together: the audio path, idling,
-   sample rate changes, the DSP, threading, resilience, persistence, and the
-   traps that cost time to find.
+   sample rate changes, the DSP, threading, resilience, persistence, the AutoEq
+   catalog and search, and the traps that cost time to find.
+   [[file:AUTOEQ_LOCAL.org][AUTOEQ_LOCAL.org]] goes deeper on the correction CoreEQ computes for a target
+   AutoEq did not publish.
 5. [[file:RELEASING.org][RELEASING.org]] — what CI runs and when, and how a release is cut.
 6. [[file:STRINGS.org][STRINGS.org]] — how interface text is written, following Apple's style, and
    where it lives: the String Catalog, =make strings=, plurals, and what stays

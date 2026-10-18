@@ -1,0 +1,76 @@
+#+TITLE: CoreEQ 1.10 — Leave apps out, find a correction
+#+AUTHOR: Andrey Pudov
+#+DATE: <2026-10-23 Fri>
+#+OPTIONS: toc:nil num:nil
+
+1.10 lets you leave apps out of the equalizer, and finds an AutoEq correction
+for your headphones without leaving CoreEQ. It also changes how releases are
+signed, so this is the last update that asks for the audio permission again.
+
+* Before you update
+
+*CoreEQ asks for the audio permission once more, on this update.* Releases are
+now signed with CoreEQ's own certificate, and macOS records the permission
+against that certificate rather than against each build, so every later update
+keeps it. This one changes the kind of signature, so macOS asks one last time.
+CoreEQ now explains what the permission is for and asks from an *Allow…* button,
+instead of the prompt appearing at launch.
+
+Gatekeeper is unchanged: the certificate is not Apple's, so the first launch of
+a download still needs *Open Anyway* in System Settings → Privacy & Security, or
+the =xattr= step in the README.
+
+* New
+
+- *The AutoEq catalog.* The *AutoEq* button beside the =+=, and *Browse AutoEq
+  Catalog…* in the =+= menu, search AutoEq's corrections by headphone model.
+  Selecting a measurement plays it against whatever is playing, without saving
+  anything; *Cancel* puts your sound back, and *Import* keeps it as a preset.
+  Other compatible target curves are computed in the app. Nothing is downloaded
+  until you open the catalog, and a correction heard once previews offline.
+  Contributed by Sebastian Ullrich.
+- *Leaving apps out* (#20). Settings → *Exclusions* lists apps whose sound goes
+  straight to the output, never through CoreEQ: a DAW, a mastering chain, a
+  player you want bit for bit. Each has a switch, so one can have its EQ back
+  for a while without being removed. Needs macOS 26 or later. Browsers can't be
+  excluded, because they play through a helper process macOS shares between
+  apps.
+- *Narrower bells* (#41). A parametric bell's Q now goes to 16, up from 10, for
+  the sharp resonances in-ear headphones are corrected with.
+- *Imports say what they change.* Free filters now reach ±20 dB, and any value
+  that still has to change is listed before anything is added — the filter, the
+  old and new value, and what it does to the response in dB. A bell past the
+  graphic sliders' ±12 dB can be kept exact or clipped onto its slider.
+- *Search that finds model numbers.* Presets and catalog models match word by
+  word, ignoring case, accents and punctuation: “sony mdr m1” finds Sony
+  MDR-M1, and “600” finds both the HD 600 and the HD600.
+- *The editor follows the graph.* Clicking a numbered node on the graph shows
+  the Parametric tab with its row selected; a round handle shows the Graphic
+  tab.
+- *The preamp works with AUTO on.* Dragging it takes over from AUTO;
+  double-clicking returns it to the preset's value.
+
+* Fixed
+
+- *Two copies of CoreEQ silenced the Mac.* Each one's tap muted the other's
+  output. A second copy now asks which one to quit before it starts.
+- *Moving between catalog previews played your own preset in between.* A
+  preview now replaces the previous one directly.
+- *The band list came up empty* after switching from a long parametric preset
+  to a shorter one while scrolled down.
+- *A refused permission and one never asked looked the same*, and a refusal
+  could take six seconds of playing audio to notice. CoreEQ now asks macOS
+  directly.
+
+* Notes
+
+All interface text is now in one String Catalog, reviewed against a single
+style guide. Nothing is translated yet; this is what a translation would start
+from.
+
+The diagnostics report now includes the AutoEq catalog's version and, if it
+failed to load, why. Its description in Settings now says everything it names:
+your audio devices, your presets, and any apps you've excluded.
+
+The full account of each change is in [[file:../RELEASE_NOTES.org][RELEASE_NOTES.org]], and what is still owed
+is in [[file:../ROADMAP.org][ROADMAP.org]].

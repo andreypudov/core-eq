@@ -479,9 +479,6 @@
     "Changes CoreEQ Will Make" : {
 
     },
-    "Check your internet connection and try again." : {
-      "comment" : "AutoEq recovery suggestion"
-    },
     "Checking for AutoEq updates…" : {
       "comment" : "AutoEq progress"
     },
@@ -490,15 +487,6 @@
     },
     "Choose a Target" : {
 
-    },
-    "Choose a different measurement source, or import a correction by hand." : {
-      "comment" : "AutoEq recovery suggestion"
-    },
-    "Choose a different measurement." : {
-      "comment" : "AutoEq recovery suggestion"
-    },
-    "Choose a different target or measurement." : {
-      "comment" : "AutoEq recovery suggestion"
     },
     "Choose a measurement first" : {
       "comment" : "Target pop-up, before a measurement"
@@ -1244,9 +1232,6 @@
     "Try Again" : {
 
     },
-    "Try again in a moment. AutoEq may be temporarily unavailable." : {
-      "comment" : "AutoEq recovery suggestion"
-    },
     "Turn on CoreEQ under Screen & System Audio Recording, then choose Quit & Reopen when macOS asks." : {
       "comment" : "Permission instructions. “Quit & Reopen” is the button macOS shows; use its translation."
     },
@@ -1300,7 +1285,7 @@
     "Warm bass, slightly recessed mids, and an airy top, for small-group recordings." : {
       "comment" : "Built-in preset description: Jazz"
     },
-    "What CoreEQ sees on this Mac. Include it with a bug report: it answers most questions about audio problems. It lists your audio devices by name and contains nothing else about you." : {
+    "What CoreEQ sees on this Mac. Include it with a bug report: it answers most questions about audio problems. It names your audio devices, your presets, and any apps you’ve excluded, and contains nothing else about you." : {
 
     },
     "Where AutoEq asks which equalizer you use, choose EqualizerAPO’s parametric EQ." : {

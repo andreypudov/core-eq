@@ -6,7 +6,7 @@ application is playing, with no virtual audio driver and no kernel extension.
 It runs on Apple's native Core Audio process-tap API, so there is nothing
 installed into the system and nothing left behind when CoreEQ is not running.
 
-[[./design/screenshots/core-eq-1.9.png]]
+[[./design/screenshots/core-eq-1.10.png]]
 
 * Highlights
 
@@ -64,7 +64,7 @@ xattr -dr com.apple.quarantine /Applications/CoreEQ.app
 
 ** Build from source
 
-Requires Xcode 16 or later. Locally built applications are not quarantined, so
+Requires Xcode 26 or later. Locally built applications are not quarantined, so
 CoreEQ launches with no Gatekeeper warnings:
 
 #+begin_src sh
@@ -83,7 +83,8 @@ Download the latest =CoreEQ-x.y.zip= from the *Releases* page, unzip, and move
 * Getting started
 
 1. Launch CoreEQ. A sliders icon appears in the menu bar; there is no Dock icon.
-2. Grant *System Audio Recording* when macOS asks — CoreEQ needs it to process
+2. Allow *System Audio Recording*. CoreEQ opens its window, says what the
+   permission is for, and asks when you click *Allow…* — it needs it to process
    the sound you hear. Nothing is recorded, stored, or transmitted.
 3. Choose a preset. The sound changes immediately.
 
@@ -114,7 +115,8 @@ in a report, the commit message format, and what a pull request needs;
 
 Thank you to [[https://github.com/souljedi][Sebastian Ullrich (@souljedi)]] for AutoEq and EqualizerAPO
 preset import ([[https://github.com/andreypudov/core-eq/pull/25][#25]]) — CoreEQ's first contribution from outside, and the
-most requested feature it had.
+most requested feature it had — and for the AutoEq catalog browser that
+followed it ([[https://github.com/andreypudov/core-eq/pull/40][#40]]).
 
 CoreEQ's AutoEq catalog browser uses headphone correction data from
 [[https://github.com/jaakkopasanen/AutoEq][AutoEq]] by Jaakko Pasanen, under the MIT

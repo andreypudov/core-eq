@@ -119,3 +119,54 @@ struct AppExclusionTests {
         #expect(!AppExclusion.rebuildsOnChange(isRunning: false, hasFailed: false))
     }
 }
+
+/// What each edit in the Exclusions pane does to the stored list.
+struct ExclusionListTests {
+    private let empty = ExclusionList(listed: [], excluded: [])
+    private let own = "com.andreypudov.coreeq"
+
+    @Test func anAddedAppIsListedAndSwitchedOn() {
+        let list = empty.adding(["com.apple.logic10", "com.spotify.client"], ownBundleID: own)
+        #expect(list.listed == ["com.apple.logic10", "com.spotify.client"])
+        #expect(list.excluded == ["com.apple.logic10", "com.spotify.client"])
+    }
+
+    /// Adding an app that is listed with its switch off is asking for it to be
+    /// left out again, not a second row.
+    @Test func addingAListedAppSwitchesItBackOn() {
+        let off = ExclusionList(listed: ["com.apple.logic10"], excluded: [])
+        let list = off.adding(["com.apple.Logic10"], ownBundleID: own)
+        #expect(list.listed == ["com.apple.logic10"])
+        #expect(list.excluded == ["com.apple.logic10"])
+    }
+
+    @Test func coreEQItselfIsNeverAdded() {
+        #expect(empty.adding([own], ownBundleID: own) == empty)
+    }
+
+    @Test func switchingOffKeepsTheAppListed() {
+        let on = empty.adding(["com.apple.logic10"], ownBundleID: own)
+        let off = on.setting("com.apple.logic10", excluded: false, ownBundleID: own)
+        #expect(off.listed == ["com.apple.logic10"])
+        #expect(off.excluded.isEmpty)
+        #expect(off.setting("com.apple.logic10", excluded: true, ownBundleID: own) == on)
+    }
+
+    @Test func removingTakesTheAppOffAltogether() {
+        let list = empty.adding(["com.apple.logic10", "com.spotify.client"], ownBundleID: own)
+            .removing("com.apple.logic10", ownBundleID: own)
+        #expect(list.listed == ["com.spotify.client"])
+        #expect(list.excluded == ["com.spotify.client"])
+    }
+
+    /// A rebuild breaks the sound for a moment, so only a change to what the
+    /// tap leaves out asks for one.
+    @Test func onlyAChangeToTheExcludedAppsRebuildsTheTap() {
+        let on = empty.adding(["com.apple.logic10"], ownBundleID: own)
+        let off = on.setting("com.apple.logic10", excluded: false, ownBundleID: own)
+        #expect(on.changesTap(comparedTo: empty))
+        #expect(off.changesTap(comparedTo: on))
+        #expect(!off.removing("com.apple.logic10", ownBundleID: own).changesTap(comparedTo: off))
+        #expect(!empty.changesTap(comparedTo: empty))
+    }
+}

@@ -364,7 +364,7 @@ struct EqualizerDetailView: View {
         // A low floor, not a comfortable one: every point the fixed sections
         // don't need goes here, so the graph is large whenever the window is,
         // and it compresses rather than pushing the window past the screen when
-        // the window is small and the Filters section is open.
+        // the window is small.
         //
         // The floor and `contentMinSize` are a pair. With this floor the fixed
         // sections plus the editing area come to ~640 pt, inside the window's

@@ -35,8 +35,6 @@ struct FilterListView: View {
         .animation(.easeInOut(duration: 0.18), value: profileManager.freeFilters.count)
     }
 
-    private var hasBands: Bool { !profileManager.freeFilters.isEmpty }
-
     /// The column titles. Same widths and same spacing as a band row, from the
     /// same tokens, so the two can't drift apart.
     private var columnTitles: some View {

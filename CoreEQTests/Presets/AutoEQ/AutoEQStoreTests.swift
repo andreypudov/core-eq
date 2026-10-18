@@ -23,7 +23,7 @@ extension AutoEQIntegrationTests {
             store.selectModel(named: "Alpha Headphones")
             #expect(store.selectedVariant?.source == "oratory1990")
             #expect(store.selectedTargetLabel == AutoEQCatalogParser.defaultTargetLabel)
-            #expect(!store.supportsCustomTargets)
+            #expect(!store.availableTargets.contains { $0.fr != nil })
             #expect(
                 !StubURLProtocol.requests.contains {
                     $0.url?.path.hasSuffix(" ParametricEQ.txt") == true
@@ -57,7 +57,7 @@ extension AutoEQIntegrationTests {
             }
             let store = try await loadedStore(cache)
             store.selectModel(named: "Alpha Headphones")
-            #expect(store.supportsCustomTargets)
+            #expect(store.availableTargets.contains { $0.fr != nil })
             #expect(store.availableTargets.map(\.label).contains("Alternative"))
             store.selectTarget(label: "Alternative")
             let profile = try #require(await store.loadSelectedProfile())

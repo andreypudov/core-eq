@@ -8,8 +8,11 @@ the equalizer is shaped the way it is, in [[file:ARCHITECTURE.org][ARCHITECTURE.
 
 * Toolchain
 
-- Xcode *16 or later* to build and test (the project uses the folder-
-  synchronized project format, =objectVersion 70=).
+- Xcode *26 or later* to build and test. App exclusion sets
+  =CATapDescription.bundleIDs= and =isProcessRestoreEnabled=, which exist only
+  in the macOS 26 SDK; the calls are guarded at runtime, so the app still runs
+  on macOS 14.2. The project also uses the folder-synchronized format
+  (=objectVersion 70=), which needs Xcode 16.
 - Xcode *27* to cut a release. CI and =release.yml= both run it, and the release
   job rejects a binary linked against anything older than the 27 SDK — see “The
   runner image is a user-visible choice” in [[file:RELEASING.org][RELEASING.org]]. Nothing
@@ -51,15 +54,16 @@ re-signed with CoreEQ's certificate; with that certificate in your keychain,
 The =Makefile= wraps the common flows (it also auto-selects the full Xcode
 toolchain if =xcode-select= points at the Command Line Tools):
 
-| =make build=   | Release build into =build/Release/CoreEQ.app=          |
-| =make test=    | Run the =CoreEQTests= unit suite                       |
-| =make format=  | Apply the house style to every Swift file              |
-| =make lint=    | Report style violations without changing anything      |
-| =make strings= | Build, then merge new interface text into the catalog  |
-| =make sign=    | Build, then re-sign with =SIGN_IDENTITY= when it is set |
-| =make install= | Sign and install to =/Applications=                    |
-| =make release= | Sign and zip to =dist/CoreEQ-<version>.zip= (=ditto=)  |
-| =make clean=   | Remove =build/= and =dist/=                            |
+| =make build=      | Release build into =build/Release/CoreEQ.app=           |
+| =make test=       | Run the =CoreEQTests= unit suite                        |
+| =make format=     | Apply the house style to every Swift file               |
+| =make lint=       | Report style violations without changing anything       |
+| =make strings=    | Build, then merge new interface text into the catalog   |
+| =make sign=       | Build, then re-sign with =SIGN_IDENTITY= when it is set |
+| =make install=    | Sign and install to =/Applications=                     |
+| =make release=    | Sign and zip to =dist/CoreEQ-<version>.zip= (=ditto=)   |
+| =make screenshot= | Build, sign, and capture the window for the README      |
+| =make clean=      | Remove =build/= and =dist/=                             |
 
 =make build= takes extra xcodebuild settings through =XCODE_FLAGS=, e.g.
 =make build XCODE_FLAGS=ARCHS=arm64=. It is empty by default, so =make release=
@@ -111,6 +115,47 @@ Engine activity is logged through =os.Logger= (subsystem
 #+begin_src sh
 log stream --predicate 'subsystem == "com.andreypudov.coreeq"' --level info
 #+end_src
+
+** The README screenshot
+
+=make screenshot= takes it without anyone touching the app, so screenshots of
+one version and the next differ in what changed and nothing else. It builds
+the app, signs it, and runs =Tools/screenshot.sh=, which:
+
+1. checks the terminal's two permissions, before touching anything;
+2. generates a test signal: pink noise with a chord of two notes over it, high-
+   passed at 40 Hz and rolled off from 12 kHz — the slope and the peaks of
+   music, from a fixed seed, so the same samples every run;
+3. quits any running CoreEQ and opens =build/Release/CoreEQ.app=, a second
+   time if needed: once it has the permission it starts with no window, and
+   opening it again shows one, as opening it again from Finder does;
+4. moves the window to the Retina screen and sets it to the size it opens at on
+   a large screen (=MainWindowGeometry.preferred=, read from the source; 1120
+   × 760);
+5. plays the signal for four seconds and captures the window, shadow included,
+   to =design/screenshots/core-eq-<version>.png=, the version read from the
+   app. Running it again replaces that version's file.
+
+The spectrum behind the curve is drawn from what CoreEQ outputs, so with a
+signal this even it takes the active preset's shape: the screenshot shows
+whichever preset is selected, and its boosts and cuts as humps and dips. Pick
+the preset in the app first. The signal is audible for those seconds, at the
+system volume.
+
+- *Signing.* The build is signed with the =CoreEQ Release= certificate when the
+  keychain has it (or with =SIGN_IDENTITY=, when given), so the audio
+  permission granted once covers every later build. An ad-hoc build is a new
+  app to macOS each time. If CoreEQ opens on the *Allow…* card, the script says
+  so and waits for it to be answered, rather than capturing the card.
+- *Retina.* A window is captured at the resolution of the screen it is on; on
+  a 1x external display it comes out at half the detail and in that display's
+  colour profile. The script warns if the result is not 2x.
+- *Settings.* =WIDTH=, =HEIGHT=, =SETTLE= (the seconds of signal before the
+  capture) and =CARD_TIMEOUT= override the defaults. Any other copy of the app
+  can be passed: =Tools/screenshot.sh /Applications/CoreEQ.app=.
+- *Permissions.* The terminal needs Accessibility, to size the window, and
+  Screen Recording, to capture it. macOS does not ask for either; the script
+  opens the System Settings page for the one that is missing.
 
 * Testing
 

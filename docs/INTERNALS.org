@@ -470,6 +470,65 @@ being remembered alongside the rest. The keys that predate the per-device model
 =customBandGains=) are read once at launch, migrated into the current device's
 slot, and cleared.
 
+Two more keys hold the Exclusions list, and are not per device: which apps should
+never be equalized does not change with the headphones.
+
+- =exclusionListBundleIDs= — every app on the list, in the order it was added.
+- =excludedBundleIDs= — the ones switched on, which the engine reads each time it
+  builds the tap. The list's getter always includes them, so nothing the engine
+  leaves out can be missing from the pane that switches it back.
+
+Every edit the pane makes goes through =ExclusionList=, which normalises both
+lists and says whether the change touches the tap; only then is the engine
+rebuilt, because a rebuild is a moment's break in the sound.
+
+None of these are decoded with an error anyone would see — =try?= falls back to
+empty — so a format change would lose data silently. =UpgradeFrom192Tests=
+decodes JSON written by 1.9.2's own types, built from that tag; when a stored
+type changes, add the release being replaced there the same way.
+
+* The AutoEq catalog
+
+=AutoEQNetworkService= (an actor) downloads, =AutoEQStore= (main actor) holds
+what the browser shows, and =AutoEQLocalSolver= computes a correction for a
+target AutoEq did not publish — its method and accuracy are in
+[[file:AUTOEQ_LOCAL.org][AUTOEQ_LOCAL.org]].
+
+Everything is pinned to one AutoEq commit. The catalog is AutoEq's
+=results/INDEX.md= at that revision, kept as =catalog-v1.json= with the time it
+was checked; it is checked again only when the browser opens and the snapshot is
+a week old, and a failed check keeps the old snapshot, marked stale. Corrections
+are cached under =profiles/<revision>/=, so a catalog update can never reuse a
+correction from another revision; computed ones under
+=computed-v<solver version>/=, keyed by a hash of the revision, the measurement
+and the target, so a solver change invalidates them. Cache file names are
+hashes, never paths from the index, and every result path is checked by
+=AutoEQCatalogParser.resultComponents= before it reaches a URL: three
+components, no =..=, no control characters, nothing from Crinacle. The cache
+lives in =~/Library/Caches/com.andreypudov.coreeq/AutoEQ=.
+
+The store is owned by the app delegate, not by the browser, so a selection
+survives the sheet closing. =AutoEQStatusBridge= lets the Settings scene ask it
+for the diagnostics report's catalog section, the same boundary
+=EngineStatusBridge= and =ProfileStatusBridge= cross.
+
+* Search
+
+The sidebar and the catalog share one rule, =SearchQuery=: each typed word is
+matched on its own, in any order, against the name with case, accents and
+punctuation folded away and its separators removed, so a model number matches
+however it is written. A word that starts a word in the name — or starts after a
+change between letters and digits, as =600= does in =HD600= — ranks the name
+above one that only contains it. Deliberately not fuzzy: every result contains
+what was typed. The catalog prepares its names once, as =SearchableName=, when
+it loads.
+
+* Interface text
+
+Every string the interface shows is in =Localizable.xcstrings=; how they are
+written, what stays out of the catalog, and =make strings= are in
+[[file:STRINGS.org][STRINGS.org]].
+
 * Design decisions
 
 - *Deployment target 14.2, not 13.0.* The process-tap API is the only way to

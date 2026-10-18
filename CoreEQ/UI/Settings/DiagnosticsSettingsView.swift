@@ -22,7 +22,7 @@ struct DiagnosticsSettingsView: View {
                 .font(Theme.Font.heading)
 
             Text(
-                "What CoreEQ sees on this Mac. Include it with a bug report: it answers most questions about audio problems. It lists your audio devices by name and contains nothing else about you."
+                "What CoreEQ sees on this Mac. Include it with a bug report: it answers most questions about audio problems. It names your audio devices, your presets, and any apps you’ve excluded, and contains nothing else about you."
             )
             .font(Theme.Font.label)
             .foregroundStyle(.secondary)

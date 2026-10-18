@@ -459,10 +459,6 @@ final class ProfileManager: ObservableObject {
         var requiresConfirmation: Bool { candidates.disclosure.requiresConfirmation }
         /// How many values could be clipped into the graphic range.
         var clippableCount: Int { candidates.disclosure.clippableCount }
-        /// The beyond-band adjustments the clip choice acts on.
-        var clipCandidates: [ImportAdjustment] {
-            candidates.disclosure.adjustments.filter { $0.kind == .keptBeyondBandRange }
-        }
     }
 
     enum ExportError: LocalizedError, Equatable {

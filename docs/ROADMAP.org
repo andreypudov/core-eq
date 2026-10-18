@@ -1,18 +1,20 @@
 #+TITLE: CoreEQ Roadmap
 #+SUBTITLE: Fix what is broken, then open the format, then open the scope
 #+AUTHOR: Andrey Pudov
-#+DATE: <2026-10-01 Thu>
+#+DATE: <2026-10-18 Sun>
 #+OPTIONS: toc:2 num:nil
 
-Where CoreEQ goes after 1.7, and why in this order. Everything here comes out
+Where CoreEQ goes after 1.10, and why in this order. Everything here comes out
 of what people asked for and reported after the app was posted publicly; the
 shape of the filter chain the later releases build on is in [[file:ARCHITECTURE.org][ARCHITECTURE.org]].
 
 The ordering rule is simple. A defect that makes the app produce no sound
 outranks the most-asked-for feature, and both outrank a feature that
-widens what the app is. So: 1.8 fixes, 1.9 opens the preset format, and 1.10
-opens the scope only as far as leaving apps out. One chain per application is
-under *Later*, until it is asked for on its own.
+widens what the app is. So: 1.8 fixed, 1.9 opened the preset format, and 1.10
+opened the scope only as far as leaving apps out, with the AutoEq catalog
+alongside. All three plans are done. What is left is the two defects that have
+not been reproduced, below, and then *Later*. One chain per application is
+there, until it is asked for on its own.
 
 Dates are deliberately absent. This is a project I wrote for myself and put on
 GitHub because it turned out to be useful to other people; the order is a
@@ -21,7 +23,7 @@ commitment, the schedule is not.
 What is already fixed moves to [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]] rather than staying here marked
 done. This document is what is still owed, so that its length means something.
 
-* 1.8 — Make it work everywhere it claims to
+* Still open — Make it work everywhere it claims to
 
 Public feedback produced three defects that are not edge cases, and chasing the
 first turned up two more that nobody had reported. Three of the five are fixed
@@ -38,9 +40,22 @@ screen recordings that captured the sound twice, and the documentation that
 answered the same questions one comment at a time. Both have moved to
 [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]], with the preset format 1.9 was for.
 
+1.10 settled none of what is left, and was not meant to: it shipped the scope
+1.10 was planned for — leaving apps out — and the AutoEq catalog, both in
+[[file:RELEASE_NOTES.org][RELEASE_NOTES.org]].
+
 What is left here: an echo after waking that has not been reproduced, and a
 report of noise over Bluetooth. They affect people doing nothing unusual, so by
 the ordering rule they still head the next release.
+
+Also for the next release, and not visible to anyone using the app: the review
+before 1.10 left the largest files alone rather than split them days before a
+tag — =AudioEngine= at about 1,600 lines, =ProfileManager= at 1,000, and the
+AutoEq browser, the main window's detail and sidebar views, and the menu bar
+controller at 750–870 each. Splitting them along the seams they already have
+is the first piece of work after 1.10, before anything new is added to them.
+The first new thing after that is Shortcuts, under *Later*: small, and
+touching none of the audio path.
 
 ** Bluetooth noise at higher volume
 
@@ -146,6 +161,52 @@ What is left is the wake case:
   with neither points somewhere not yet looked at.
 
 * Later — worth doing, not yet scheduled
+
+** Shortcuts
+
+Actions for the Shortcuts app, through App Intents, which macOS also offers in
+Spotlight and as Focus filters at no extra cost. Next after the file split, and
+deliberately small.
+
+Where it earns its place:
+
+- *Turning the EQ off and on from the keyboard.* Shortcuts can bind any
+  shortcut to a global key, so a toggle gives an instant A/B against the
+  untouched sound without opening the menu. The strongest case of the lot.
+- *Focus filters.* A Work focus picks a flat preset, a Gaming one a V shape: a
+  rule CoreEQ does not have, which the system then owns, with no settings pane
+  to build.
+- *Automations.* On macOS 26 Shortcuts runs them on the Mac — at a time, when an
+  app opens, when a display connects — so whatever the actions expose can be
+  scheduled without CoreEQ growing rules of its own.
+- *Scripting.* =shortcuts run= from a shell, Raycast, or Alfred.
+
+Where it adds little, and why the set stays small: a preset per output device
+already covers the commonest automation anyone would build (“when my headphones
+connect, use this”), and leaving an app out is exclusion, which works per
+process and is better than switching the whole EQ when the app opens.
+
+The first set, three actions:
+
+1. *Turn EQ on, off, or toggle.*
+2. *Set preset*, chosen from the user's presets, optionally for a given output
+   device.
+3. *Get the current preset and whether the EQ is on*, so a shortcut can branch.
+
+The A/B slot is a fourth if it is asked for.
+
+What it costs and what it risks:
+
+- App Intents needs macOS 13, inside the 14.2 floor. Actions run inside the
+  running app, which suits a menu bar app, and can launch it in the background
+  when it is not running.
+- The work is the preset list for the picker, and routing each action through
+  the same calls the menu bar makes, so the menu, the window, and Shortcuts
+  cannot disagree about what happened. The actions stay thin; the tests cover
+  the managers they call. Their names go in the String Catalog.
+- None of it touches the audio path. The real risk is that it is public
+  surface: once people have built automations on an action, renaming or
+  removing it breaks them. Another reason to start with three.
 
 ** Per-application EQ and volume
 

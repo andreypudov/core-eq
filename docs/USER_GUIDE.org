@@ -77,7 +77,9 @@ Twenty-two built-in profiles — the classic set familiar from Apple Music and
 Spotify — plus your own, managed from the sidebar. Built-ins are immutable;
 your presets can be renamed, duplicated, edited, and deleted. Switching is
 instantaneous and glitch-free. Hover a built-in preset, in the sidebar or the
-menu, for a one-line description of what it is for.
+menu, for a one-line description of what it is for. The sidebar's search field
+matches the way the AutoEq catalog does: each word on its own, anywhere in the
+name, so “boost” finds both boosters.
 
 The =+= at the bottom of the sidebar creates a *New Preset* from the current
 sound, opens the AutoEq catalog, or imports one. Right-click a preset for *Rename*, *Duplicate*, *Save
@@ -133,7 +135,10 @@ in your preset list.
 
 The catalog sheet keeps the equalizer in context while you listen. Type in the
 search field to find a model by name — the catalog holds thousands and matches
-as you type. A model measured more than once says how many measurements it has.
+as you type. Each word is matched on its own, in any order, ignoring case,
+accents and punctuation, so “sony mdr m1” finds Sony MDR-M1, and “600” finds
+both the HD 600 and the HD600. Names where the words start a word are listed
+first. A model measured more than once says how many measurements it has.
 
 The *Measurement source* menu chooses who measured the headphones and how —
 for example Oratory1990 or Rtings. Different measurements give different

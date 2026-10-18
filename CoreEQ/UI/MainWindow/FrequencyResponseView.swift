@@ -21,9 +21,9 @@ import SwiftUI
 /// parametric table's rows carry: one band, pointed at from either side.
 ///
 /// Double-click resets a point's gain to 0 dB. With `allowsFilterCreation` set —
-/// which the main window ties to the Filters section being open — double-
-/// clicking empty space creates a filter there instead, so a user who never
-/// opens that section can never make one by accident.
+/// which the main window ties to the Parametric tab showing — double-clicking
+/// empty space creates a filter there instead, so a user who never opens that
+/// tab can never make one by accident.
 struct FrequencyResponseView: View {
     /// The whole chain: ladder filters and free filters together.
     let filters: [EQFilter]
@@ -68,7 +68,7 @@ struct FrequencyResponseView: View {
     var onBandSelect: ((_ slot: Int) -> Void)?
 
     /// Whether double-clicking empty space creates a filter. Off unless the
-    /// user has opened the Filters section.
+    /// Parametric tab is showing.
     var allowsFilterCreation = false
 
     /// Compact, read-only presentation for the menu-bar Quick EQ: no grid,
