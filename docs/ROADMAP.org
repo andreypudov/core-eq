@@ -1,18 +1,20 @@
 #+TITLE: CoreEQ Roadmap
 #+SUBTITLE: Fix what is broken, then open the format, then open the scope
 #+AUTHOR: Andrey Pudov
-#+DATE: <2026-10-01 Thu>
+#+DATE: <2026-10-18 Sun>
 #+OPTIONS: toc:2 num:nil
 
-Where CoreEQ goes after 1.7, and why in this order. Everything here comes out
+Where CoreEQ goes after 1.10, and why in this order. Everything here comes out
 of what people asked for and reported after the app was posted publicly; the
 shape of the filter chain the later releases build on is in [[file:ARCHITECTURE.org][ARCHITECTURE.org]].
 
 The ordering rule is simple. A defect that makes the app produce no sound
 outranks the most-asked-for feature, and both outrank a feature that
-widens what the app is. So: 1.8 fixes, 1.9 opens the preset format, and 1.10
-opens the scope only as far as leaving apps out. One chain per application is
-under *Later*, until it is asked for on its own.
+widens what the app is. So: 1.8 fixed, 1.9 opened the preset format, and 1.10
+opened the scope only as far as leaving apps out, with the AutoEq catalog
+alongside. All three plans are done. What is left is the two defects that have
+not been reproduced, below, and then *Later*. One chain per application is
+there, until it is asked for on its own.
 
 Dates are deliberately absent. This is a project I wrote for myself and put on
 GitHub because it turned out to be useful to other people; the order is a
@@ -21,7 +23,7 @@ commitment, the schedule is not.
 What is already fixed moves to [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]] rather than staying here marked
 done. This document is what is still owed, so that its length means something.
 
-* 1.8 — Make it work everywhere it claims to
+* Still open — Make it work everywhere it claims to
 
 Public feedback produced three defects that are not edge cases, and chasing the
 first turned up two more that nobody had reported. Three of the five are fixed
@@ -38,9 +40,20 @@ screen recordings that captured the sound twice, and the documentation that
 answered the same questions one comment at a time. Both have moved to
 [[file:RELEASE_NOTES.org][RELEASE_NOTES.org]], with the preset format 1.9 was for.
 
+1.10 settled none of what is left, and was not meant to: it shipped the scope
+1.10 was planned for — leaving apps out — and the AutoEq catalog, both in
+[[file:RELEASE_NOTES.org][RELEASE_NOTES.org]].
+
 What is left here: an echo after waking that has not been reproduced, and a
 report of noise over Bluetooth. They affect people doing nothing unusual, so by
 the ordering rule they still head the next release.
+
+Also for the next release, and not visible to anyone using the app: the review
+before 1.10 left the largest files alone rather than split them days before a
+tag — =AudioEngine= at about 1,600 lines, =ProfileManager= at 1,000, and the
+AutoEq browser, the main window's detail and sidebar views, and the menu bar
+controller at 750–870 each. Splitting them along the seams they already have
+is the first piece of work after 1.10, before anything new is added to them.
 
 ** Bluetooth noise at higher volume
 
