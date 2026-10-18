@@ -15,6 +15,15 @@ struct MainWindowGeometryTests {
         #expect(size == MainWindowGeometry.preferred)
     }
 
+    /// The smallest MacBook screen sold today, a 13-inch Air at its default
+    /// scaling, with the menu bar taken off its 956 points: the window opens
+    /// at full width, kept clear of both edges.
+    @Test func aThirteenInchMacBookGetsTheFullWidth() {
+        let size = MainWindowGeometry.openingSize(visibleFrame: CGSize(width: 1_470, height: 923))
+
+        #expect(size.width == MainWindowGeometry.preferred.width)
+    }
+
     /// The window arrives fully on screen rather than with its edges past the
     /// corner, so a display that cannot hold the preferred size gets less.
     @Test func aSmallerScreenIsKeptClearOfItsEdges() {
@@ -40,10 +49,10 @@ struct MainWindowGeometryTests {
 
     /// Each axis is capped on its own: a wide, short screen keeps its width.
     @Test func eachAxisIsCappedIndependently() {
-        let size = MainWindowGeometry.openingSize(visibleFrame: CGSize(width: 2_560, height: 860))
+        let size = MainWindowGeometry.openingSize(visibleFrame: CGSize(width: 2_560, height: 820))
 
         #expect(size.width == MainWindowGeometry.preferred.width)
-        #expect(size.height == 780)
+        #expect(size.height == 740)
     }
 
     /// AppKit genuinely reports no main screen — during login, or with the lid
