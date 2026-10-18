@@ -30,7 +30,7 @@ struct ExclusionsSettingsView: View {
             pane
         } else {
             ContentUnavailableView {
-                Label("Requires macOS 26", systemImage: "nosign")
+                Label("Requires macOS 26", systemImage: "square.grid.2x2")
             } description: {
                 Text(
                     "Leaving apps out needs macOS 26 or later. On this Mac, CoreEQ equalizes every app."
