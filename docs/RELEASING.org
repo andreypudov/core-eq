@@ -155,6 +155,12 @@ pinned fingerprint:
 | =SIGNING_CERT_P12=      | the exported =.p12=, base64-encoded                       |
 | =SIGNING_CERT_PASSWORD= | its export password                                       |
 
+The =.p12= must hold the private key, not only the certificate: in Keychain
+Access, open *My Certificates* (not *Certificates*), check that =CoreEQ Release=
+expands to show its key, and export that row as Personal Information Exchange.
+Without the key the release fails at import with “has no identity”, and
+codesign would say “no identity found”.
+
 To put the =.p12= on the clipboard for the first one:
 
 #+begin_src sh
