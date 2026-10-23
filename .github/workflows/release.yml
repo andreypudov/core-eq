@@ -62,7 +62,15 @@ jobs:
             -k "$keychain_password" "$RUNNER_TEMP/signing.keychain-db" > /dev/null
           security list-keychains -d user -s "$RUNNER_TEMP/signing.keychain-db" \
             $(security list-keychains -d user | tr -d '"')
-          security find-identity -p codesigning "$RUNNER_TEMP/signing.keychain-db"
+          identities=$(security find-identity -p codesigning "$RUNNER_TEMP/signing.keychain-db")
+          echo "$identities"
+          # Listed as CSSMERR_TP_NOT_TRUSTED, which is expected for a self-signed
+          # certificate and does not stop codesign. Not listed at all means the
+          # .p12 holds no private key, or a different certificate.
+          if ! printf '%s' "$identities" | grep -q "$SIGNING_CERT_SHA1"; then
+            echo "::error::SIGNING_CERT_P12 has no identity $SIGNING_CERT_SHA1 — export the certificate *with its private key* (My Certificates in Keychain Access) — see docs/RELEASING.org"
+            exit 1
+          fi
 
       # Signed by fingerprint rather than by name, so it can only be the pinned
       # certificate. `make release` fails if the signature does not name one.
