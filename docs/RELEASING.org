@@ -43,6 +43,12 @@ nothing to the database. =ONLY_ACTIVE_ARCH=YES= does not work for this —
 with =-target= and no destination there is no active architecture to pick, and
 the build comes out universal regardless.
 
+It also sets =COMBINE_HIDPI_IMAGES=NO=, so the menu bar icons are copied as
+PNG pairs instead of combined into TIFFs. CodeQL's tracer runs the build as
+x86_64 under Rosetta, and on macOS 27 =/usr/bin/tiffutil= has no x86_64 slice,
+so the combine step failed with “Bad CPU type in executable”. Releases still
+combine them; only the analysis build skips it.
+
 
 * Cutting a release
 

@@ -87,11 +87,17 @@ jobs:
       # destination there is no active architecture to pick, and the build comes
       # out universal anyway.
       #
+      # The PNG pairs are copied as they are instead of combined into TIFFs.
+      # CodeQL's tracer runs the build as x86_64 under Rosetta, and on macOS 27
+      # /usr/bin/tiffutil ships without an x86_64 slice, so the combine step
+      # fails with "Bad CPU type in executable". The app loads both forms by
+      # name, and nothing is analyzed in a resource, so this changes nothing.
+      #
       # The autobuilder cannot replace this: the project uses file-system-
       # synchronized groups (objectVersion 70) and an ad-hoc signed macOS app
       # target, so the build has to be the one the rest of CI runs.
       - name: Build
-        run: make build XCODE_FLAGS=ARCHS=arm64
+        run: make build XCODE_FLAGS="ARCHS=arm64 COMBINE_HIDPI_IMAGES=NO"
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
