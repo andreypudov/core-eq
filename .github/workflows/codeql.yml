@@ -56,9 +56,14 @@ jobs:
   swift:
     name: Analyze (swift)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    # Same runner image as ci.yml and release.yml: the SDK the binary is linked
-    # against is a real choice, documented in docs/RELEASING.org.
-    runs-on: xcode-27
+    # Not the image ci.yml and release.yml use. CodeQL's Swift extractor is
+    # x86_64 and runs under Rosetta, and Xcode 27 is arm64 only: its
+    # swift-plugin-server cannot start, so every macro — SwiftUI's @State among
+    # them, on the 27 SDK — fails to expand, and on macOS 27 even tiffutil has
+    # no x86_64 slice. Xcode 26 is still universal. Nothing built here ships,
+    # and the sources build against the 26 SDK, so the analysis loses nothing.
+    # Move back once CodeQL's extractor runs natively on arm64.
+    runs-on: macos-26
     permissions:
       security-events: write
       contents: read

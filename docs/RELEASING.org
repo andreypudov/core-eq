@@ -43,6 +43,15 @@ nothing to the database. =ONLY_ACTIVE_ARCH=YES= does not work for this —
 with =-target= and no destination there is no active architecture to pick, and
 the build comes out universal regardless.
 
+And it runs on =macos-26= (Xcode 26), not the =xcode-27= image the other two
+jobs use. CodeQL's Swift extractor is x86_64 and runs under Rosetta, and Xcode
+27 is arm64 only. Its =swift-plugin-server= cannot start, so every macro fails
+to expand — on the 27 SDK that includes SwiftUI's =@State= — and on macOS 27
+even =/usr/bin/tiffutil= has no x86_64 slice. Both failed with “Bad CPU type in
+executable”. Xcode 26 is still universal. Nothing this job builds ships, and the
+sources build against the 26 SDK, so the analysis loses nothing. Move it back
+once CodeQL's extractor runs natively on arm64.
+
 
 * Cutting a release
 
@@ -59,7 +68,9 @@ the macOS design an app renders in from the SDK it was *linked against*, not
 from the macOS running it. Building 1.6 on the =macos-15= image (Xcode 16, SDK
 15.5) shipped a binary that drew as a pre-26 app on every current Mac, while
 local builds against the 26 SDK looked native — same commit, same version, two
-different-looking apps. All three macOS jobs therefore pin the *same* image, and
+different-looking apps. The two jobs that build the app to run it — =ci.yml=
+and =release.yml= — therefore pin the *same* image (the Swift analysis cannot
+yet; see above), and
 the release job asserts the linked SDK out of =LC_BUILD_VERSION= before
 publishing. The deployment target (=MACOSX_DEPLOYMENT_TARGET= 14.2) is set in
 the project and is unaffected by any of this: a 27-SDK build still runs on macOS
@@ -71,8 +82,8 @@ That image is =xcode-27=, not =macos-27=. There is no GA macOS 27 label —
 against the 27 SDK. Three consequences worth knowing before a release:
 
 - It is a *preview* image. Its Xcode is not version-pinned, and capacity can be
-  tighter than the GA images. Move all three jobs together when it changes;
-  =ci.yml= and =codeql.yml= exist partly to find out before =release.yml= does.
+  tighter than the GA images. Move both jobs together when it changes; =ci.yml=
+  exists partly to find out before =release.yml= does.
   As of image =20260912.0186.1= it carries Xcode *27.0 build 27A266a* — the same
   build as a current local Xcode 27 — so the toolchain is not a beta despite the
   label. That is not guaranteed to hold: the SDK assertion checks the
@@ -83,7 +94,7 @@ against the 27 SDK. Three consequences worth knowing before a release:
   =macos-27= at GA. On precedent that is a while off: =macos-26= shipped as a
   public beta on 2025-09-11 and went GA on 2026-02-26, and =macos-15= took a
   comparable six months, so a GA =macos-27= is likely *early-to-mid 2027*, with
-  =macos-latest= following months later. Switch the three jobs together then.
+  =macos-latest= following months later. Switch both jobs together then.
 - The linked-SDK assertion requires *27 or newer*, deliberately narrower than
   the SDK actually in use. If the image ever hands back a 26 toolchain, the
   release fails instead of silently shipping a binary of the wrong generation —
