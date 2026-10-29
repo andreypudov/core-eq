@@ -53,6 +53,49 @@ enum CaptureProof {
         return (silent >= limit ? .notCapturing : .waiting, silent)
     }
 
+    // MARK: - Acting on a verdict
+
+    /// What the engine does with a verdict.
+    enum Response: Equatable {
+        /// Nothing to conclude yet. Ask again at the next poll.
+        case keepWatching
+        /// An unmuted tap delivered. Rebuild it muted, and start processing.
+        case mute
+        /// A muted tap delivered. The proof it was built on still holds, and
+        /// there is nothing left to watch for.
+        case confirm
+        /// An unmuted tap is silent while audio plays. Say so, leave the sound
+        /// alone, and keep watching for the permission to arrive.
+        case report
+        /// A muted tap is silent while audio plays: the Mac is silent. Withdraw
+        /// the proof and rebuild unmuted, so the next tap has to earn it again.
+        case unmute
+    }
+
+    /// - Parameters:
+    ///   - verdict: from `evaluate`, about the tap now running.
+    ///   - isMuting: whether that tap was built muted.
+    /// - Returns: what to do about it.
+    ///
+    /// The proof belongs to a session, but every rebuild makes a new tap — on a
+    /// device change, a rate change, a wake, an edit to the excluded apps — and
+    /// a muted tap was trusted on the strength of an earlier one. Without TCC
+    /// to ask, a permission withdrawn in between went unnoticed: the new tap
+    /// muted every other process and delivered nothing, and the idle policy
+    /// kept it running because something was playing. So a muted tap is held to
+    /// the same evidence as an unmuted one, and the answer to failing it is to
+    /// stop muting — never to report and carry on, which would leave the Mac
+    /// silent while saying why.
+    static func response(to verdict: Verdict, isMuting: Bool) -> Response {
+        switch (verdict, isMuting) {
+        case (.waiting, _): return .keepWatching
+        case (.proven, false): return .mute
+        case (.proven, true): return .confirm
+        case (.notCapturing, false): return .report
+        case (.notCapturing, true): return .unmute
+        }
+    }
+
     // MARK: - What counts as playing
 
     /// A process sending output, as much as `isOtherAudioPlaying` needs.

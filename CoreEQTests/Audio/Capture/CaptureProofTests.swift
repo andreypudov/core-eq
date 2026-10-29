@@ -102,6 +102,66 @@ struct CaptureProofTests {
         #expect(evaluate(playing: false, silent: silent).verdict != .notCapturing)
     }
 
+    // MARK: - Acting on a verdict
+
+    /// Unmuted, the proof is what earns muting, and failing it only costs the
+    /// equalizing — the sound is left alone and the failure is said.
+    @Test func anUnmutedTapMutesOnProofAndReportsOnSilence() {
+        #expect(CaptureProof.response(to: .proven, isMuting: false) == .mute)
+        #expect(CaptureProof.response(to: .notCapturing, isMuting: false) == .report)
+        #expect(CaptureProof.response(to: .waiting, isMuting: false) == .keepWatching)
+    }
+
+    /// Muted, the same evidence confirms the proof the tap was built on, or
+    /// takes it back.
+    @Test func aMutedTapIsConfirmedOnProofAndUnmutedOnSilence() {
+        #expect(CaptureProof.response(to: .proven, isMuting: true) == .confirm)
+        #expect(CaptureProof.response(to: .notCapturing, isMuting: true) == .unmute)
+        #expect(CaptureProof.response(to: .waiting, isMuting: true) == .keepWatching)
+    }
+
+    /// The defect. A permission withdrawn mid-session, with no TCC to ask, met
+    /// the next rebuild: a muted tap trusted on the earlier proof, delivering
+    /// nothing while another app played. Nothing watched it, so the Mac was
+    /// silent for as long as the app ran. It has to be unmuted, and within the
+    /// same limit that condemns an unmuted tap.
+    @Test func aMutedTapSilentWhileAudioPlaysIsUnmutedWithinTheLimit() {
+        var silent: TimeInterval = 0
+        var responses: [CaptureProof.Response] = []
+        for _ in 0..<Int(limit / interval) {
+            let result = evaluate(playing: true, silent: silent)
+            responses.append(CaptureProof.response(to: result.verdict, isMuting: true))
+            silent = result.silentWhilePlaying
+        }
+
+        #expect(responses.last == .unmute, "a silent Mac was left muted")
+        #expect(
+            responses.dropLast().allSatisfy { $0 == .keepWatching },
+            "the tap was unmuted before the limit")
+    }
+
+    /// A quiet Mac stays muted. Rebuilding unmuted on silence alone would cost
+    /// a rebuild and a fresh proof every time the device was rebuilt during a
+    /// pause, and the rebuild is what disturbed players opening a Bluetooth
+    /// device.
+    @Test func aMutedTapOnAQuietMacIsNeverUnmuted() {
+        var silent: TimeInterval = 0
+        for _ in 0..<960 {
+            let result = evaluate(playing: false, silent: silent)
+            #expect(CaptureProof.response(to: result.verdict, isMuting: true) == .keepWatching)
+            silent = result.silentWhilePlaying
+        }
+    }
+
+    /// Nothing but a failed proof unmutes, and nothing but a muted tap can be
+    /// unmuted: the two failures of the one test never trade places.
+    @Test(arguments: [CaptureProof.Verdict.proven, .waiting, .notCapturing], [false, true])
+    func onlySilenceWhilePlayingUnmutes(verdict: CaptureProof.Verdict, isMuting: Bool) {
+        let response = CaptureProof.response(to: verdict, isMuting: isMuting)
+        #expect((response == .unmute) == (verdict == .notCapturing && isMuting))
+        #expect((response == .report) == (verdict == .notCapturing && !isMuting))
+    }
+
     // MARK: - What counts as playing
 
     private let own: AudioObjectID = 1

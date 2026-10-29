@@ -208,6 +208,39 @@ What it costs and what it risks:
   surface: once people have built automations on an action, renaming or
   removing it breaks them. Another reason to start with three.
 
+** Lower latency
+
+One report (#55): a DJ playing Rekordbox's master through the Mac's speakers
+and cueing on headphones plugged into the controller hears the two drift apart
+by a few milliseconds, and switching CoreEQ off fixes it. The speakers go
+through CoreEQ and the controller does not, so the master arrives late against
+the cue. That is invisible when listening and obvious when beatmatching by ear.
+
+The filters add no delay of their own. The route does: the tap delivers each
+cycle's audio to the IO proc one cycle late, and drift compensation on the tap
+buffers on top of that. The aggregate's buffer size is never set, so it runs at
+the system default — at 512 frames and 48 kHz, about 10.7 ms a cycle. None of
+this has been measured yet.
+
+The answer today is exclusion: leave Rekordbox out and its sound goes straight
+to the device, at the cost of not being equalized.
+
+What to try, measured with a loopback before and after:
+
+- *A smaller buffer on the aggregate.* Set =kAudioDevicePropertyBufferFrameSize=
+  to 128 or 64 frames after it is created. Shrinks the delay, never removes it.
+  Costs more wakeups and a higher risk of dropouts under load, so it may belong
+  behind a setting rather than as the default. It does nothing for Bluetooth,
+  whose own delay is far larger.
+- *Drift compensation off.* The tap and the output are the same device on the
+  same clock, so compensation may be buffering for nothing. A guess until it is
+  measured, and any change to how the aggregate is built goes near the rebuild
+  path that hung =coreaudiod= in #27.
+
+Zero is not on offer. The tap is a cycle behind by construction; anyone who
+needs sample-accurate alignment between CoreEQ's output and another device's
+should exclude the app.
+
 ** Per-application EQ and volume
 
 Asked for repeatedly, on Reddit and as GitHub issues; one request puts the
