@@ -134,7 +134,7 @@ The proof is polled every 250 ms and never gives up on a clock. Silence proves
 nothing on its own — a quiet Mac is quiet — so the engine waits, indefinitely and
 harmlessly, because an unmuted tap writing nothing is CoreEQ not being there. It
 concludes only when audio is demonstrably flowing and none of it is arriving:
-two seconds of silence *while another process is playing output*
+six seconds of silence *while another process is playing output*
 (=kAudioProcessPropertyIsRunningOutput=, our own process excluded). Then it says
 it is not capturing and *leaves the audio alone*.
 
@@ -142,6 +142,17 @@ It keeps watching after that. A verdict is a reading of the moment rather than a
 sentence, so allowing the permission in System Settings takes effect on the next
 sound, which proves the tap and clears the failure. Returning to the app also
 starts a fresh attempt when macOS cannot be asked directly (see below).
+
+The proof belongs to the session, but every rebuild makes a new tap — on a
+device change, a rate change, a wake, an edit to the excluded apps — and that
+tap is created muted on the strength of the earlier proof. So a muted tap is
+watched too, until its own first sample, and held to the same test. A muted tap
+silent for six seconds while another process plays is a silent Mac, most likely
+a permission withdrawn mid-session with no TCC to notice: the engine withdraws
+the proof and rebuilds unmuted, and the new tap has to earn muting again. Silence
+on a quiet Mac unmutes nothing, as before. =CaptureProof.response(to:isMuting:)=
+decides; the watch stops while the engine is idle and picks up on resume if the
+tap has still delivered nothing.
 
 =EQProcessor.hasReceivedAudio= is the observation, and it is reported in
 Settings ▸ Diagnostics alongside whether the tap is muting yet. The two have to

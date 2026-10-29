@@ -507,7 +507,7 @@ final class AudioEngine: ObservableObject {
 
         processor.resetAudioObservation()
         processor.isProvingCapture = !captureProven
-        if !captureProven { startProvingCapture() }
+        startProvingCapture()
 
         startedAt = Date()
         status = .running(deviceName: device.name)
@@ -736,10 +736,21 @@ final class AudioEngine: ObservableObject {
     /// The engine is rebuilt rather than the live tap being modified. A tap's
     /// description is writable in principle, but a rebuild uses only operations
     /// already proven to work here, and it happens once per session.
+    ///
+    /// A muted tap is watched too, until its own first sample. Every rebuild
+    /// makes a new tap, muted on the strength of the session's proof, and that
+    /// proof can go stale — a permission withdrawn while CoreEQ runs, with no
+    /// TCC to ask. Such a tap delivers nothing while muting everything else, so
+    /// failing the same test an unmuted tap fails withdraws the proof and
+    /// rebuilds unmuted. What to do with each verdict is
+    /// `CaptureProof.response(to:isMuting:)`.
+    ///
+    /// Whether the running tap mutes is `captureProven`: it is read when the
+    /// tap is made, and every change to it is followed by a rebuild.
     private func startProvingCapture(silentWhilePlaying: TimeInterval = 0) {
         capturePoll?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.ioProcID != nil, !self.captureProven else { return }
+            guard let self, self.ioProcID != nil, !self.isIdle else { return }
 
             let (verdict, silent) = CaptureProof.evaluate(
                 hasReceivedAudio: self.processor.observed.hasReceivedAudio,
@@ -750,9 +761,25 @@ final class AudioEngine: ObservableObject {
                 interval: Self.capturePollInterval,
                 limit: Self.silenceWhilePlayingLimit)
 
-            if verdict == .proven {
+            switch CaptureProof.response(to: verdict, isMuting: self.captureProven) {
+            case .keepWatching, .report:
+                break
+            case .mute:
                 self.logger.info("Tap is delivering audio; muting and restarting to process it")
                 self.captureProven = true
+                self.start()
+                return
+            case .confirm:
+                self.capturePoll = nil
+                return
+            case .unmute:
+                // The Mac is silent: every other process is muted at the
+                // hardware and nothing is arriving to replace it. Unmuted, the
+                // next tap either proves itself or is reported as not
+                // receiving, which is the failure an equalizer is allowed.
+                self.logger.error(
+                    "Audio is playing but the muted tap is silent; unmuting and proving it again")
+                self.captureProven = false
                 self.start()
                 return
             }
@@ -940,6 +967,10 @@ final class AudioEngine: ObservableObject {
     private func goIdle(reason: String) {
         guard !isIdle, let ioProcID, aggregateID != kAudioObjectUnknown else { return }
         AudioDeviceStop(aggregateID, ioProcID)
+        // Stopped, the tap delivers nothing and mutes nothing, so there is no
+        // evidence to wait for. `resumeFromIdle` picks the watch up again.
+        capturePoll?.cancel()
+        capturePoll = nil
         isIdle = true
         idleCount += 1
         idleSince = Date()
@@ -974,6 +1005,9 @@ final class AudioEngine: ObservableObject {
             start()
             return
         }
+        // A muted tap that went idle before delivering anything has still to
+        // show that it can.
+        if captureProven, !processor.observed.hasReceivedAudio { startProvingCapture() }
         logger.info("Resuming: audio is playing")
     }
 
