@@ -30,6 +30,11 @@ final class AudioEngine: ObservableObject {
         /// — a menu is as wide as its widest item. `message` says what to
         /// change, and is what every surface with room for it shows.
         case failed(summary: String, message: String)
+        /// Not running, because another process has taken the output device and
+        /// macOS had nowhere CoreEQ can follow. Not a failure: nothing is wrong
+        /// and there is nothing to change, so the switch stays available, and the
+        /// path comes back by itself when the device is released.
+        case heldExclusively(ExclusiveAccess.Hold)
 
         var description: String {
             switch self {
@@ -45,6 +50,8 @@ final class AudioEngine: ObservableObject {
                     comment: "Engine status")
             case .failed(_, let message):
                 return message
+            case .heldExclusively(let hold):
+                return hold.message
             }
         }
 
@@ -53,6 +60,7 @@ final class AudioEngine: ObservableObject {
             switch self {
             case .stopped, .running, .awaitingPermission: return nil
             case .failed(let summary, _): return summary
+            case .heldExclusively(let hold): return hold.summary
             }
         }
     }
@@ -112,6 +120,13 @@ final class AudioEngine: ObservableObject {
     /// recording runs, and an equalizer that stops for no visible reason reads
     /// as broken.
     @Published private(set) var isPausedForRecording = false
+
+    /// Another process holding an output device to itself. See `ExclusiveAccess`.
+    ///
+    /// Separate from `status` because the two are independent: the usual case is
+    /// CoreEQ running correctly on the device macOS moved to, while the player's
+    /// sound goes straight to the device it holds.
+    @Published private(set) var exclusiveHold: ExclusiveAccess.Hold?
 
     /// Whether asking for the equalizer to be on can achieve anything.
     ///
@@ -185,7 +200,7 @@ final class AudioEngine: ObservableObject {
     nonisolated static func canProcess(status: Status) -> Bool {
         switch status {
         case .failed, .awaitingPermission: return false
-        case .stopped, .running: return true
+        case .stopped, .running, .heldExclusively: return true
         }
     }
 
@@ -210,6 +225,9 @@ final class AudioEngine: ObservableObject {
 
     private let processor = EQProcessor()
     private let settings: SettingsStore
+    private lazy var exclusiveAccessMonitor = ExclusiveAccessMonitor { [weak self] in
+        self?.updateExclusiveHold()
+    }
     private let logger = Logger(subsystem: "com.andreypudov.coreeq", category: "AudioEngine")
 
     private var tapIDs: [AudioObjectID] = []
@@ -266,20 +284,21 @@ final class AudioEngine: ObservableObject {
     /// needs about 90 ms to deliver its first buffer after `AudioDeviceStart`,
     /// so anything above that is the app's own dithering.
     ///
-    /// Two listeners, because measurement ruled out the obvious one.
+    /// Measurement ruled out the obvious property.
     /// `kAudioProcessPropertyIsRunningOutput` sends no notifications at all —
     /// attached to every process, it never fired once — and sweeping every
     /// process by hand costs 6 ms a pass, far too much to do often.
     /// `kAudioDevicePropertyDeviceIsRunningSomewhere` does notify, costs 0.05 ms
     /// to read, and is false while CoreEQ is idle, so it says exactly what is
-    /// wanted: somebody else wants this device.
+    /// wanted: somebody else is using this device.
+    ///
+    /// A process merely appearing in the audio process list is not enough, though
+    /// it arrives about 80 ms sooner. Starting ahead of any audio leaves the start
+    /// pending, and a player taking hog mode while it is pending waits about 14 s.
+    /// Measured with `make hog-test`, with the player taking the device 0.05 s and
+    /// 1 s after launching. So a just-launched app gets the same short gap as one
+    /// that was already open.
     private var deviceRunningListener: AudioObjectPropertyListenerBlock?
-    /// A process appearing in the audio process list, which measured about 80 ms
-    /// *before* it starts playing — enough of a head start to cover the device's
-    /// own warm-up.
-    private var processListListener: AudioObjectPropertyListenerBlock?
-    /// Set by that listener and cleared once acted on.
-    private var audioStarting = false
     /// The device the aggregate is built around, which is what the running
     /// listener watches — not the aggregate, whose own state is CoreEQ's.
     private var outputDeviceID = AudioObjectID(kAudioObjectUnknown)
@@ -356,9 +375,10 @@ final class AudioEngine: ObservableObject {
         // failure was permanent in the strong sense, until the app was
         // relaunched. Installed here, a device change always gets a hearing.
         installDefaultDeviceListenerIfNeeded()
-        installPlaybackListenersIfNeeded()
         installWakeObserverIfNeeded()
         installActivationObserverIfNeeded()
+        exclusiveAccessMonitor.start()
+        updateExclusiveHold()
         // No tap until the answer is yes. Creating one is what raises the macOS
         // prompt, and raising it at launch asks before CoreEQ has said what the
         // permission is for; after a refusal a tap only delivers silence.
@@ -379,6 +399,13 @@ final class AudioEngine: ObservableObject {
             // and may be translated, the error names the Core Audio operation.
             logger.error("Engine start failed: \(String(describing: error), privacy: .public)")
             diagnostics = nil
+            // The device the user chose is held, and the one macOS moved to is
+            // not one CoreEQ can use. That device is not what needs changing, so
+            // its error would send someone off to fix the wrong thing.
+            if let exclusiveHold, exclusiveHold.wasOutput {
+                status = .heldExclusively(exclusiveHold)
+                return
+            }
             // Only a signal when TCC cannot be asked. Measured, a refusal does
             // not make tap creation fail, so with TCC's answer in hand an error
             // here is some other fault and must not be called a refusal.
@@ -430,7 +457,7 @@ final class AudioEngine: ObservableObject {
         switch status {
         case .running: isRunning = true
         case .failed: hasFailed = true
-        case .stopped, .awaitingPermission: break
+        case .stopped, .awaitingPermission, .heldExclusively: break
         }
         guard AppExclusion.rebuildsOnChange(isRunning: isRunning, hasFailed: hasFailed) else {
             return
@@ -754,9 +781,12 @@ final class AudioEngine: ObservableObject {
 
             let (verdict, silent) = CaptureProof.evaluate(
                 hasReceivedAudio: self.processor.observed.hasReceivedAudio,
-                isAnythingPlaying: AudioDevices.isAnyProcessPlayingOutput(
-                    excluding: self.tapExcludedProcess, ignoringCapturing: true,
-                    ignoringApps: self.tapExcludedApps),
+                // A process holding a device is playing, and no tap can hear it.
+                // That silence says nothing about this tap.
+                isAnythingPlaying: self.exclusiveHold == nil
+                    && AudioDevices.isAnyProcessPlayingOutput(
+                        excluding: self.tapExcludedProcess, ignoringCapturing: true,
+                        ignoringApps: self.tapExcludedApps),
                 silentWhilePlaying: silentWhilePlaying,
                 interval: Self.capturePollInterval,
                 limit: Self.silenceWhilePlayingLimit)
@@ -863,6 +893,9 @@ final class AudioEngine: ObservableObject {
         let isAnythingPlaying: Bool
         if isIdle {
             isAnythingPlaying = AudioDevices.isRunningSomewhere(outputDeviceID)
+            // Asked again here rather than trusting the listener: the device
+            // starting and hog mode being taken can arrive in either order.
+            if isAnythingPlaying { updateExclusiveHold() }
         } else if processor.observed.silentSeconds >= IdlePolicy.idleAfter {
             isAnythingPlaying = AudioDevices.isAnyProcessPlayingOutput(
                 excluding: tapExcludedProcess)
@@ -878,10 +911,9 @@ final class AudioEngine: ObservableObject {
             isEnabled: isEnabled,
             isCaptureProven: captureProven,
             pausesWhenSilent: settings.pausesWhenSilent,
-            isAudioStarting: audioStarting,
             isRecovering: status.summary != nil,
-            stepsAsideForRecording: stepsAside)
-        audioStarting = false
+            stepsAsideForRecording: stepsAside,
+            isOutputHeld: exclusiveHold?.deviceID == outputDeviceID)
 
         switch verdict {
         case .keepRunning, .stayIdle:
@@ -1030,35 +1062,6 @@ final class AudioEngine: ObservableObject {
 
     // MARK: - Change handling
 
-    /// Removes the observers that survive a restart. `start()` reinstalls both,
-    /// so stopping and starting again is a complete cycle.
-    /// Watches for anything starting to play, so a resume does not wait for a
-    /// timer.
-    ///
-    /// Two kinds are needed and one alone is not enough: a listener per process
-    /// catches an app that is already known to Core Audio, and a listener on the
-    /// process list catches one that has just appeared — measured, a freshly
-    /// launched player fires no per-process notification, because there was no
-    /// process object to attach to when the listeners went on.
-    private func installPlaybackListenersIfNeeded() {
-        guard processListListener == nil else { return }
-        var addr = propertyAddress(kAudioHardwarePropertyProcessObjectList)
-        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.audioStarting = true
-                self.evaluateIdleState()
-            }
-        }
-        let status = AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &addr, .main, block)
-        if status == noErr {
-            processListListener = block
-        } else {
-            logger.error("Failed to observe the audio process list: \(status)")
-        }
-    }
-
     /// Watches the output device for anyone else starting to use it.
     ///
     /// On the device rather than the aggregate: the aggregate's running state is
@@ -1087,18 +1090,12 @@ final class AudioEngine: ObservableObject {
         outputDeviceID = AudioObjectID(kAudioObjectUnknown)
     }
 
-    private func removePlaybackListeners() {
-        if let processListListener {
-            var addr = propertyAddress(kAudioHardwarePropertyProcessObjectList)
-            AudioObjectRemovePropertyListenerBlock(
-                AudioObjectID(kAudioObjectSystemObject), &addr, .main, processListListener)
-        }
-        processListListener = nil
-        removeDeviceRunningListener()
-    }
-
+    /// Removes the observers that survive a restart. `start()` reinstalls them,
+    /// so stopping and starting again is a complete cycle.
     private func removeSystemObservers() {
-        removePlaybackListeners()
+        removeDeviceRunningListener()
+        exclusiveAccessMonitor.stop()
+        exclusiveHold = nil
         if let defaultDeviceListener {
             var addr = propertyAddress(kAudioHardwarePropertyDefaultOutputDevice)
             AudioObjectRemovePropertyListenerBlock(
@@ -1117,6 +1114,28 @@ final class AudioEngine: ObservableObject {
         }
         activationObserver = nil
 
+    }
+
+    /// Asks every output device who owns it, and acts if the answer has changed.
+    private func updateExclusiveHold() {
+        let hold = ExclusiveAccess.currentHold(
+            in: exclusiveAccessMonitor.readings(), me: getpid(),
+            output: outputDeviceID == kAudioObjectUnknown ? nil : outputDeviceID,
+            previous: exclusiveHold, appName: ExclusiveAccessMonitor.appName(of:))
+        guard hold != exclusiveHold else { return }
+        exclusiveHold = hold
+        if let hold {
+            logger.info(
+                "Exclusive access to \(hold.deviceName, privacy: .public) by \(hold.appName ?? "another process", privacy: .public), was the output: \(hold.wasOutput, privacy: .public)"
+            )
+        } else {
+            logger.info("Exclusive access ended")
+            // Normally the default output moving back has already asked for this,
+            // and a second request replaces the first.
+            if case .heldExclusively = status {
+                scheduleRestart(after: 0.5, reason: "exclusive access ended")
+            }
+        }
     }
 
     private func scheduleRestart(after delay: TimeInterval, reason: String) {

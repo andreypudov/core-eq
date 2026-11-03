@@ -72,19 +72,45 @@ notifications*: attached to every audio process, it never fired once. Sweeping
 those processes by hand answers the question but costs about 6 ms a pass, which
 rules out polling it quickly. =kAudioDevicePropertyDeviceIsRunningSomewhere= on
 the output device does notify, costs 0.05 ms to read, and reads false while
-CoreEQ is idle — so it says precisely "somebody else wants this device". A
-listener on the audio process list runs alongside it, because a process appears
-there about 80 ms before it plays, and the device needs about 90 ms to deliver
-its first buffer after being started. Acting on the announcement rather than on
-the audio is what closes the gap.
+CoreEQ is idle — so it says precisely "somebody else is using this device".
 
 Measured on a Bluetooth headset, resume went from 1.97 / 1.10 / 0.29 s of
-unequalized audio at a half-second poll to a consistent 40-48 ms.
+unequalized audio at a half-second poll to a consistent 40-48 ms. That was with
+a listener on the audio process list running alongside, because a process appears
+there about 80 ms before it plays. The listener is gone, and that figure has not
+been measured again without it. Starting ahead of any audio leaves the start
+pending, and a player that took hog mode during it waited about 14 s: see “A
+player holding the device”, below.
 
 =Status= is deliberately unchanged while idle: nothing has changed for the user,
 and an idle engine reporting itself stopped would blink the menu bar icon off
 whenever a room went quiet. The diagnostics report carries the fact instead,
 because a released device and a broken engine look identical from outside.
+
+** A player holding the device
+
+A player can take an output device for itself with hog mode. =make hog-test=
+measures what follows, using a second process as the player:
+
+- macOS moves the default output off a hogged device as soon as it is taken, if
+  it has anywhere to move it. So =kAudioDevicePropertyHogMode= on the current
+  output says nobody holds anything by the time the path has rebuilt, and CoreEQ
+  reports that it is running on the fallback. Every output device has to be asked.
+- The property notifies, on both take and release, and from another process.
+- A tap hears nothing from the process holding the device, and an aggregate around
+  that device delivers no IO until it is released. Nothing else reaches the device
+  meanwhile.
+- CoreEQ does not stand in the player's way, with one exception. A path started
+  while nothing was playing leaves =AudioDeviceStart= pending, and if a player
+  takes the device during that, its own start takes 14.18 s against 0.03 s without
+  CoreEQ. Stopping the path blocks in =AudioDeviceStop= for about 15 s as well.
+  Hence the rule in =IdlePolicy=, and hence no resuming on a process merely
+  appearing.
+
+The fallback is whatever macOS picks, and it changed between runs on one Mac:
+speakers, BlackHole, a user's Aggregate Device. If it is an Aggregate Device the
+engine cannot follow, the status says who holds the device rather than sending
+someone to choose a single output, and the switch stays available.
 
 ** Sample rate changes, and why there is no stale window
 

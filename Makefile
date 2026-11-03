@@ -23,7 +23,7 @@ ifneq (,$(findstring CommandLineTools,$(shell xcode-select -p)))
 export DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 endif
 
-.PHONY: build sign test audio-test format lint strings install release icons screenshot clean
+.PHONY: build sign test audio-test hog-test format lint strings install release icons screenshot clean
 
 build:
 	xcodebuild -project $(APP).xcodeproj -target $(APP) -configuration $(CONFIG) $(XCODE_FLAGS) build
@@ -71,6 +71,16 @@ audio-test: build
 	@mkdir -p build
 	@xcrun swiftc -O -parse-as-library -o build/audio-test Tools/AudioTest.swift
 	@./build/audio-test
+
+# Measures what CoreEQ does when another process takes exclusive access to the
+# output device, and reports it without judging it. Runs against whichever
+# CoreEQ is already running and briefly locks the device, so other audio on it
+# stops. A quiet tone plays on the default output. Pass options through ARGS;
+# `make hog-test ARGS=--help` lists them.
+hog-test:
+	@mkdir -p build
+	@xcrun swiftc -O -parse-as-library -o build/hog-test Tools/HogTest.swift
+	@./build/hog-test $(ARGS)
 
 # Re-signs the whole bundle with SIGN_IDENTITY, then refuses to continue if the
 # result would still be pinned to this one binary. The identifier is passed

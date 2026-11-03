@@ -13,6 +13,9 @@ final class EngineStatusBridge: ObservableObject {
 
     @Published private(set) var status: AudioEngine.Status = .stopped
 
+    /// Another process holding an output device to itself.
+    @Published private(set) var exclusiveHold: ExclusiveAccess.Hold?
+
     /// What the engine settled on, for the Diagnostics pane. Nil when it is not
     /// running, which the report says rather than hides.
     @Published private(set) var diagnostics: DiagnosticsReport.Engine?
@@ -73,6 +76,9 @@ final class EngineStatusBridge: ObservableObject {
         self.engine = engine
         engine.$status
             .sink { [weak self] status in self?.status = status }
+            .store(in: &cancellables)
+        engine.$exclusiveHold
+            .sink { [weak self] hold in self?.exclusiveHold = hold }
             .store(in: &cancellables)
         engine.$diagnostics
             .sink { [weak self] diagnostics in self?.diagnostics = diagnostics }

@@ -16,16 +16,37 @@ struct IdlePolicyTests {
         isEnabled: Bool = true,
         isCaptureProven: Bool = true,
         pausesWhenSilent: Bool = true,
-        isAudioStarting: Bool = false,
         isRecovering: Bool = false,
-        stepsAsideForRecording: Bool = false
+        stepsAsideForRecording: Bool = false,
+        isOutputHeld: Bool = false
     ) -> IdlePolicy.Verdict {
         IdlePolicy.evaluate(
             isRunning: isRunning, silentSeconds: silentSeconds,
             isAnythingPlaying: isAnythingPlaying, isEnabled: isEnabled,
             isCaptureProven: isCaptureProven, pausesWhenSilent: pausesWhenSilent,
-            isAudioStarting: isAudioStarting, isRecovering: isRecovering,
-            stepsAsideForRecording: stepsAsideForRecording)
+            isRecovering: isRecovering,
+            stepsAsideForRecording: stepsAsideForRecording, isOutputHeld: isOutputHeld)
+    }
+
+    // MARK: - A device another process holds
+
+    /// A player taking the device runs it, which is what a player wanting
+    /// equalizing does too. Waking for it stalled the player's start by fourteen
+    /// seconds, measured with `make hog-test`.
+    @Test func aHeldOutputIsNeverResumedFor() {
+        #expect(verdict(isRunning: false, isAnythingPlaying: true, isOutputHeld: true) == .stayIdle)
+        #expect(
+            verdict(isRunning: false, pausesWhenSilent: false, isOutputHeld: true) == .stayIdle,
+            "turning idling off pins the engine on, which is no reason to fight for the device")
+    }
+
+    @Test func aRunningPathIsNotStoppedBecauseItsOutputIsHeld() {
+        #expect(
+            verdict(isRunning: true, isAnythingPlaying: true, isOutputHeld: true) == .keepRunning)
+    }
+
+    @Test func theOutputComingBackAllowsAResume() {
+        #expect(verdict(isRunning: false, isAnythingPlaying: true, isOutputHeld: false) == .resume)
     }
 
     // MARK: - Recording
@@ -41,7 +62,7 @@ struct IdlePolicyTests {
     @Test func playbackDoesNotResumeDuringARecording() {
         #expect(
             verdict(
-                isRunning: false, isAnythingPlaying: true, isAudioStarting: true,
+                isRunning: false, isAnythingPlaying: true,
                 stepsAsideForRecording: true) == .stayIdle)
     }
 
@@ -149,31 +170,6 @@ struct IdlePolicyTests {
     /// system has to be asked.
     @Test func somethingPlayingBringsThePathBack() {
         #expect(verdict(isRunning: false, isAnythingPlaying: true) == .resume)
-    }
-
-    /// Coming back *before* the first sample is the whole point. A process
-    /// announcing itself arrives about 80 ms before it plays and the device
-    /// needs about 90 ms to start, so waiting for audio to be audible before
-    /// reacting is already too late — that is what a second of unequalized
-    /// playback was.
-    @Test func anAnnouncementIsEnoughToComeBack() {
-        let announced = verdict(
-            isRunning: false, isAnythingPlaying: false, isAudioStarting: true)
-        #expect(announced == .resume)
-    }
-
-    /// It is a hint, not an override. Switched off there is still nothing to
-    /// come back for, and a failed path is still left to its own retry.
-    @Test func anAnnouncementDoesNotOverrideTheRulesAboveIt() {
-        #expect(
-            verdict(isRunning: false, isEnabled: false, isAudioStarting: true) == .stayIdle)
-        #expect(
-            verdict(isRunning: false, isAudioStarting: true, isRecovering: true) == .stayIdle)
-    }
-
-    /// While running it means nothing — the engine is already up.
-    @Test func anAnnouncementDoesNotDisturbARunningEngine() {
-        #expect(verdict(silentSeconds: 600, isAudioStarting: true) == .goIdle)
     }
 
     @Test func aQuietMacStaysIdle() {
