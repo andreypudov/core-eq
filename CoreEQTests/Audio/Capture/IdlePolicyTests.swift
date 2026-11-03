@@ -28,6 +28,51 @@ struct IdlePolicyTests {
             stepsAsideForRecording: stepsAsideForRecording, isOutputHeld: isOutputHeld)
     }
 
+    // MARK: - A newly built path
+
+    /// What the engine asks after every build. Nothing playing means not started:
+    /// a started path with no audio gets no callbacks, never counts its silence,
+    /// and stalled a player taking the device by 14 s. `make audio-test` checks it
+    /// against real hardware.
+    @Test func aNewPathWithNothingPlayingIsNotStarted() {
+        #expect(verdict(isRunning: false, isCaptureProven: true) == .stayIdle)
+        #expect(verdict(isRunning: false, isCaptureProven: false) == .stayIdle)
+    }
+
+    /// The silent-Mac guard: when something is playing a muted tap has to have a
+    /// path running, and an unmuted one has to run to prove itself.
+    @Test func aNewPathWithSomethingPlayingStarts() {
+        #expect(verdict(isRunning: false, isAnythingPlaying: true) == .resume)
+        #expect(
+            verdict(isRunning: false, isAnythingPlaying: true, isCaptureProven: false) == .resume)
+    }
+
+    /// The setting that turns idling off is the way out when idling goes wrong, so
+    /// it has to bring back an always-running path too.
+    @Test func turningIdlingOffStillStartsANewPath() {
+        #expect(verdict(isRunning: false, pausesWhenSilent: false) == .resume)
+    }
+
+    @Test func aNewPathOnAHeldDeviceIsNotStarted() {
+        #expect(verdict(isRunning: false, isAnythingPlaying: true, isOutputHeld: true) == .stayIdle)
+    }
+
+    // MARK: - Counting silence
+
+    /// A path started for audio that never came gets no callbacks to count with.
+    /// Without this it never went idle.
+    @Test func aPathThatNeverHadAudioCountsTheTimeSinceItStarted() {
+        let silence = IdlePolicy.silence(observed: 0, hasReceivedAudio: false, secondsRunning: 40)
+        #expect(silence == 40)
+        #expect(verdict(silentSeconds: silence) == .goIdle)
+    }
+
+    /// Once audio has arrived the callbacks are what count. Time since starting
+    /// would put a path that has been playing for an hour straight to sleep.
+    @Test func aPathThatHasHadAudioCountsOnlyItsCurrentSilence() {
+        #expect(IdlePolicy.silence(observed: 2, hasReceivedAudio: true, secondsRunning: 3600) == 2)
+    }
+
     // MARK: - A device another process holds
 
     /// A player taking the device runs it, which is what a player wanting

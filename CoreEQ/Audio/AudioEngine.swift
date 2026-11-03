@@ -273,6 +273,8 @@ final class AudioEngine: ObservableObject {
     /// by `stop`, and completed by its own work item.
     private var pendingRestart: DispatchWorkItem?
     private var capturePoll: DispatchWorkItem?
+    /// When the IO proc last started. Nil while it is stopped.
+    private var ioStartedAt: Date?
     private var idlePoll: DispatchWorkItem?
 
     /// What tells the engine that audio is starting, so a resume is not waiting
@@ -293,11 +295,7 @@ final class AudioEngine: ObservableObject {
     /// wanted: somebody else is using this device.
     ///
     /// A process merely appearing in the audio process list is not enough, though
-    /// it arrives about 80 ms sooner. Starting ahead of any audio leaves the start
-    /// pending, and a player taking hog mode while it is pending waits about 14 s.
-    /// Measured with `make hog-test`, with the player taking the device 0.05 s and
-    /// 1 s after launching. So a just-launched app gets the same short gap as one
-    /// that was already open.
+    /// it arrives about 80 ms sooner. See "When the IO proc runs" in INTERNALS.org.
     private var deviceRunningListener: AudioObjectPropertyListenerBlock?
     /// The device the aggregate is built around, which is what the running
     /// listener watches — not the aggregate, whose own state is CoreEQ's.
@@ -387,9 +385,10 @@ final class AudioEngine: ObservableObject {
             return
         }
         do {
+            noteIdleEnded()
+            isIdle = false
             try startEngine()
             retryCount = 0
-            isIdle = false
             isPausedForRecording = false
             scheduleIdleCheck()
         } catch {
@@ -507,7 +506,7 @@ final class AudioEngine: ObservableObject {
             inputBuffers: AudioDevices.inputBufferChannels(of: device.id).count)
         processor.setOutputLayout(layout)
 
-        try startIOProc(on: aggregateID)
+        try createIOProc(on: aggregateID)
         installDeviceRunningListener(on: device.id)
 
         // Only the two tied to this aggregate. The device and wake observers are
@@ -534,7 +533,24 @@ final class AudioEngine: ObservableObject {
 
         processor.resetAudioObservation()
         processor.isProvingCapture = !captureProven
-        startProvingCapture()
+
+        // A started IO proc with no audio gets no callbacks, and on real hardware
+        // a player taking the device then waits 14 s. So it starts only for audio.
+        // See "When the IO proc runs" in INTERNALS.org.
+        let verdict = IdlePolicy.evaluate(
+            isRunning: false, silentSeconds: 0,
+            isAnythingPlaying: AudioDevices.isRunningSomewhere(device.id),
+            isEnabled: isEnabled, isCaptureProven: captureProven,
+            pausesWhenSilent: settings.pausesWhenSilent,
+            stepsAsideForRecording: settings.pausesWhileRecording && isRecordingSystemAudio,
+            isOutputHeld: exclusiveHold?.deviceID == device.id)
+        if verdict == .resume {
+            try check(AudioDeviceStart(aggregateID, ioProcID), "starting the aggregate device")
+            ioStartedAt = Date()
+            startProvingCapture()
+        } else {
+            noteIdleStarted(reason: "nothing to do, so the new path is not started")
+        }
 
         startedAt = Date()
         status = .running(deviceName: device.name)
@@ -658,13 +674,13 @@ final class AudioEngine: ObservableObject {
         throw UnusableOutputDevice.noOutputStreams(name: deviceName)
     }
 
-    private func startIOProc(on aggregate: AudioObjectID) throws {
+    /// Creates the IO proc without starting it. `startEngine` decides that.
+    private func createIOProc(on aggregate: AudioObjectID) throws {
         var id: AudioDeviceIOProcID?
         try check(
             AudioDeviceCreateIOProcIDWithBlock(&id, aggregate, nil, Self.ioBlock(for: processor)),
             "creating the IO proc")
         ioProcID = id
-        try check(AudioDeviceStart(aggregate, id), "starting the aggregate device")
     }
 
     /// The block Core Audio calls on its realtime IO thread.
@@ -734,7 +750,7 @@ final class AudioEngine: ObservableObject {
 
     /// How often the idle decision is revisited when nothing has told us to.
     ///
-    /// A backstop, not the mechanism: `playbackListeners` is what makes resuming
+    /// A backstop, not the mechanism: `deviceRunningListener` is what makes resuming
     /// prompt, and this only catches anything they miss. Slow on purpose — going
     /// idle a couple of seconds late costs nothing against a thirty second
     /// threshold, and a timer that fires rarely is a timer that costs no
@@ -890,13 +906,17 @@ final class AudioEngine: ObservableObject {
         // threshold the verdict is `keepRunning` whatever it returns, so paying
         // that every couple of seconds for the whole life of the app would be
         // battery spent to confirm something already known.
+        let silentSeconds = IdlePolicy.silence(
+            observed: processor.observed.silentSeconds,
+            hasReceivedAudio: processor.observed.hasReceivedAudio,
+            secondsRunning: ioStartedAt.map { -$0.timeIntervalSinceNow } ?? 0)
         let isAnythingPlaying: Bool
         if isIdle {
             isAnythingPlaying = AudioDevices.isRunningSomewhere(outputDeviceID)
             // Asked again here rather than trusting the listener: the device
             // starting and hog mode being taken can arrive in either order.
             if isAnythingPlaying { updateExclusiveHold() }
-        } else if processor.observed.silentSeconds >= IdlePolicy.idleAfter {
+        } else if silentSeconds >= IdlePolicy.idleAfter {
             isAnythingPlaying = AudioDevices.isAnyProcessPlayingOutput(
                 excluding: tapExcludedProcess)
         } else {
@@ -906,7 +926,7 @@ final class AudioEngine: ObservableObject {
         let stepsAside = settings.pausesWhileRecording && isRecordingSystemAudio
         let verdict = IdlePolicy.evaluate(
             isRunning: !isIdle && ioProcID != nil,
-            silentSeconds: processor.observed.silentSeconds,
+            silentSeconds: silentSeconds,
             isAnythingPlaying: isAnythingPlaying,
             isEnabled: isEnabled,
             isCaptureProven: captureProven,
@@ -1003,12 +1023,22 @@ final class AudioEngine: ObservableObject {
         // evidence to wait for. `resumeFromIdle` picks the watch up again.
         capturePoll?.cancel()
         capturePoll = nil
+        noteIdleStarted(reason: "stopped the IO proc, \(reason)")
+    }
+
+    /// `status` is deliberately untouched. Nothing has changed for the user:
+    /// CoreEQ is on, and the next sound will be equalized.
+    private func noteIdleStarted(reason: String) {
         isIdle = true
         idleCount += 1
         idleSince = Date()
-        // `status` is deliberately untouched. Nothing has changed for the user:
-        // CoreEQ is on, and the next sound will be equalized.
-        logger.info("Idle: stopped the IO proc, \(reason, privacy: .public)")
+        ioStartedAt = nil
+        logger.info("Idle: \(reason, privacy: .public)")
+    }
+
+    private func noteIdleEnded() {
+        if let idleSince { totalIdle += -idleSince.timeIntervalSinceNow }
+        idleSince = nil
     }
 
     /// Starts the IO proc again because something wants to play.
@@ -1026,8 +1056,7 @@ final class AudioEngine: ObservableObject {
             start()
             return
         }
-        if let idleSince { totalIdle += -idleSince.timeIntervalSinceNow }
-        idleSince = nil
+        noteIdleEnded()
         isIdle = false
         // The delay lines describe audio from before the pause.
         processor.prepareForResume()
@@ -1037,9 +1066,10 @@ final class AudioEngine: ObservableObject {
             start()
             return
         }
-        // A muted tap that went idle before delivering anything has still to
-        // show that it can.
-        if captureProven, !processor.observed.hasReceivedAudio { startProvingCapture() }
+        ioStartedAt = Date()
+        // A tap that went idle before delivering anything has still to show that
+        // it can, muted or not.
+        if !processor.observed.hasReceivedAudio { startProvingCapture() }
         logger.info("Resuming: audio is playing")
     }
 

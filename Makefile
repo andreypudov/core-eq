@@ -67,8 +67,9 @@ test:
 #
 # Requires BlackHole (brew install blackhole-16ch) and takes about a minute,
 # most of it waiting for the idle timer.
-audio-test: build
+audio-test: sign
 	@mkdir -p build
+	@xcrun swiftc -O -parse-as-library -o build/hog-test Tools/HogTest.swift
 	@xcrun swiftc -O -parse-as-library -o build/audio-test Tools/AudioTest.swift
 	@./build/audio-test
 

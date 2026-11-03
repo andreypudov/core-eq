@@ -78,14 +78,53 @@ Measured on a Bluetooth headset, resume went from 1.97 / 1.10 / 0.29 s of
 unequalized audio at a half-second poll to a consistent 40-48 ms. That was with
 a listener on the audio process list running alongside, because a process appears
 there about 80 ms before it plays. The listener is gone, and that figure has not
-been measured again without it. Starting ahead of any audio leaves the start
-pending, and a player that took hog mode during it waited about 14 s: see “A
-player holding the device”, below.
+been measured again without it. See “When the IO proc runs”, below, for why it
+went.
 
 =Status= is deliberately unchanged while idle: nothing has changed for the user,
 and an idle engine reporting itself stopped would blink the menu bar icon off
 whenever a room went quiet. The diagnostics report carries the fact instead,
 because a released device and a broken engine look identical from outside.
+
+** When the IO proc runs
+
+The rule: *the IO proc runs only while there is audio to process.* Every build and
+every idle decision goes through =IdlePolicy.evaluate=, so there is one rule.
+
+| Event                                | What CoreEQ does                                                 |
+|--------------------------------------+------------------------------------------------------------------|
+| Path built, nothing playing          | Tap and aggregate exist, IO proc not started. Logs =Idle:=       |
+| Path built, something playing        | Starts the IO proc and proves the tap                            |
+| Output device starts running         | Resumes the IO proc. No rebuild                                  |
+| 30 s of silence, nothing playing     | Stops the IO proc. Tap and aggregate stay                        |
+| Tap proven while unmuted             | Rebuilds muted                                                   |
+| Muted tap silent for 6 s during play | Rebuilds unmuted, and has to prove itself again                  |
+| Another process takes the output     | macOS moves the default, CoreEQ rebuilds there and reports it    |
+| That process lets go                 | The default moves back, and CoreEQ rebuilds                      |
+| Switched off                         | Stops the IO proc at once                                        |
+
+=status= stays =.running= while idle, because the next sound is equalized. The
+diagnostics report's =idling= line is what tells them apart.
+
+Exceptions: *Pause when silent* switched off keeps the IO proc running, unless
+another process holds the device. That is the way out if idling goes wrong, and it
+keeps the stall below.
+
+What this rests on, all measured:
+
+- *A started IO proc with no audio gets no callbacks.* Silence is counted in the
+  callback, so such a path never went idle. =IdlePolicy.silence= counts time since
+  starting until audio has arrived.
+- *A player taking a real device from that state waits 14.2 s*, against 0.03 s
+  without CoreEQ, and CoreEQ's own =AudioDeviceStop= blocks for about 15 s. On
+  BlackHole the same sequence usually takes 0.03 s, so only a real device shows it.
+  This is why the IO proc waits for audio, and why it no longer starts for a process
+  merely appearing, which had made resuming about 80 ms sooner.
+- *A muted tap with no IO proc running does not silence anything.* Other audio
+  reaches the device until the IO proc starts.
+
+The cost: the first sound after any silent build or idle starts unequalized, until
+the device has delivered its first buffer. Not measured since this changed.
 
 ** A player holding the device
 
@@ -94,23 +133,30 @@ measures what follows, using a second process as the player:
 
 - macOS moves the default output off a hogged device as soon as it is taken, if
   it has anywhere to move it. So =kAudioDevicePropertyHogMode= on the current
-  output says nobody holds anything by the time the path has rebuilt, and CoreEQ
-  reports that it is running on the fallback. Every output device has to be asked.
+  output says nobody holds anything by the time the path has rebuilt. Every output
+  device has to be asked, which is =ExclusiveAccessMonitor=.
 - The property notifies, on both take and release, and from another process.
 - A tap hears nothing from the process holding the device, and an aggregate around
   that device delivers no IO until it is released. Nothing else reaches the device
   meanwhile.
-- CoreEQ does not stand in the player's way, with one exception. A path started
-  while nothing was playing leaves =AudioDeviceStart= pending, and if a player
-  takes the device during that, its own start takes 14.18 s against 0.03 s without
-  CoreEQ. Stopping the path blocks in =AudioDeviceStop= for about 15 s as well.
-  Hence the rule in =IdlePolicy=, and hence no resuming on a process merely
-  appearing.
 
 The fallback is whatever macOS picks, and it changed between runs on one Mac:
 speakers, BlackHole, a user's Aggregate Device. If it is an Aggregate Device the
 engine cannot follow, the status says who holds the device rather than sending
 someone to choose a single output, and the switch stays available.
+
+** Which test covers what
+
+| Question                                         | Where                       |
+|--------------------------------------------------+-----------------------------|
+| What should the engine decide?                   | =IdlePolicyTests=, =ExclusiveAccessTests=, =CaptureProofTests= |
+| Does audio arrive, equalized, after each change? | =make audio-test=           |
+| Does a player get a real device at once?         | =make audio-test=, last section |
+| What exactly happens during a hold?              | =make hog-test=             |
+
+Add a state to =make audio-test= when adding one to the table above. The stall went
+unnoticed because every check played audio first, and the idle check only asked
+whether the device was running, which a path with no callbacks also passes.
 
 ** Sample rate changes, and why there is no stale window
 
@@ -156,7 +202,8 @@ is the worst state this engine has.
 Unmuted, the same refusal costs only that the audio is not equalized. That is
 how an equalizer should fail, and it is why the order matters: prove, then mute.
 
-The proof is polled every 250 ms and never gives up on a clock. Silence proves
+The proof is polled every 250 ms from when the IO proc starts, which is when audio
+is playing, and never gives up on a clock. Silence proves
 nothing on its own — a quiet Mac is quiet — so the engine waits, indefinitely and
 harmlessly, because an unmuted tap writing nothing is CoreEQ not being there. It
 concludes only when audio is demonstrably flowing and none of it is arriving:

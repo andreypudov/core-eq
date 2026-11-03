@@ -156,8 +156,10 @@ enum Player {
             exit(2)
         }
         // A held device is released when its owner exits, so this bounds the
-        // worst case: nothing stays locked if the observer dies.
-        alarm(UInt32(seconds + hogDelay) + 10)
+        // worst case: nothing stays locked if the observer dies. Well past the
+        // 14 s a start has been measured stalling, which is the thing being
+        // measured: an alarm inside that kills the player before it can report.
+        alarm(UInt32(seconds + hogDelay) + 40)
 
         // Any Core Audio call makes this process known to the HAL, which is the
         // announcement CoreEQ acts on. The device is taken only afterwards.

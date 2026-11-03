@@ -223,25 +223,28 @@ Done, not yet released:
 - Every output device is watched for hog mode, and the status names the app and
   the device. The switch stays available, because it records what the user wants.
   The icon shows paused only when the held device is the one CoreEQ was on.
-- A player that took the device from an idle CoreEQ waited about 14 s, and now
-  starts as quickly as it does without CoreEQ (0.03 s). The cost is that CoreEQ no
-  longer wakes for a process merely appearing, so a just-launched app gets the
-  same short unequalized start as one that was already open.
+- A player taking a real device waited about 14 s whenever CoreEQ had a path with
+  no audio: from idle, after launching, after a rebuild. It now starts as quickly
+  as it does without CoreEQ (0.03 s), because the IO proc runs only while there is
+  audio. See “When the IO proc runs” in [[file:INTERNALS.org][INTERNALS.org]].
 
 Still owed:
 
-- *Try it with a real player and a real DAC.* Everything above used the stand-ins.
+- *Try it with a real DAC.* IINA took the speakers and behaved as expected, by hand.
   A player may also change the stream format, which the test does not do.
-- *Measure the unequalized start without the head start.* The 40-48 ms in
-  INTERNALS.org was measured with it.
+- *Measure the unequalized start.* The first sound after a silent build or an idle
+  now starts unequalized until the device delivers. The 40-48 ms in INTERNALS.org
+  was measured with the head start that has gone.
 - *A Mac with nowhere to fall back to.* Not measured: the default output cannot
   move, so the path stays on the held device.
 - *Held before CoreEQ launches, with an Aggregate Device as the fallback.* CoreEQ
   cannot tell that the held device was the one in use, so the status can still say
   to choose a single output device, and the switch is disabled until the device is
   released.
-- *A start already pending when a device is taken.* Audio resumes the path, and a
-  player taking the device in that moment could still stall. Not tested.
+- *A player taking the device just as audio has started the IO proc.* Could still
+  stall. Not tested.
+- =UnrenderableTapFormat= was logged once, during a stall, and the next rebuild was
+  fine. Not seen since the fix, and the cause is not known.
 
 This is about being honest in the status, not about bit-perfect playback, which
 stays under *Not planned*.

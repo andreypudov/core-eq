@@ -110,6 +110,14 @@ extension AudioTest {
             mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
     }
 
+    static func transportType(of device: AudioDeviceID) -> UInt32 {
+        var addr = address(kAudioDevicePropertyTransportType)
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &value)
+        return value
+    }
+
     static func devices() -> [AudioDeviceID] {
         var addr = address(kAudioHardwarePropertyDevices)
         var size: UInt32 = 0
@@ -418,6 +426,8 @@ extension AudioTest {
 
 extension AudioTest {
     static let appPath = "build/Release/CoreEQ.app"
+    nonisolated(unsafe) static var lastLaunch = Date()
+    nonisolated(unsafe) static var wasPrompted = false
 
     static func isRunning() -> Bool {
         !shell("/usr/bin/pgrep", ["-x", "CoreEQ"]).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -450,6 +460,8 @@ extension AudioTest {
     }
 
     static func launchApp() -> Bool {
+        let launched = Date().addingTimeInterval(-1)
+        lastLaunch = launched
         shell("/usr/bin/open", [appPath])
         for _ in 0..<40 {
             Thread.sleep(forTimeInterval: 0.25)
@@ -458,6 +470,14 @@ extension AudioTest {
         // The engine builds its tap and aggregate after launch, and on a first
         // run it also has to prove the tap before it starts processing.
         Thread.sleep(forTimeInterval: 6)
+        if engineLog(since: launched).contains("Waiting for the audio permission") {
+            wasPrompted = true
+            print("  CoreEQ is waiting for the audio permission. Allow it in its window.")
+            for _ in 0..<120 where !engineLog(since: launched).contains("permission is now granted") {
+                Thread.sleep(forTimeInterval: 1)
+            }
+            Thread.sleep(forTimeInterval: 3)
+        }
         return isRunning()
     }
 
@@ -478,6 +498,65 @@ extension AudioTest {
             Thread.sleep(forTimeInterval: 0.05)
         }
         return false
+    }
+
+    /// BlackHole's own volume scales what is read back. Left low by anything,
+    /// the baseline fails for a reason that has nothing to do with CoreEQ.
+    @discardableResult
+    static func setVolume(_ volume: Float32, on device: AudioDeviceID) -> Float32? {
+        var previous: Float32?
+        for scope in [kAudioObjectPropertyScopeOutput, kAudioObjectPropertyScopeInput] {
+            var addr = address(kAudioDevicePropertyVolumeScalar, scope)
+            var current: Float32 = 0
+            var size = UInt32(MemoryLayout<Float32>.size)
+            guard AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &current) == noErr
+            else { continue }
+            if previous == nil { previous = current }
+            var value = volume
+            AudioObjectSetPropertyData(device, &addr, 0, nil, size, &value)
+        }
+        return previous
+    }
+
+    /// CoreEQ's own log since `start`, because some of what it does is invisible
+    /// from outside: a device nobody is running looks the same whether CoreEQ
+    /// has gone idle or has simply never had a callback.
+    static func engineLog(since start: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return shell(
+            "/usr/bin/log",
+            [
+                "show", "--start", formatter.string(from: start), "--info", "--style", "compact",
+                "--predicate",
+                "subsystem == \"com.andreypudov.coreeq\" AND category == \"AudioEngine\"",
+            ])
+    }
+
+    static func engineWentIdle(since start: Date) -> Bool {
+        engineLog(since: start).contains("Idle:")
+    }
+
+    /// Plays the part of a player taking exclusive access, using `build/hog-test`,
+    /// and returns how long its own start took. Silent, so whatever the device
+    /// carries afterwards is not this.
+    static func playerStartSeconds(on device: AudioDeviceID, holding seconds: Double) -> Double? {
+        let output = shell("build/hog-test", ["hold", String(device), String(seconds), "0", "0"])
+        guard let line = output.split(separator: "\n").first(where: { $0.contains("IO proc") }),
+            let last = line.split(separator: " ").dropLast().last
+        else { return nil }
+        return Double(last)
+    }
+
+    /// Macs fall back to another output while a device is held, and normally come
+    /// back. This is about what happens next, so it does not rely on that.
+    static func waitForOutput(_ device: AudioDeviceID) {
+        for _ in 0..<20 where defaultOutput() != device {
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        if defaultOutput() != device { setDefaultOutput(device) }
+        // The rebuild that follows the output coming back.
+        Thread.sleep(forTimeInterval: 3)
     }
 
     /// Waits for the engine to let go of the device, which it does after
@@ -529,6 +608,7 @@ extension AudioTest {
         // happens, they go back.
         let originalOutput = defaultOutput()
         let originalRate = nominalRate(of: blackHole)
+        let originalVolume = setVolume(1, on: blackHole)
         // Noted before anything is killed, so whatever the user had running can
         // be started again — and started from the same bundle, which may be the
         // installed copy rather than this build.
@@ -540,6 +620,7 @@ extension AudioTest {
         defer {
             quitApp()
             setNominalRate(originalRate, on: blackHole)
+            if let originalVolume { setVolume(originalVolume, on: blackHole) }
             setDefaultOutput(originalOutput)
             if let previousBundle {
                 shell("/usr/bin/open", [previousBundle])
@@ -608,6 +689,8 @@ extension AudioTest {
             print("  CoreEQ did not launch")
             return couldNotRun
         }
+        checkSilentLaunch(blackHole: blackHole)
+
         // A throwaway pass first. On a fresh launch the engine has to prove the
         // tap can capture before it starts muting, and proving it ends in a
         // restart — so the first tone after launch is partly passthrough and
@@ -747,7 +830,126 @@ extension AudioTest {
         checkRateChange(blackHole: blackHole, tone: tone, processed: processed)
 
         print("")
+        checkSilentRebuild(blackHole: blackHole, tone: tone)
+
+        print("")
+        checkRealDevice(blackHole: blackHole)
+
+        print("")
         return failures > 0 ? 1 : 0
+    }
+
+    /// The longest a player's start may take. It measured about 0.03 s without
+    /// CoreEQ, and 14 s when it got in the way.
+    static let playerStartLimit = 1.0
+
+    static func checkPlayerStart(_ name: String, on device: AudioDeviceID) {
+        let seconds = playerStartSeconds(on: device, holding: 2)
+        check(
+            name, (seconds ?? .infinity) < playerStartLimit,
+            seconds.map { String(format: "%.3f s", $0) } ?? "the player did not report a start")
+    }
+
+    /// CoreEQ just launched, and nothing has played. The state a login item spends
+    /// most of the morning in, and one no other check here ever sees: each of them
+    /// plays something first.
+    ///
+    /// Before audio has arrived a started IO proc gets no callbacks, so silence is
+    /// never counted and the path never went idle, and a player taking the device
+    /// then stalled for 14 s.
+    static func checkSilentLaunch(blackHole: AudioDeviceID) {
+        print("Launched, with nothing played yet")
+        // Not judged after a permission prompt, where this reading has been
+        // unreliable. A first launch was checked by hand with a live log.
+        if wasPrompted {
+            skip("nothing playing means the path is not started", "CoreEQ asked for permission; run again")
+        } else {
+            check(
+                "nothing playing means the path is not started",
+                engineWentIdle(since: lastLaunch))
+        }
+        // Said here while it is still true, because the reason is the first thing
+        // anyone reading a failure will want to know.
+        let isRunning = isRunningSomewhere(blackHole)
+        check(
+            "the device is left alone", !isRunning,
+            isRunning ? "in use by \(otherProcessesPlaying() + ["CoreEQ, or nobody it names"])" : "")
+        checkPlayerStart("a player gets exclusive access at once", on: blackHole)
+        waitForOutput(blackHole)
+        print("")
+    }
+
+    /// The same, on a tap already proven and muting, after a rebuild. Quitting an
+    /// exclusive player does this, and reopening it is what stalled.
+    ///
+    /// The tone at the end is the silent-Mac check. A muted tap that is alive but
+    /// not started must not silence anything, and must take over when audio plays.
+    static func checkSilentRebuild(blackHole: AudioDeviceID, tone: URL) {
+        print("Rebuilt, with nothing played since")
+        guard let reference = measure(on: blackHole, tone: tone) else {
+            check("audio before a silent rebuild", false, "could not capture")
+            return
+        }
+        Thread.sleep(forTimeInterval: 1)
+        let rebuilt = Date()
+        _ = playerStartSeconds(on: blackHole, holding: 2)
+        waitForOutput(blackHole)
+
+        check("nothing playing means the path is not started", engineWentIdle(since: rebuilt))
+        checkPlayerStart("a player gets exclusive access at once", on: blackHole)
+        waitForOutput(blackHole)
+
+        guard let after = measure(on: blackHole, tone: tone) else {
+            check("audio comes back after a silent rebuild", false, "could not capture")
+            return
+        }
+        check(
+            "audio comes back after a silent rebuild",
+            after.decibels(after.atLeft[0]) > -60 && after.decibels(after.atRight[1]) > -60,
+            String(format: "ch0 %.1f dB, ch1 %.1f dB",
+                   after.decibels(after.atLeft[0]), after.decibels(after.atRight[1])))
+        let leftDrift = after.decibels(after.atLeft[0]) - reference.decibels(reference.atLeft[0])
+        let rightDrift =
+            after.decibels(after.atRight[1]) - reference.decibels(reference.atRight[1])
+        check(
+            "the sound is still equalized after a silent rebuild",
+            abs(leftDrift) < 0.5 && abs(rightDrift) < 0.5,
+            String(format: "%+.2f dB / %+.2f dB", leftDrift, rightDrift))
+    }
+
+    /// A player taking a real device from a path that has had no audio.
+    ///
+    /// Here because this cannot be seen on BlackHole: there the same sequence took
+    /// 0.03 s, and on a MacBook's speakers 14 s. Nothing is played, so nothing is
+    /// audible, and a failure takes that long to report.
+    static func checkRealDevice(blackHole: AudioDeviceID) {
+        print("A real device, with nothing played")
+        let real = devices().first {
+            transportType(of: $0) == kAudioDeviceTransportTypeBuiltIn
+                && outputChannels(of: $0) > 0
+        }
+        guard let real else {
+            skip("a player gets exclusive access at once", "no built-in output on this Mac")
+            return
+        }
+        note(name(of: real))
+
+        // The tap is proven and muting by now, as it is for most of a session.
+        setDefaultOutput(real)
+        Thread.sleep(forTimeInterval: 3)
+        checkPlayerStart("after a rebuild, a player gets exclusive access at once", on: real)
+        waitForOutput(real)
+
+        // Unproven and fresh, as at login.
+        quitApp()
+        Thread.sleep(forTimeInterval: 1)
+        guard launchApp() else {
+            check("CoreEQ launches on a real device", false)
+            return
+        }
+        checkPlayerStart("after launching, a player gets exclusive access at once", on: real)
+        waitForOutput(real)
+        setDefaultOutput(blackHole)
     }
 
     /// Another application changing the device's sample rate underneath the

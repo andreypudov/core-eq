@@ -35,8 +35,22 @@ enum IdlePolicy {
     /// well past the point where a rebuild's 27 ms could be noticed.
     static let idleAfter: TimeInterval = 30
 
+    /// How long the path has been silent, for `evaluate`.
+    ///
+    /// Silence is counted in the IO callback, and a path that has had no audio
+    /// gets no callbacks, so its count stays at zero and it would never go idle.
+    /// Until audio has arrived, the time since starting is the silence.
+    static func silence(
+        observed: TimeInterval, hasReceivedAudio: Bool, secondsRunning: TimeInterval
+    ) -> TimeInterval {
+        hasReceivedAudio ? observed : max(observed, secondsRunning)
+    }
+
+    /// Also decides whether a newly built path starts: `.resume` starts it, and
+    /// anything else leaves it stopped, as if it had gone idle.
+    ///
     /// - Parameters:
-    ///   - isRunning: whether the audio path exists right now.
+    ///   - isRunning: whether the IO proc is started right now.
     ///   - silentSeconds: how long the render path has seen nothing but digital
     ///     zero. Meaningless while not running, and ignored there.
     ///   - isAnythingPlaying: whether any other process is playing output. The
