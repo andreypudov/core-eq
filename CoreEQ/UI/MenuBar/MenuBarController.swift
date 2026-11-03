@@ -105,12 +105,15 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // clicking the switch in the menu left the icon unchanged until the menu
         // closed, which is precisely when nobody is looking at it.
         audioEngine.$isEnabled
-            .combineLatest(audioEngine.$status, audioEngine.$isPausedForRecording)
-            .sink { [weak self] isEnabled, status, isPausedForRecording in
+            .combineLatest(
+                audioEngine.$status, audioEngine.$isPausedForRecording, audioEngine.$exclusiveHold
+            )
+            .sink { [weak self] isEnabled, status, isPausedForRecording, exclusiveHold in
                 self?.applyStatusIcon(
                     for: .init(
                         status: status, isEnabled: isEnabled,
-                        isPausedForRecording: isPausedForRecording))
+                        isPausedForRecording: isPausedForRecording,
+                        exclusiveHold: exclusiveHold))
             }
             .store(in: &cancellables)
     }
@@ -279,11 +282,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let status: AudioEngine.Status
         let isEnabled: Bool
         let isPausedForRecording: Bool
+        let exclusiveHold: ExclusiveAccess.Hold?
 
         var icon: StatusIcon {
             guard AudioEngine.canProcess(status: status) else { return .unavailable }
             guard isEnabled else { return .off }
-            return isPausedForRecording ? .paused : .shaping
+            // Only for the device CoreEQ was on. A hold on some other device
+            // leaves what the user is listening to equalized.
+            return isPausedForRecording || exclusiveHold?.wasOutput == true ? .paused : .shaping
         }
     }
 
@@ -291,7 +297,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         applyStatusIcon(
             for: .init(
                 status: audioEngine.status, isEnabled: audioEngine.isEnabled,
-                isPausedForRecording: audioEngine.isPausedForRecording))
+                isPausedForRecording: audioEngine.isPausedForRecording,
+                exclusiveHold: audioEngine.exclusiveHold))
     }
 
     private func applyStatusIcon(for state: EngineState) {
@@ -316,7 +323,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func engineFailureItem() -> NSMenuItem? {
         let permission = PermissionPrompt(
             access: audioEngine.tapAccess, canAskMacOS: AudioCapturePermission.isAvailable)
-        guard let title = permission?.menuTitle ?? audioEngine.status.summary else { return nil }
+        let hold = audioEngine.exclusiveHold
+        guard let title = permission?.menuTitle ?? audioEngine.status.summary ?? hold?.summary
+        else { return nil }
         let isPermission = permission != nil
 
         // Always General, whichever kind of warning this is. Someone clicking a
@@ -334,7 +343,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 ? "exclamationmark.circle.fill" : "exclamationmark.triangle.fill",
             accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
-        item.toolTip = audioEngine.status.description
+        item.toolTip =
+            audioEngine.status.summary == nil
+            ? hold?.message ?? audioEngine.status.description : audioEngine.status.description
         return item
     }
 

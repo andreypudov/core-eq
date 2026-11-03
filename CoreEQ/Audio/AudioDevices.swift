@@ -315,6 +315,19 @@ enum AudioDevices {
         outputBufferChannels(of: deviceID).reduce(0, +)
     }
 
+    static var hogModeAddress: AudioObjectPropertyAddress {
+        address(kAudioDevicePropertyHogMode)
+    }
+
+    /// The process holding this device to itself, or -1 when it is shared.
+    static func hogModeOwner(of deviceID: AudioDeviceID) -> pid_t {
+        var hogAddress = address(kAudioDevicePropertyHogMode)
+        var owner: pid_t = -1
+        var size = UInt32(MemoryLayout<pid_t>.size)
+        let status = AudioObjectGetPropertyData(deviceID, &hogAddress, 0, nil, &size, &owner)
+        return status == noErr ? owner : -1
+    }
+
     /// Whether anything at all is using this device right now.
     ///
     /// One property on one object, at about 0.05 ms — a hundred times cheaper

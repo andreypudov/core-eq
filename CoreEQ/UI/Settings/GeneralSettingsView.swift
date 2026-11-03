@@ -22,8 +22,8 @@ struct GeneralSettingsView: View {
     /// is already about exactly that, and saying it twice on one pane would read
     /// as two faults rather than one.
     private var engineProblem: String? {
-        guard case .failed(_, let message) = engine.status else { return nil }
-        return message
+        if case .failed(_, let message) = engine.status { return message }
+        return engine.exclusiveHold?.message
     }
 
     var body: some View {

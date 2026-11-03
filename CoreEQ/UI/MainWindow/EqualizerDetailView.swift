@@ -62,6 +62,8 @@ struct EqualizerDetailView: View {
                         permissionOverlay
                     } else if let failure = engineFailure {
                         engineOverlay(failure)
+                    } else if let hold = audioEngine.exclusiveHold, hold.wasOutput {
+                        engineOverlay(hold.message)
                     } else if audioEngine.isPausedForRecording {
                         recordingOverlay
                     }
@@ -795,7 +797,7 @@ struct EqualizerDetailView: View {
 
     private var engineWarning: String? {
         switch audioEngine.status {
-        case .running: return nil
+        case .running, .heldExclusively: return nil
         case .stopped:
             return String(
                 localized: "CoreEQ isn’t running", comment: "Warning icon, for VoiceOver")

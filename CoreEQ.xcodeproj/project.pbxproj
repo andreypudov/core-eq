@@ -21,6 +21,7 @@
 				Audio/AudioDeviceList.swift,
 				Audio/AudioDevices.swift,
 				Audio/AudioEngine.swift,
+				Audio/ExclusiveAccessMonitor.swift,
 				"Extensions/Color+CoreEQ.swift",
 				"Extensions/NSFont+Bold.swift",
 				Resources/AppIcon.icns,
