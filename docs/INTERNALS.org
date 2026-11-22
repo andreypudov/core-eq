@@ -147,12 +147,30 @@ someone to choose a single output, and the switch stays available.
 
 ** Which test covers what
 
-| Question                                         | Where                       |
-|--------------------------------------------------+-----------------------------|
+| Question                                         | Where                         |
+|--------------------------------------------------+-------------------------------|
 | What should the engine decide?                   | =IdlePolicyTests=, =ExclusiveAccessTests=, =CaptureProofTests= |
-| Does audio arrive, equalized, after each change? | =make audio-test=           |
-| Does a player get a real device at once?         | =make audio-test=, last section |
-| What exactly happens during a hold?              | =make hog-test=             |
+| Does audio arrive, equalized, after each change? | =make audio-test=             |
+| Does a player get a real device at once?         | =make audio-test=             |
+| Is a hold noticed, and the sound right after it? | =make audio-test=, from the engine's log |
+| What exactly happens during a hold?              | =make hog-test=               |
+
+=make audio-test= runs these states, each followed by a tone that has to arrive
+equalized: launch with nothing played, playing, idle and resume, a rate change, a
+silent rebuild, a hold on the output and on another device, switching outputs in
+silence, a real device after a rebuild and after launch, and Pause When Silent off.
+
+Manual only, and why:
+
+- *Bluetooth.* No headset in the loop. A Jabra Evolve 75 measured suspending its
+  own stream about 1 s after playback started in 2 of 3 starts, with or without
+  CoreEQ, and Quick Look stops when that happens. Check that before blaming CoreEQ.
+- *The unequalized start after idle.* Capturing from BlackHole runs the device,
+  which wakes CoreEQ before the tone plays, so the test cannot see a start.
+- *Wake from sleep.* A scheduled wake needs =sudo=.
+- *The EQ switch, the card, the icon and the menu row.* Nothing outside the app
+  drives them.
+- *Real players and DACs.* IINA on the speakers was checked by hand.
 
 Add a state to =make audio-test= when adding one to the table above. The stall went
 unnoticed because every check played audio first, and the idle check only asked
