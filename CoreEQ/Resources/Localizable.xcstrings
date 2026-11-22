@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ Has Exclusive Access" : {
+      "comment" : "Menu row: the app holding an output device to itself"
+    },
     "%@ copy" : {
       "comment" : "Name of a duplicated preset, such as “Jazz copy”"
     },
@@ -9,6 +12,17 @@
     },
     "%@ downloaded" : {
       "comment" : "AutoEq catalog download progress, size unknown, such as “2 MB downloaded”"
+    },
+    "%@ has exclusive access to “%@”, so its sound isn’t being equalized. The equalizer returns when %@ lets go." : {
+      "comment" : "Engine status: an app holds an output device to itself",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ has exclusive access to “%2$@”, so its sound isn’t being equalized. The equalizer returns when %3$@ lets go."
+          }
+        }
+      }
     },
     "%@ hertz" : {
 
@@ -391,6 +405,12 @@
     },
     "An equalizer has to reach the sound to change it. CoreEQ reads audio on its way to your speakers, adjusts it, and plays it straight back. Nothing is recorded, stored, or sent anywhere, and quitting CoreEQ hands the audio back immediately." : {
       "comment" : "What the audio permission is for, shown before macOS asks"
+    },
+    "Another App Has Exclusive Access" : {
+      "comment" : "Menu row: an unnamed app holding an output device to itself"
+    },
+    "Another app has exclusive access to “%@”, so its sound isn’t being equalized. The equalizer returns when that app lets go." : {
+      "comment" : "Engine status: an unnamed app holds an output device to itself"
     },
     "Another copy of CoreEQ is running." : {
       "comment" : "Alert title at launch, when CoreEQ is already running"

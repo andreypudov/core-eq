@@ -35,8 +35,22 @@ enum IdlePolicy {
     /// well past the point where a rebuild's 27 ms could be noticed.
     static let idleAfter: TimeInterval = 30
 
+    /// How long the path has been silent, for `evaluate`.
+    ///
+    /// Silence is counted in the IO callback, and a path that has had no audio
+    /// gets no callbacks, so its count stays at zero and it would never go idle.
+    /// Until audio has arrived, the time since starting is the silence.
+    static func silence(
+        observed: TimeInterval, hasReceivedAudio: Bool, secondsRunning: TimeInterval
+    ) -> TimeInterval {
+        hasReceivedAudio ? observed : max(observed, secondsRunning)
+    }
+
+    /// Also decides whether a newly built path starts: `.resume` starts it, and
+    /// anything else leaves it stopped, as if it had gone idle.
+    ///
     /// - Parameters:
-    ///   - isRunning: whether the audio path exists right now.
+    ///   - isRunning: whether the IO proc is started right now.
     ///   - silentSeconds: how long the render path has seen nothing but digital
     ///     zero. Meaningless while not running, and ignored there.
     ///   - isAnythingPlaying: whether any other process is playing output. The
@@ -44,11 +58,11 @@ enum IdlePolicy {
     ///   - isEnabled: whether the user has CoreEQ switched on at all.
     ///   - isCaptureProven: whether a tap has been seen delivering audio.
     ///   - pausesWhenSilent: the user's setting. False pins the engine on.
-    ///   - isAudioStarting: whether something has just announced itself as about
-    ///     to use audio, which arrives slightly before it plays.
     ///   - isRecovering: whether the last attempt to build the path failed.
     ///   - stepsAsideForRecording: whether a recording is capturing system audio
     ///     and the user wants CoreEQ out of its way. See `RecordingDetection`.
+    ///   - isOutputHeld: whether another process holds the device the path is
+    ///     built around. See `ExclusiveAccess`.
     ///   - idleAfter: the silence that counts as nothing playing.
     /// - Returns: what to do.
     static func evaluate(
@@ -58,9 +72,9 @@ enum IdlePolicy {
         isEnabled: Bool,
         isCaptureProven: Bool,
         pausesWhenSilent: Bool,
-        isAudioStarting: Bool = false,
         isRecovering: Bool = false,
         stepsAsideForRecording: Bool = false,
+        isOutputHeld: Bool = false,
         idleAfter: TimeInterval = idleAfter
     ) -> Verdict {
         // A path that cannot be built is not a path that should be built twice a
@@ -70,6 +84,12 @@ enum IdlePolicy {
         // engine refuses would be retried at the poll interval forever, which is
         // the same fault as a retry loop with no ceiling.
         guard !isRecovering else { return isRunning ? .keepRunning : .stayIdle }
+
+        // A player that has taken the device looks exactly like a player that
+        // wants equalizing: the device is running. Starting a path around a held
+        // device gets no audio and has been measured stalling the player by about
+        // fourteen seconds. Ahead of `pausesWhenSilent`, which would resume.
+        if isOutputHeld, !isRunning { return .stayIdle }
 
         // A recording is capturing system audio, and while CoreEQ renders it
         // hears every sound twice. Stepping aside is what switching off does —
@@ -96,14 +116,7 @@ enum IdlePolicy {
             // Switched off, there is nothing to come back for: the audio path
             // would be built only to pass audio through untouched.
             guard isEnabled else { return .stayIdle }
-            // `isAudioStarting` is deliberately enough on its own. The device
-            // needs about 90 ms to deliver its first buffer after being
-            // started, and a process announcing itself arrives about 80 ms
-            // before it plays — so acting on the announcement is what turns a
-            // gap of unequalized audio into no gap at all. Being wrong costs
-            // one idle period, which is thirty seconds of a device nobody is
-            // using; being late costs audio the user hears.
-            return (isAnythingPlaying || isAudioStarting) ? .resume : .stayIdle
+            return isAnythingPlaying ? .resume : .stayIdle
         }
 
         // Switched off is the clearest case there is — no audio is being

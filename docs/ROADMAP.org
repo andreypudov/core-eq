@@ -208,6 +208,47 @@ What it costs and what it risks:
   surface: once people have built automations on an action, renaming or
   removing it breaks them. Another reason to start with three.
 
+** A player holding the device in hog mode
+
+Raised on r/MacApps: when a player takes the DAC in exclusive or hog mode, a tap
+may not see that audio at all, and then the menu bar would look like the EQ is
+on while nothing is being equalized. Measured with =make hog-test=, using a second
+process as the player and BlackHole as a stand-in DAC, and it is true, with a
+twist: macOS moves the default output off the hogged device, so CoreEQ reported
+that it was running on the fallback. Details are in “A player holding the device”
+in [[file:INTERNALS.org][INTERNALS.org]].
+
+Done, not yet released:
+
+- Every output device is watched for hog mode, and the status names the app and
+  the device. The switch stays available, because it records what the user wants.
+  The icon shows paused only when the held device is the one CoreEQ was on.
+- A player taking a real device waited about 14 s whenever CoreEQ had a path with
+  no audio: from idle, after launching, after a rebuild. It now starts as quickly
+  as it does without CoreEQ (0.03 s), because the IO proc runs only while there is
+  audio. See “When the IO proc runs” in [[file:INTERNALS.org][INTERNALS.org]].
+
+Still owed:
+
+- *Try it with a real DAC.* IINA took the speakers and behaved as expected, by hand.
+  A player may also change the stream format, which the test does not do.
+- *Measure the unequalized start.* The first sound after a silent build or an idle
+  now starts unequalized until the device delivers. The 40-48 ms in INTERNALS.org
+  was measured with the head start that has gone.
+- *A Mac with nowhere to fall back to.* Not measured: the default output cannot
+  move, so the path stays on the held device.
+- *Held before CoreEQ launches, with an Aggregate Device as the fallback.* CoreEQ
+  cannot tell that the held device was the one in use, so the status can still say
+  to choose a single output device, and the switch is disabled until the device is
+  released.
+- *A player taking the device just as audio has started the IO proc.* Could still
+  stall. Not tested.
+- =UnrenderableTapFormat= was logged once, during a stall, and the next rebuild was
+  fine. Not seen since the fix, and the cause is not known.
+
+This is about being honest in the status, not about bit-perfect playback, which
+stays under *Not planned*.
+
 ** Lower latency
 
 One report (#55): a DJ playing Rekordbox's master through the Mac's speakers

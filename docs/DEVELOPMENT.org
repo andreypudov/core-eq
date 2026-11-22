@@ -261,6 +261,12 @@ rebuild that broke playback on Bluetooth. What they have in common is that every
 layer of the app went on reporting that it worked. The only thing that catches
 that is listening to the output.
 
+Pass =SIGN_IDENTITY= so that it does not ask for the audio permission on each run,
+and quit any ad hoc build first, because the test restores whatever was running. Its
+last section uses the Mac's built-in output, silently, because a stall measured
+there does not reliably show on BlackHole. A failure there takes about 14 s to
+report. See “Which test covers what” in [[file:INTERNALS.org][INTERNALS.org]].
+
 It plays a stereo tone with a *different frequency in each channel*, so a map
 that swaps or smears them fails rather than merely sounding odd, and captures
 through BlackHole — silent, exact, and independent of speakers. What it asserts:
