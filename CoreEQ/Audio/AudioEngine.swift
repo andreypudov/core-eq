@@ -73,6 +73,12 @@ final class AudioEngine: ObservableObject {
     func showStatusForSnapshot(_ status: Status) {
         self.status = status
     }
+
+    /// Shows an answer about the audio permission without asking macOS. For
+    /// snapshots only.
+    func showTapAccessForSnapshot(_ access: TapAccess) {
+        tapAccess = access
+    }
     #endif
 
     @Published private(set) var tapAccess: TapAccess = .unknown

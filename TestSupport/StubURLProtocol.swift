@@ -1,6 +1,13 @@
 import Foundation
 import Testing
 
+// Shared by both test targets. CoreEQTests compiles the app's sources into
+// itself and must never import the app module; the snapshot tests are hosted in
+// the app and must. `SNAPSHOT_TESTS` is set on the snapshot target only.
+#if SNAPSHOT_TESTS
+@testable import CoreEQ
+#endif
+
 /// Both network and store tests share the protocol registry and must not run
 /// concurrently with one another.
 @Suite(.serialized)

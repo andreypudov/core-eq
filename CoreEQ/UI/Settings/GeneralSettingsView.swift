@@ -10,8 +10,10 @@ struct GeneralSettingsView: View {
     /// Mirrors the system's answer rather than storing one of its own. Refreshed
     /// whenever the app is brought forward, because the user can revoke the login
     /// item in System Settings while this is on screen.
-    @State private var opensAtLogin = LoginItem.isEnabled
+    @State private var opensAtLogin = false
     @State private var loginItemFailed = false
+
+    @Environment(\.settingsFacts) private var facts
 
     @ObservedObject private var engine = EngineStatusBridge.shared
     @ObservedObject private var route = SettingsRoute.shared
@@ -80,38 +82,26 @@ struct GeneralSettingsView: View {
             }
 
             Section {
-                // Laid out here rather than with `LabeledContent`, which places
-                // its value column on its own alignment and insets — that is
-                // what left the button at a different margin from every other
-                // row. An `HStack` with a `Spacer` puts the trailing edge on the
-                // form's own margin, so the button lines up with the toggle in
-                // the section above.
-                HStack(spacing: 12) {
-                    Text("System Audio Recording")
-
-                    Spacer(minLength: 12)
-
-                    Label(permission.title, systemImage: permission.symbol)
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(
-                            permission.isGranted
-                                ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-
-                    // Only when there is genuinely something to do. "Not
-                    // determined this session" is not a problem, and offering to
-                    // fix it is the same mistake as calling it refused: it sends
-                    // someone to correct something that is not wrong.
-                    //
-                    // Prominent because arriving here from the menu bar means
-                    // having been sent to do something, and the something has to
-                    // be obvious at a glance. The same button as the main
-                    // window's, from the same `PermissionPrompt`.
-                    if let action = prompt?.secondary {
-                        Button(action.title) { engine.perform(action) }
+                // Reflows rather than squeezes, whatever the language: one
+                // line when the title, the status, and the buttons all fit at
+                // their own size; then the buttons on a line of their own;
+                // then a line each, with the title free to wrap. Squeezed onto
+                // one line, “Relaunch CoreEQ” came out as “Relaunch Core…” in
+                // English. See “Room for every language” in STRINGS.org.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        permissionTitleAndStatus(wraps: false)
+                        permissionActions
                     }
-                    if let action = prompt?.primary {
-                        Button(action.title) { engine.perform(action) }
-                            .buttonStyle(.borderedProminent)
+
+                    VStack(alignment: .trailing, spacing: 10) {
+                        HStack(spacing: 12) { permissionTitleAndStatus(wraps: false) }
+                        HStack(spacing: 12) { permissionActions }
+                    }
+
+                    VStack(alignment: .trailing, spacing: 10) {
+                        HStack(spacing: 12) { permissionTitleAndStatus(wraps: true) }
+                        permissionActions
                     }
                 }
             } footer: {
@@ -121,16 +111,60 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear { opensAtLogin = facts.isLoginItemEnabled }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
             // Coming back from System Settings is the likeliest way for either of
             // these to have changed underneath us.
-            opensAtLogin = LoginItem.isEnabled
+            opensAtLogin = facts.isLoginItemEnabled
         }
     }
 
     // MARK: - The permission
+
+    /// Laid out by hand rather than with `LabeledContent`, which places its
+    /// value column on its own alignment and insets — that is what left the
+    /// button at a different margin from every other row. A `Spacer` puts the
+    /// trailing edge on the form's own margin, so the status and the buttons
+    /// line up with the toggles in the sections above.
+    ///
+    /// The title keeps one line until the last layout, where it may wrap
+    /// rather than push the status off the row.
+    @ViewBuilder private func permissionTitleAndStatus(wraps: Bool) -> some View {
+        Text("System Audio Recording")
+            .fixedSize(horizontal: !wraps, vertical: true)
+
+        Spacer(minLength: 12)
+
+        Label(permission.title, systemImage: permission.symbol)
+            .labelStyle(.titleAndIcon)
+            .foregroundStyle(
+                permission.isGranted ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary)
+            )
+            .fixedSize()
+    }
+
+    /// Only when there is genuinely something to do. "Not determined this
+    /// session" is not a problem, and offering to fix it is the same mistake as
+    /// calling it refused: it sends someone to correct something that is not
+    /// wrong.
+    ///
+    /// Prominent because arriving here from the menu bar means having been
+    /// sent to do something, and the something has to be obvious at a glance.
+    /// The same buttons as the main window's, from the same `PermissionPrompt`.
+    /// Never narrower than their titles: a button is never cut off.
+    @ViewBuilder private var permissionActions: some View {
+        if let action = prompt?.secondary {
+            Button(action.title) { engine.perform(action) }
+                .fixedSize()
+        }
+        if let action = prompt?.primary {
+            Button(action.title) { engine.perform(action) }
+                .buttonStyle(.borderedProminent)
+                .fixedSize()
+        }
+    }
 
     /// What CoreEQ can honestly say about the permission.
     ///
@@ -212,16 +246,16 @@ struct GeneralSettingsView: View {
     /// it cannot be handed, being a separate scene.
     private var idleBinding: Binding<Bool> {
         Binding(
-            get: { SettingsStore().pausesWhenSilent },
-            set: { SettingsStore().pausesWhenSilent = $0 }
+            get: { facts.settings.pausesWhenSilent },
+            set: { facts.settings.pausesWhenSilent = $0 }
         )
     }
 
     /// Read by the engine on its next idle check, like `idleBinding`.
     private var recordingBinding: Binding<Bool> {
         Binding(
-            get: { SettingsStore().pausesWhileRecording },
-            set: { SettingsStore().pausesWhileRecording = $0 }
+            get: { facts.settings.pausesWhileRecording },
+            set: { facts.settings.pausesWhileRecording = $0 }
         )
     }
 
@@ -234,7 +268,7 @@ struct GeneralSettingsView: View {
                 loginItemFailed = !succeeded
                 // Whatever happened, the control ends up showing the system's
                 // answer rather than the user's request.
-                opensAtLogin = LoginItem.isEnabled
+                opensAtLogin = facts.isLoginItemEnabled
             }
         )
     }

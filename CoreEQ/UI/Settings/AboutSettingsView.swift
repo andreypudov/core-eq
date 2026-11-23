@@ -12,6 +12,8 @@ struct AboutSettingsView: View {
     /// the release is cut, so a build made between releases would link to a 404.
     private static let releases = URL(string: "https://github.com/andreypudov/core-eq/releases")!
 
+    @Environment(\.settingsFacts) private var facts
+
     var body: some View {
         VStack(spacing: 10) {
             AppMark()
@@ -50,7 +52,8 @@ struct AboutSettingsView: View {
     /// an About that disagrees with itself.
     private var versionLine: String {
         let version =
-            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            facts.appVersion
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         return String(
             localized: "Version \(version ?? "—")", comment: "About: the app’s version number")
     }

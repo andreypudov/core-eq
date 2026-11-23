@@ -258,10 +258,39 @@ nobody meant to make: a label that moved, a colour that shifted, text a
 longer language would cut off. It does not check behaviour — what a drag or a
 double-click does belongs in the unit tests.
 
-*What is covered.* The response plot, the sidebar, and the equalizer column
-with each editor tab, in light and dark. Each is drawn from fixed state — a
+*What is covered.* In light and dark, every window a person sees:
+
+- /Main window/ — the response plot, the sidebar, and the equalizer column
+  with each editor tab.
+- /AutoEQ/ — the browser with a model chosen and its correction previewed,
+  the “Import by Hand” guide, and the import confirmation sheet.
+- /Settings/ — General (as it usually is, and with a fault and a refused
+  permission), Exclusions, Diagnostics, and About.
+
+Each is drawn from fixed state, so nothing on the machine reaches an image: a
 fixed preset, two made-up output devices, a spectrum from a fixed signal, the
-engine shown as running — so nothing on the machine reaches an image.
+engine shown as running. The AutoEQ browser loads its catalog from a fixture
+cache and its correction through =StubURLProtocol=, the same fixtures the
+store's own tests use, so a run never reaches the network. The Settings panes
+read the machine through =SettingsFacts= — where settings are stored, the
+login item, the version, the diagnostics report — which the app leaves at the
+real values and the tests fix.
+
+*Views that load something.* =expectSnapshot= waits by suspending
+(=Task.sleep=), not by spinning the run loop: a spin inside a main-actor test
+blocks every other main-actor task, so a window's own =.task= — the AutoEQ
+catalog load — would never run. =afterAppearing= does what a person would do
+next (choose a model), and =settle= gives what that starts time to finish.
+Keyboard focus is cleared before the picture is taken, because a focused field
+draws a blinking text cursor. All suites run one at a time, nested in
+=SnapshotTests=: they share the run loop, the engine bridge the Settings panes
+read, and the network stub.
+
+*Helpers both test targets use* live in =TestSupport/=: =InMemoryDefaults=,
+the AutoEQ fixtures, and =StubURLProtocol=. =CoreEQTests= compiles the app's
+sources and must never import the app module; the snapshot target is hosted in
+the app and must. The shared files import it only under =SNAPSHOT_TESTS=, a
+condition set on the snapshot target alone.
 
 *Languages.* =CoreEQSnapshots.xctestplan= runs every test once per
 configuration, and each configuration records its own images, named
@@ -271,6 +300,17 @@ configuration, and each configuration records its own images, named
 - /Double-Length/ — the pseudolanguage that shows every string twice
   (=-NSDoubleLocalizedStrings YES=). It stands in for a language whose words
   are much longer than English, and is where truncation shows up first.
+
+  Expect raw placeholders in its images, and don't fix them: “#@value@
+  %#@value@” where a count belongs (“3 models”, “2 measurements”, “Saving will
+  adjust 2 values…”), and “@ dB” in the first copy of a string with numbers in
+  it. macOS doubles a string's template before it fills it in, and a plural
+  string's template is an internal placeholder that only becomes “3 models”
+  once its form is chosen — doubled, the lookup fails and the placeholder shows.
+  English images of the same screens show these strings correctly, and a real
+  translation never doubles anything. The text is still about as long as the
+  real doubled text, so what the configuration is for — room — is still
+  checked; only those strings' wording isn't.
 
 Adding a language is one more configuration with its =language= set, then
 =make snapshot-record SNAPSHOT_CONFIG=<name>=.
@@ -293,6 +333,9 @@ unlike =CoreEQTests=. A host-less bundle has the test runner as its main
 bundle, so views would lose the app's string catalog and no language could be
 tested. While hosting tests the app skips its own startup — no tap, no menu
 bar item, no presets read — so a run does not disturb an installed CoreEQ.
+The host shares the installed app's bundle identifier, so its standard
+defaults *are* the user's CoreEQ settings: no snapshot reads them, which is
+why the Settings panes take theirs from =SettingsFacts=.
 
 *Limits.*
 

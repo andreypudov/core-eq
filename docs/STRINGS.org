@@ -68,6 +68,11 @@ language.
   it comes and goes, hide it with =opacity=, which keeps its size, rather than
   reserving a measured slot. Where a space must mirror a control, mirror it
   with a hidden copy of that control. Revert in the header does both.
+- *A row reflows rather than squeezes.* When a row's controls don't all fit
+  at their own size, it moves them to a line of their own, and then to a line
+  each, with =ViewThatFits= choosing the first layout that fits. The
+  permission row in General does this: squeezed onto one line, “Relaunch
+  CoreEQ” was cut off in English.
 - *A column takes its widest content.* Columns that line up across rows can't
   size row by row, so they are as wide as the widest thing they can hold — every
   option, and the column's title — measured at run time from the control that
@@ -101,7 +106,9 @@ The double-length pseudolanguage shows every string twice, so it finds any
 place that has not made room. It is a configuration of the snapshot tests
 (=make snapshot-test=), and its images are where a change here is checked: the
 English images must not change, and the double-length ones show what was
-fixed.
+fixed. Plural strings and strings with numbers come out there as raw
+placeholders (“#@value@”) — a limit of the pseudolanguage, not a fault; see
+“Snapshot tests” in [[file:DEVELOPMENT.org][DEVELOPMENT.org]].
 
 * Voice
 
