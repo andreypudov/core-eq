@@ -39,41 +39,33 @@ struct FilterListView: View {
     /// same tokens, so the two can't drift apart.
     private var columnTitles: some View {
         HStack(spacing: 0) {
-            title(Text(verbatim: "#"), width: Theme.FilterRow.Column.index, alignment: .leading)
+            title(Column.Title.index, width: Column.index, alignment: .leading)
             ColumnGap()
-            title(
-                Text("On", comment: "Band list column: band turned on"),
-                width: Theme.FilterRow.Column.enable)
+            title(Column.Title.enable, width: Column.enable)
             ColumnGap()
-            title(
-                Text("Type", comment: "Band list column: filter type"),
-                width: Theme.FilterRow.Column.type)
+            title(Column.Title.type, width: Column.type)
             ColumnGap()
-            title(
-                Text("Frequency", comment: "Band list column"),
-                width: Theme.FilterRow.Column.frequency)
+            title(Column.Title.frequency, width: Column.frequency)
             ColumnGap()
-            title(Text("Gain", comment: "Band list column"), width: Theme.FilterRow.Column.gain)
+            title(Column.Title.gain, width: Column.gain)
             ColumnGap()
-            title(
-                Text("Q", comment: "Band list column: the band’s width"),
-                width: Theme.FilterRow.Column.q)
+            title(Column.Title.q, width: Column.q)
             Spacer(minLength: Theme.FilterRow.columnSpacing)
-            title(
-                Text("Actions", comment: "Band list column: the row’s buttons"),
-                width: Theme.FilterRow.Column.actions, alignment: .trailing)
+            title(Column.Title.actions, width: Column.actions, alignment: .trailing)
         }
         .frame(height: Theme.FilterRow.headerHeight)
         .padding(.horizontal, 8)
         .accessibilityHidden(true)
     }
 
-    /// A title sits over its column at the column's own width, but keeps its
-    /// full length if it is the wider of the two: the columns are sized for the
-    /// controls in them, and "Actions" over a 24-point button would otherwise
-    /// arrive as "Ac…".
-    private func title(_ text: Text, width: CGFloat, alignment: Alignment = .center) -> some View {
-        text
+    private typealias Column = Theme.FilterRow.Column
+
+    /// A title over its column. The column is at least as wide as its title in
+    /// every language, so a title never spills over its neighbour: "Actions"
+    /// over the 24-point delete button used to, into the gap beside it.
+    private func title(_ text: String, width: CGFloat, alignment: Alignment = .center) -> some View
+    {
+        Text(verbatim: text)
             // The size the Preamp readout and the band captions use, so the
             // window has one voice for the small print rather than a different
             // one per section.

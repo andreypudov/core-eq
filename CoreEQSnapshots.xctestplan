@@ -14,6 +14,9 @@
       "options" : {
         "commandLineArgumentEntries" : [
           {
+            "argument" : "-AppleShowScrollBars WhenScrolling"
+          },
+          {
             "argument" : "-NSDoubleLocalizedStrings YES"
           }
         ],
@@ -23,6 +26,11 @@
     }
   ],
   "defaultOptions" : {
+    "commandLineArgumentEntries" : [
+      {
+        "argument" : "-AppleShowScrollBars WhenScrolling"
+      }
+    ],
     "targetForVariableExpansion" : {
       "containerPath" : "container:CoreEQ.xcodeproj",
       "identifier" : "1A0000000000000000000005",

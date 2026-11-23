@@ -8,12 +8,15 @@ import Testing
 /// be dragged down to `contentMinSize`. Nothing at runtime complains when those
 /// two facts stop being compatible — the columns simply clip, on the narrowest
 /// window, which is where it is least likely to be noticed.
+@MainActor
 @Suite(.serialized)
 struct ThemeTests {
     /// The width the editor block actually has when the window is at its
     /// smallest, derived the way the window derives it.
     private var editorBlockWidth: CGFloat {
-        let windowMinimum: CGFloat = 960  // AppDelegate.contentMinSize
+        // `AppDelegate` sets it as the window's `contentMinSize`. It follows the
+        // Type column, so this holds in every language, not only English.
+        let windowMinimum = MainWindowGeometry.minimum.width
         let sidebar: CGFloat = 216  // NSSplitViewItem.minimumThickness
         let content = windowMinimum - sidebar - Theme.Spacing.window * 2
         let editor = content - Theme.globalGainWidth - Theme.Spacing.inner
@@ -197,5 +200,46 @@ struct ThemeTests {
         let dg = Double(a.greenComponent - b.greenComponent)
         let db = Double(a.blueComponent - b.blueComponent)
         return (dr * dr + dg * dg + db * db).squareRoot()
+    }
+
+    // MARK: - Room for every language
+
+    /// English keeps the width it always had; only a longer language grows it.
+    @Test func theTypeColumnIsNeverNarrowerThanEnglishNeeds() {
+        #expect(Theme.FilterRow.Column.type >= Theme.FilterRow.Column.typeContent)
+    }
+
+    /// The column holds its widest kind, measured from the control that draws
+    /// it, rather than a number typed in for one language.
+    @Test func theTypeColumnHoldsItsWidestKind() {
+        let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
+        popUp.controlSize = .small
+        popUp.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
+        popUp.addItems(withTitles: EQFilter.Kind.allCases.map(\.title))
+
+        #expect(Theme.FilterRow.Column.type >= popUp.intrinsicContentSize.width)
+    }
+
+    /// Whatever the table takes beyond its English contents, the window's
+    /// minimum gives back.
+    @Test func theWindowMinimumGrowsWithTheTable() {
+        #expect(
+            MainWindowGeometry.minimum.width == 960 + Theme.FilterRow.Column.growth)
+    }
+
+    /// No title spills over its neighbour: every column is at least as wide
+    /// as its own title.
+    @Test func everyColumnHoldsItsTitle() {
+        typealias Column = Theme.FilterRow.Column
+        let columns: [(CGFloat, String)] = [
+            (Column.index, Column.Title.index), (Column.enable, Column.Title.enable),
+            (Column.type, Column.Title.type), (Column.frequency, Column.Title.frequency),
+            (Column.gain, Column.Title.gain), (Column.q, Column.Title.q),
+            (Column.actions, Column.Title.actions),
+        ]
+        for (width, title) in columns {
+            let needed = (title as NSString).size(withAttributes: [.font: Column.titleFont]).width
+            #expect(width >= needed, "“\(title)” needs \(needed) pt and has \(width)")
+        }
     }
 }

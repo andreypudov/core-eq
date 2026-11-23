@@ -368,7 +368,7 @@
       "comment" : "Built-in preset description: Lounge"
     },
     "AUTO" : {
-      "comment" : "Automatic gain switch, written in capitals as a badge"
+      "comment" : "Automatic gain switch, written in capitals as a badge under the preamp slider. Keep it to about 5 letters: the badge can grow to about 90 points at most."
     },
     "About" : {
 
@@ -1018,7 +1018,7 @@
 
     },
     "Preamp" : {
-
+      "comment" : "Title of the output trim column, on its border. Keep it short: about 90 points, the width of “Preamp” twice over."
     },
     "Preamp: %@" : {
       "comment" : "Import alert: the preset’s output trim, such as “Preamp: −6.0 dB”"

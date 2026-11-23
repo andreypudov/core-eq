@@ -42,7 +42,12 @@ func expectSnapshot(
         .appendingPathComponent(fileName)
 
     let recording = ProcessInfo.processInfo.environment["SNAPSHOT_RECORD"] == "1"
-    guard !recording, let expected = Snapshot.load(reference) else {
+    let existing = Snapshot.load(reference)
+    // Recording leaves an image that still matches alone: a PNG encoded again
+    // differs byte for byte, and ten unchanged files in the diff hide the six
+    // that did change.
+    if recording, let existing, Snapshot.compare(image, existing).matches { return }
+    guard !recording, let expected = existing else {
         Snapshot.write(image, to: reference)
         Issue.record(
             "Recorded \(reference.path). Look at it, then run again to compare.",
