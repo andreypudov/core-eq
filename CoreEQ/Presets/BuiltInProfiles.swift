@@ -256,7 +256,12 @@ enum BuiltInProfiles {
         assert(gains.count == frequencies.count)
         return EQProfile(
             name: name,
-            filters: gains.enumerated().map { EQFilter.band(slot: $0, gain: $1) } + filters,
+            filters: gains.enumerated().map { EQFilter.band(slot: $0, gain: $1) }
+                // Rebuilt on every launch, so a fresh id each time would never
+                // match the working chain the last launch saved.
+                + filters.enumerated().map {
+                    $1.identified(as: EQFilter.stableID("built-in/\(name)/\($0)"))
+                },
             isBuiltIn: true
         )
     }

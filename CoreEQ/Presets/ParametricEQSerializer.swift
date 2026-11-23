@@ -101,6 +101,7 @@ enum ParametricEQSerializer {
     static func serializeToCoreEQJSON(_ profile: EQProfile) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.userInfo[.omitsFilterIdentity] = true
         // `JSONEncoder` writes UTF-8, so decoding it back cannot fail.
         return String(decoding: try encoder.encode(profile), as: UTF8.self)
     }

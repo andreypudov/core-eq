@@ -194,7 +194,11 @@ extension DeviceEQState {
             chain = FilterChain.applyingTone(
                 bass: bass, mid: mid, treble: treble, to: profile.filters)
         } else {
-            chain = filters.map(FilterChain.normalized) ?? profile.filters
+            chain =
+                filters.map {
+                    FilterChain.adoptingIdentity(
+                        of: profile.filters, into: FilterChain.normalized($0))
+                } ?? profile.filters
         }
 
         // A computed trim is recomputed rather than trusted: the stored number

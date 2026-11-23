@@ -62,4 +62,49 @@ import Testing
         #expect(manager.isAutoGain)
         #expect(manager.tone == ProfileManager.ToneControls(bass: 1, mid: 0, treble: -1))
     }
+
+    // MARK: - Filter identity
+
+    /// 1.9.2 stored no filter ids. The live chain takes its preset's ids on
+    /// loading, so a double-click on a node goes back to the preset — 105 Hz,
+    /// +6 dB for this low shelf — and not to 0 dB.
+    @Test func aNodeOfTheUpgradedChainResetsToItsPreset() throws {
+        let manager = ProfileManager(settings: settings, outputDeviceUID: "BuiltInSpeakerDevice")
+        let shelf = try #require(manager.freeFilters.first)
+
+        manager.setFilterFrequency(300, id: shelf.id)
+        manager.setFilterGain(-6, id: shelf.id)
+        manager.resetFilter(id: shelf.id)
+
+        let reset = try #require(manager.freeFilters.first)
+        #expect(reset.frequency == 105)
+        #expect(reset.gain == 6)
+        #expect(!manager.isModified)
+    }
+
+    /// And keeps doing so on every launch after the first: the ids written
+    /// back on the first one are the ones read on the next.
+    @Test func theUpgradedChainStillResetsAfterAnotherRelaunch() throws {
+        let first = ProfileManager(settings: settings, outputDeviceUID: "BuiltInSpeakerDevice")
+        first.setFilterGain(-6, id: try #require(first.freeFilters.first).id)
+
+        let second = ProfileManager(settings: settings, outputDeviceUID: "BuiltInSpeakerDevice")
+        let shelf = try #require(second.freeFilters.first)
+        #expect(shelf.gain == -6, "the edit came back")
+
+        second.resetFilter(id: shelf.id)
+        #expect(try #require(second.freeFilters.first).gain == 6)
+    }
+
+    /// The one-time rewrite adds ids and changes nothing else.
+    @Test func addingIDsLeavesTheStoredPresetsAsTheyWere() throws {
+        let before = settings.userProfiles
+        _ = ProfileManager(settings: settings, outputDeviceUID: "BuiltInSpeakerDevice")
+        let after = settings.userProfiles
+
+        #expect(after.map(\.name) == before.map(\.name))
+        #expect(after.map(\.filters) == before.map(\.filters))
+        #expect(after.map(\.preamp) == before.map(\.preamp))
+        #expect(!after.flatMap(\.filters).contains { $0.hasGeneratedID })
+    }
 }

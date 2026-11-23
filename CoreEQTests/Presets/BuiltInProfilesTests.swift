@@ -112,16 +112,24 @@ struct BuiltInProfilesTests {
         #expect(!decoded.isBuiltIn, "a decoded profile is always a user profile")
     }
 
-    /// `EQFilter.id` is outside both `CodingKeys` and `==`, so a chain restored
-    /// from disk compares equal to the one it was saved from. Without this,
-    /// `ProfileManager.isModified` would report every launch as edited.
-    @Test func decodedFiltersCompareEqualDespiteFreshIdentifiers() throws {
+    /// `EQFilter.id` is stored, so a chain restored from disk keeps the ids it
+    /// was saved with — which is how a filter is found again in its preset.
+    @Test func decodedFiltersKeepTheirIdentifiers() throws {
         let original = BuiltInProfiles.all[3].filters
         let decoded = try JSONDecoder().decode(
             [EQFilter].self, from: JSONEncoder().encode(original))
 
         #expect(decoded == original)
-        #expect(decoded.map(\.id) != original.map(\.id))
+        #expect(decoded.map(\.id) == original.map(\.id))
+        #expect(!decoded.contains { $0.hasGeneratedID })
+    }
+
+    /// `EQFilter.id` is outside `==`: two chains that sound the same are equal
+    /// whatever their ids. Without this, `ProfileManager.isModified` would
+    /// report a chain rebuilt with new ids as edited.
+    @Test func filtersCompareEqualWhateverTheirIdentifiers() {
+        let filter = EQFilter(kind: .bell, frequency: 1_000, gain: 3, q: 1)
+        #expect(filter.identified(as: UUID()) == filter)
     }
 
     /// Presets written by CoreEQ 1.x stored a `bands` array with no kind, no
