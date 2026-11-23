@@ -34,9 +34,9 @@ struct FrequencyResponseView: View {
     var preamp: Double = 0
 
     /// The analyzer whose output is drawn behind the grid and curve, or nil for
-    /// no backdrop. Deliberately the object rather than its points: it is
-    /// observed by `SpectrumBackdrop` alone, so its sixty-a-second updates
-    /// invalidate that layer and leave this view untouched.
+    /// no backdrop. Deliberately the object rather than its points: only
+    /// `SpectrumBackdrop` subscribes to it, and writes its layers directly, so
+    /// the analyzer's frame-rate updates never invalidate this view.
     var spectrum: SpectrumAnalyzer?
 
     /// The filter whose node is drawn as chosen, and whose row is highlighted in
@@ -191,6 +191,7 @@ struct FrequencyResponseView: View {
                             axis: axis(size),
                             plotHeight: plotHeight(size)
                         )
+                        .accessibilityHidden(true)
                     }
 
                     Canvas { context, _ in
