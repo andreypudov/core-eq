@@ -30,9 +30,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Hosting the snapshot tests: they build their views from fixed state.
+        // Carrying on would contend with the installed app for the single
+        // instance, tap audio, and load the user's real presets.
+        guard !Self.isHostingTests else { return }
+
         // Before anything else exists: a second copy must not get as far as a
         // menu bar icon, let alone a tap. See `SingleInstance`.
         SingleInstance.ensure { [weak self] in self?.finishLaunching() }
+    }
+
+    /// Whether this process was launched by XCTest as the host of a test bundle.
+    private static var isHostingTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     private func finishLaunching() {

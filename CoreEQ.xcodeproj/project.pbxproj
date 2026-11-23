@@ -6,9 +6,20 @@
 	objectVersion = 70;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		1A000000000000000000002A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1A0000000000000000000005;
+			remoteInfo = CoreEQ;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		1A0000000000000000000004 /* CoreEQ.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CoreEQ.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A0000000000000000000011 /* CoreEQTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoreEQTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A0000000000000000000021 /* CoreEQSnapshotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoreEQSnapshotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -73,6 +84,7 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1A0000000000000000000006 /* CoreEQ */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (1A0000000000000000000015 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = CoreEQ; sourceTree = "<group>"; };
 		1A0000000000000000000012 /* CoreEQTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CoreEQTests; sourceTree = "<group>"; };
+		1A0000000000000000000022 /* CoreEQSnapshotTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CoreEQSnapshotTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -90,6 +102,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1A0000000000000000000024 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -98,6 +117,7 @@
 			children = (
 				1A0000000000000000000006 /* CoreEQ */,
 				1A0000000000000000000012 /* CoreEQTests */,
+				1A0000000000000000000022 /* CoreEQSnapshotTests */,
 				1A0000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -107,6 +127,7 @@
 			children = (
 				1A0000000000000000000004 /* CoreEQ.app */,
 				1A0000000000000000000011 /* CoreEQTests.xctest */,
+				1A0000000000000000000021 /* CoreEQSnapshotTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -159,6 +180,29 @@
 			productReference = 1A0000000000000000000011 /* CoreEQTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		1A0000000000000000000020 /* CoreEQSnapshotTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A0000000000000000000026 /* Build configuration list for PBXNativeTarget "CoreEQSnapshotTests" */;
+			buildPhases = (
+				1A0000000000000000000023 /* Sources */,
+				1A0000000000000000000024 /* Frameworks */,
+				1A0000000000000000000025 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1A0000000000000000000029 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1A0000000000000000000022 /* CoreEQSnapshotTests */,
+			);
+			name = CoreEQSnapshotTests;
+			packageProductDependencies = (
+			);
+			productName = CoreEQSnapshotTests;
+			productReference = 1A0000000000000000000021 /* CoreEQSnapshotTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -174,6 +218,10 @@
 					};
 					1A0000000000000000000010 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					1A0000000000000000000020 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = 1A0000000000000000000005;
 					};
 				};
 			};
@@ -193,6 +241,7 @@
 			targets = (
 				1A0000000000000000000005 /* CoreEQ */,
 				1A0000000000000000000010 /* CoreEQTests */,
+				1A0000000000000000000020 /* CoreEQSnapshotTests */,
 			);
 		};
 /* End PBXProject section */
@@ -206,6 +255,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1A0000000000000000000019 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1A0000000000000000000025 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -229,7 +285,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1A0000000000000000000023 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1A0000000000000000000029 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1A0000000000000000000005 /* CoreEQ */;
+			targetProxy = 1A000000000000000000002A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1A000000000000000000000C /* Debug */ = {
@@ -443,6 +514,40 @@
 			};
 			name = Release;
 		};
+		1A0000000000000000000027 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.andreypudov.coreeq.snapshot-tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CoreEQ.app/Contents/MacOS/CoreEQ";
+			};
+			name = Debug;
+		};
+		1A0000000000000000000028 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.andreypudov.coreeq.snapshot-tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CoreEQ.app/Contents/MacOS/CoreEQ";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -469,6 +574,15 @@
 			buildConfigurations = (
 				1A0000000000000000000017 /* Debug */,
 				1A0000000000000000000018 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1A0000000000000000000026 /* Build configuration list for PBXNativeTarget "CoreEQSnapshotTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A0000000000000000000027 /* Debug */,
+				1A0000000000000000000028 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

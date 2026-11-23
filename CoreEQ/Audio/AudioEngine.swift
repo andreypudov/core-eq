@@ -67,6 +67,14 @@ final class AudioEngine: ObservableObject {
 
     @Published private(set) var status: Status = .stopped
 
+    #if DEBUG
+    /// Shows a status without starting anything, so the window can be
+    /// rendered as it looks in each state. For snapshots only.
+    func showStatusForSnapshot(_ status: Status) {
+        self.status = status
+    }
+    #endif
+
     @Published private(set) var tapAccess: TapAccess = .unknown
 
     /// Rate assumed before a device has reported one. Only ever seen during

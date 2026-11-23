@@ -23,7 +23,7 @@ ifneq (,$(findstring CommandLineTools,$(shell xcode-select -p)))
 export DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 endif
 
-.PHONY: build sign test audio-test hog-test format lint strings install release icons screenshot clean
+.PHONY: build sign test snapshot-test snapshot-record audio-test hog-test format lint strings install release icons screenshot clean
 
 build:
 	xcodebuild -project $(APP).xcodeproj -target $(APP) -configuration $(CONFIG) $(XCODE_FLAGS) build
@@ -34,12 +34,12 @@ build:
 # Apple's formatter, bundled with the toolchain — no install, no dependency.
 # Configuration is in .swift-format.
 format:
-	xcrun swift-format format --in-place --recursive --configuration .swift-format CoreEQ CoreEQTests
+	xcrun swift-format format --in-place --recursive --configuration .swift-format CoreEQ CoreEQTests CoreEQSnapshotTests
 
 # The same rules, reported rather than applied. Fails on any finding, so CI can
 # gate on it.
 lint:
-	xcrun swift-format lint --strict --recursive --configuration .swift-format CoreEQ CoreEQTests
+	xcrun swift-format lint --strict --recursive --configuration .swift-format CoreEQ CoreEQTests CoreEQSnapshotTests
 
 # Merges every string the compiler extracted into the String Catalog, the way
 # Xcode does on build — xcodebuild extracts them but leaves the catalog alone.
@@ -53,6 +53,28 @@ strings: build
 
 test:
 	xcodebuild test -project $(APP).xcodeproj -scheme $(APP) -destination 'platform=macOS'
+
+# Renders the main window and its parts offscreen and compares them with the
+# reference images in CoreEQSnapshotTests/__Snapshots__, once per configuration
+# in CoreEQSnapshots.xctestplan (English, and the double-length pseudolanguage
+# that shows what a longer language would truncate). A mismatch writes the
+# actual image and a diff to build/SnapshotFailures. Hosted in the app, which
+# skips its own startup while it does: no tap, no menu bar item, no presets read.
+#
+# `make snapshot-record` rewrites every reference; look at them before
+# committing. SNAPSHOT_CONFIG= narrows either to one configuration, e.g.
+# `make snapshot-test SNAPSHOT_CONFIG=Double-Length`.
+SNAPSHOT_CONFIG ?=
+SNAPSHOT_ARGS = -project $(APP).xcodeproj -scheme $(APP)Snapshots -destination 'platform=macOS' \
+	$(if $(SNAPSHOT_CONFIG),-only-test-configuration $(SNAPSHOT_CONFIG))
+
+snapshot-test:
+	@rm -rf build/SnapshotFailures
+	xcodebuild test $(SNAPSHOT_ARGS)
+
+snapshot-record:
+	TEST_RUNNER_SNAPSHOT_RECORD=1 xcodebuild test $(SNAPSHOT_ARGS) || true
+	@echo "References rewritten; review them with git diff before committing."
 
 # End-to-end check on real hardware: plays a known signal through the built app
 # and measures what actually reaches the device. Silent — it captures through

@@ -31,6 +31,13 @@ final class AudioDeviceList: ObservableObject {
         observe(kAudioHardwarePropertyDefaultOutputDevice)
     }
 
+    /// A fixed list with no Core Audio behind it and nothing observed, so the
+    /// window can be rendered the same on any machine.
+    init(fixed devices: [AudioDevices.Device], defaultDeviceID: AudioDeviceID?) {
+        self.devices = devices
+        self.defaultDeviceID = defaultDeviceID
+    }
+
     /// Isolated for the same reason the listeners were installed on `.main`:
     /// removing a Core Audio property listener has to name the same queue and
     /// the same block it was added with, and both belong to this actor.

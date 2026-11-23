@@ -54,16 +54,18 @@ re-signed with CoreEQ's certificate; with that certificate in your keychain,
 The =Makefile= wraps the common flows (it also auto-selects the full Xcode
 toolchain if =xcode-select= points at the Command Line Tools):
 
-| =make build=      | Release build into =build/Release/CoreEQ.app=           |
-| =make test=       | Run the =CoreEQTests= unit suite                        |
-| =make format=     | Apply the house style to every Swift file               |
-| =make lint=       | Report style violations without changing anything       |
-| =make strings=    | Build, then merge new interface text into the catalog   |
-| =make sign=       | Build, then re-sign with =SIGN_IDENTITY= when it is set |
-| =make install=    | Sign and install to =/Applications=                     |
-| =make release=    | Sign and zip to =dist/CoreEQ-<version>.zip= (=ditto=)   |
-| =make screenshot= | Build, sign, and capture the window for the README      |
-| =make clean=      | Remove =build/= and =dist/=                             |
+| =make build=           | Release build into =build/Release/CoreEQ.app=           |
+| =make test=            | Run the =CoreEQTests= unit suite                        |
+| =make snapshot-test=   | Compare the window with its reference images            |
+| =make snapshot-record= | Rewrite the reference images                            |
+| =make format=          | Apply the house style to every Swift file               |
+| =make lint=            | Report style violations without changing anything       |
+| =make strings=         | Build, then merge new interface text into the catalog   |
+| =make sign=            | Build, then re-sign with =SIGN_IDENTITY= when it is set |
+| =make install=         | Sign and install to =/Applications=                     |
+| =make release=         | Sign and zip to =dist/CoreEQ-<version>.zip= (=ditto=)   |
+| =make screenshot=      | Build, sign, and capture the window for the README      |
+| =make clean=           | Remove =build/= and =dist/=                             |
 
 =make build= takes extra xcodebuild settings through =XCODE_FLAGS=, e.g.
 =make build XCODE_FLAGS=ARCHS=arm64=. It is empty by default, so =make release=
@@ -244,6 +246,65 @@ audio hardware, so it runs anywhere, including CI. Roughly one file per subject:
   between A and B.
 - =SettingsStoreTests=, =ThemeTests=, =ScrollAdjusterTests=, =KnobScaleTests=,
   =SpectrumAnalyzerTests=, and the small format and colour files.
+
+
+** Snapshot tests
+
+
+=make snapshot-test= renders the main window and its parts offscreen and
+compares each image with a reference in
+=CoreEQSnapshotTests/__Snapshots__/<test file>/=. It guards against changes
+nobody meant to make: a label that moved, a colour that shifted, text a
+longer language would cut off. It does not check behaviour — what a drag or a
+double-click does belongs in the unit tests.
+
+*What is covered.* The response plot, the sidebar, and the equalizer column
+with each editor tab, in light and dark. Each is drawn from fixed state — a
+fixed preset, two made-up output devices, a spectrum from a fixed signal, the
+engine shown as running — so nothing on the machine reaches an image.
+
+*Languages.* =CoreEQSnapshots.xctestplan= runs every test once per
+configuration, and each configuration records its own images, named
+=<view>.<appearance>.<language>.png=:
+
+- /English/.
+- /Double-Length/ — the pseudolanguage that shows every string twice
+  (=-NSDoubleLocalizedStrings YES=). It stands in for a language whose words
+  are much longer than English, and is where truncation shows up first.
+
+Adding a language is one more configuration with its =language= set, then
+=make snapshot-record SNAPSHOT_CONFIG=<name>=.
+
+*Reviewing a failure.* A mismatch writes =<name>.actual.png= and
+=<name>.diff.png= (changed pixels in red over the faded reference) to
+=build/SnapshotFailures/=. If the change is intended, =make snapshot-record=
+rewrites the references; read them in the diff before committing, because a
+recorded image is believed from then on. =SNAPSHOT_CONFIG=English= (or any
+configuration name) narrows either command.
+
+*How strict it is.* A pixel counts as changed when a channel moves by more than
+4 of 255, and an image fails at more than 20 changed pixels. A count rather
+than a share of the image: renders on one machine are identical to the pixel,
+and a share large enough to sound small (0.1%) let a one-letter change to a
+button label through.
+
+*Why it runs inside the app.* =CoreEQSnapshotTests= is hosted in =CoreEQ.app=,
+unlike =CoreEQTests=. A host-less bundle has the test runner as its main
+bundle, so views would lose the app's string catalog and no language could be
+tested. While hosting tests the app skips its own startup — no tap, no menu
+bar item, no presets read — so a run does not disturb an installed CoreEQ.
+
+*Limits.*
+
+- References belong to the machine that recorded them. Fonts and
+  anti-aliasing differ between macOS versions, so the suite is a release step
+  (see [[file:RELEASING.org][RELEASING.org]]) rather than a CI job, and a macOS update can mean one
+  re-record with nothing else changed.
+- Selected segments (A/B, the editor tabs) draw grey rather than in the accent
+  colour: AppKit uses the accent only while the app is active, and a test host
+  cannot be without taking focus.
+- The sidebar is drawn without its material, which the real window's split
+  view supplies. =make screenshot= shows the real window.
 
 
 ** =make audio-test=: what the unit tests cannot reach

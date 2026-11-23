@@ -1,0 +1,42 @@
+{
+  "configurations" : [
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E01",
+      "name" : "English",
+      "options" : {
+        "language" : "en",
+        "region" : "US"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E02",
+      "name" : "Double-Length",
+      "options" : {
+        "commandLineArgumentEntries" : [
+          {
+            "argument" : "-NSDoubleLocalizedStrings YES"
+          }
+        ],
+        "language" : "en",
+        "region" : "US"
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:CoreEQ.xcodeproj",
+      "identifier" : "1A0000000000000000000005",
+      "name" : "CoreEQ"
+    }
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:CoreEQ.xcodeproj",
+        "identifier" : "1A0000000000000000000020",
+        "name" : "CoreEQSnapshotTests"
+      }
+    }
+  ],
+  "version" : 1
+}
