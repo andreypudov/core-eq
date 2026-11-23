@@ -21,7 +21,14 @@ enum MainWindowGeometry {
     /// fixed sections plus the graph's floor. A 16:10 minimum would mean either
     /// 600 tall, which clips the editor, or 1_152 wide, which forbids a narrower
     /// window for no reason the layout has.
-    static let minimum = CGSize(width: 960, height: 720)
+    ///
+    /// 960 is what the table's contents need in English. A column whose title
+    /// or contents are wider in the language being shown widens the table,
+    /// and the minimum grows with it, so the table still fits the narrowest
+    /// window.
+    @MainActor static var minimum: CGSize {
+        CGSize(width: 960 + Theme.FilterRow.Column.growth, height: 720)
+    }
 
     /// What it opens at when there is room: about 3:2, wider than it is tall
     /// without running past what the parametric table can use.
@@ -46,7 +53,7 @@ enum MainWindowGeometry {
     /// for less than the window's own minimum on a small or scaled display, and
     /// a window opening below the size its layout needs is the one outcome worth
     /// ruling out here rather than leaving to AppKit to clamp silently.
-    static func openingSize(visibleFrame: CGSize?) -> CGSize {
+    @MainActor static func openingSize(visibleFrame: CGSize?) -> CGSize {
         guard let visibleFrame else { return preferred }
         return CGSize(
             width: max(minimum.width, min(preferred.width, visibleFrame.width - screenInset)),

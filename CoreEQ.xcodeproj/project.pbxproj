@@ -85,6 +85,7 @@
 		1A0000000000000000000006 /* CoreEQ */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (1A0000000000000000000015 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = CoreEQ; sourceTree = "<group>"; };
 		1A0000000000000000000012 /* CoreEQTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CoreEQTests; sourceTree = "<group>"; };
 		1A0000000000000000000022 /* CoreEQSnapshotTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CoreEQSnapshotTests; sourceTree = "<group>"; };
+		1A000000000000000000002B /* TestSupport */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = TestSupport; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -118,6 +119,7 @@
 				1A0000000000000000000006 /* CoreEQ */,
 				1A0000000000000000000012 /* CoreEQTests */,
 				1A0000000000000000000022 /* CoreEQSnapshotTests */,
+				1A000000000000000000002B /* TestSupport */,
 				1A0000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -172,6 +174,7 @@
 			fileSystemSynchronizedGroups = (
 				1A0000000000000000000006 /* CoreEQ */,
 				1A0000000000000000000012 /* CoreEQTests */,
+				1A000000000000000000002B /* TestSupport */,
 			);
 			name = CoreEQTests;
 			packageProductDependencies = (
@@ -195,6 +198,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				1A0000000000000000000022 /* CoreEQSnapshotTests */,
+				1A000000000000000000002B /* TestSupport */,
 			);
 			name = CoreEQSnapshotTests;
 			packageProductDependencies = (
@@ -525,6 +529,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.andreypudov.coreeq.snapshot-tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) SNAPSHOT_TESTS";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CoreEQ.app/Contents/MacOS/CoreEQ";
@@ -542,6 +547,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.andreypudov.coreeq.snapshot-tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) SNAPSHOT_TESTS";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CoreEQ.app/Contents/MacOS/CoreEQ";

@@ -162,29 +162,35 @@ struct EqualizerDetailView: View {
     /// its object is named. It used to be an inch away from the gear and the
     /// power button, with nothing beside it saying what it would undo.
     ///
-    /// The empty cell on the left is the same width as the button on the right,
-    /// so the device control stays on the column's centreline whether or not
-    /// there is anything to revert — otherwise it would slide sideways by half a
-    /// button the moment a slider was touched.
+    /// A hidden copy of the button on the left mirrors the real one on the
+    /// right, so the device control stays on the column's centreline whether or
+    /// not there is anything to revert — otherwise it would slide sideways by
+    /// half a button the moment a slider was touched. A copy rather than a
+    /// measured gap: the button takes its own width in every language, and the
+    /// copy always matches it (see “Room for every language” in STRINGS.org).
     private var deviceAndRevert: some View {
         HStack(spacing: 8) {
-            Color.clear
-                .frame(width: Theme.revertSlotWidth, height: 1)
+            revertButton
+                .hidden()
                 .accessibilityHidden(true)
 
             deviceControl
 
-            Button("Revert") { profileManager.resetToActiveProfile() }
-                .controlSize(.small)
-                .frame(width: Theme.revertSlotWidth, alignment: .leading)
+            revertButton
                 .help("Discard changes and return to the saved preset")
-                // Hidden rather than removed: the slot is held either way, and
-                // fading keeps the row still while the button comes and goes.
+                // Faded rather than removed: an invisible button keeps its
+                // size, so the row stays still while it comes and goes.
                 .opacity(profileManager.isModified ? 1 : 0)
                 .disabled(!profileManager.isModified)
                 .accessibilityHidden(!profileManager.isModified)
                 .animation(.easeInOut(duration: 0.15), value: profileManager.isModified)
         }
+    }
+
+    private var revertButton: some View {
+        Button("Revert") { profileManager.resetToActiveProfile() }
+            .controlSize(.small)
+            .fixedSize()
     }
 
     /// Where the sound is going, and what it sounds like there.

@@ -54,6 +54,62 @@ Three things are deliberately not in the catalog:
 - *No case changes in code.* Don't =lowercased()= or =capitalized= a
   localized string; write the form that is needed as a string of its own.
 
+* Room for every language
+
+Text in another language is usually longer than the English, often by a third
+and sometimes by double. The layout has to make that room itself, the way
+Apple's guidelines for localization ask and its own apps do: no width is typed
+in for text, because a number measured in English is wrong in every other
+language.
+
+- *A control takes its own size.* A button, a pop-up, a toggle, a label: AppKit
+  and SwiftUI size each one from its text in the language being shown. Don't
+  override that with =frame(width:)=. Where a control must keep its place while
+  it comes and goes, hide it with =opacity=, which keeps its size, rather than
+  reserving a measured slot. Where a space must mirror a control, mirror it
+  with a hidden copy of that control. Revert in the header does both.
+- *A row reflows rather than squeezes.* When a row's controls don't all fit
+  at their own size, it moves them to a line of their own, and then to a line
+  each, with =ViewThatFits= choosing the first layout that fits. The
+  permission row in General does this: squeezed onto one line, “Relaunch
+  CoreEQ” was cut off in English.
+- *A column takes its widest content.* Columns that line up across rows can't
+  size row by row, so they are as wide as the widest thing they can hold — every
+  option, and the column's title — measured at run time from the control that
+  shows them, with the English width as the minimum. Every column of the
+  filter list is at least as wide as its title, and the Type column is
+  measured from a pop-up button holding every filter kind. A title wider than
+  its column must not borrow the gap beside it: “Actions” over the 24-point
+  delete button did, until a longer language pushed it into the Q title.
+- *The window takes its content's minimum.* When a column grows, the window's
+  minimum width grows with it, so the narrowest window still fits the table in
+  every language. =MainWindowGeometry.minimum= follows the filter list's
+  columns.
+- *A tight spot gets a limit, and grows before it shrinks.* A few places have
+  little room: a badge under a slider, a title on a border. Their comment in
+  the catalog tells the translator how much room there is, so the translation
+  is chosen to fit. A label that can grow, grows: the AUTO badge is as wide as
+  its word, with the English width as its minimum. Only one that can't — the
+  Preamp title, on its column's border — keeps one line and a slight shrink
+  (=minimumScaleFactor= no lower than 0.8) as a safety net. Don't add the shrink
+  where it isn't needed: on its own it moves the English glyphs by a fraction
+  of a pixel.
+- *Never truncate a button.* An ellipsis is for content the user can widen —
+  a file name, a resizable column — not for a control's own name.
+
+The snapshot tests run with overlay scroll bars whatever mouse is connected
+(=-AppleShowScrollBars WhenScrolling= in the test plan): with the system's
+Automatic setting, a scroll bar that takes room on one day and not the next
+changed the sidebar's width between two runs of the same code.
+
+The double-length pseudolanguage shows every string twice, so it finds any
+place that has not made room. It is a configuration of the snapshot tests
+(=make snapshot-test=), and its images are where a change here is checked: the
+English images must not change, and the double-length ones show what was
+fixed. Plural strings and strings with numbers come out there as raw
+placeholders (“#@value@”) — a limit of the pseudolanguage, not a fault; see
+“Snapshot tests” in [[file:DEVELOPMENT.org][DEVELOPMENT.org]].
+
 * Voice
 
 - *Plain and direct.* Say what is happening and what to do, in the fewest

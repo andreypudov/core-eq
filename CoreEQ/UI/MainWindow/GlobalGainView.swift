@@ -25,9 +25,16 @@ struct GlobalGainView: View {
 
     private static let scaleGap: CGFloat = 6
 
-    /// Width of the Auto switch — the word plus a little, centred under the
-    /// track it governs.
-    private static let autoWidth: CGFloat = 46
+    /// Narrowest the Auto switch is: the English word plus a little, centred
+    /// under the track it governs. A longer word widens it.
+    private static let autoMinWidth: CGFloat = 46
+
+    /// Smallest the Preamp title may shrink to when a translation still doesn't
+    /// fit on the border. A safety net only: its catalog comment tells the
+    /// translator how much room there is. AUTO has none: it can grow with its
+    /// word instead, and a shrink nobody needed still moved its English glyphs
+    /// by a fraction of a pixel.
+    private static let tightLabelMinScale: CGFloat = 0.8
 
     var body: some View {
         // The same track / caption rhythm a band column has — see
@@ -121,9 +128,15 @@ struct GlobalGainView: View {
         .contentBlock()
         // Centred on the block's top border, over the track it names.
         .borderLabel {
-            Text("Preamp")
-                .font(Theme.Font.labelEmphasized)
-                .accessibilityAddTraits(.isHeader)
+            Text(
+                "Preamp",
+                comment:
+                    "Title of the output trim column, on its border. Keep it short: about 90 points, the width of “Preamp” twice over."
+            )
+            .font(Theme.Font.labelEmphasized)
+            .lineLimit(1)
+            .minimumScaleFactor(Self.tightLabelMinScale)
+            .accessibilityAddTraits(.isHeader)
         }
         .opacity(isEnabled ? 1.0 : 0.5)
         .help(
@@ -144,32 +157,42 @@ struct GlobalGainView: View {
         Button {
             profileManager.setAutoGain(!profileManager.isAutoGain)
         } label: {
-            Text("AUTO", comment: "Automatic gain switch, written in capitals as a badge")
-                .font(Theme.Font.labelEmphasized)
-                .kerning(0.6)
-                // Sized to the word, not to the column: a switch stretched the
-                // full width would read as a bar across the bottom of the block
-                // rather than as one control.
-                .frame(width: Self.autoWidth, height: Theme.BandRow.labelHeight)
-                .background(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(
-                            profileManager.isAutoGain
-                                ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .strokeBorder(
-                            profileManager.isAutoGain
-                                ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.12),
-                            lineWidth: 1
-                        )
-                )
-                .foregroundStyle(
-                    profileManager.isAutoGain
-                        ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary)
-                )
-                .contentShape(Rectangle())
+            Text(
+                "AUTO",
+                comment:
+                    "Automatic gain switch, written in capitals as a badge under the preamp slider. Keep it to about 5 letters: the badge can grow to about 90 points at most."
+            )
+            .font(Theme.Font.labelEmphasized)
+            .kerning(0.6)
+            .lineLimit(1)
+            // 4 a side keeps English at exactly 46 points, inside `autoMinWidth`.
+            .padding(.horizontal, 4)
+            // Sized to the word, not to the column: a switch stretched the full
+            // width would read as a bar across the bottom of the block rather
+            // than as one control.
+            .frame(
+                minWidth: Self.autoMinWidth, minHeight: Theme.BandRow.labelHeight,
+                maxHeight: Theme.BandRow.labelHeight
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(
+                        profileManager.isAutoGain
+                            ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(
+                        profileManager.isAutoGain
+                            ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.12),
+                        lineWidth: 1
+                    )
+            )
+            .foregroundStyle(
+                profileManager.isAutoGain
+                    ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary)
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)

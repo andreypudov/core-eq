@@ -34,12 +34,12 @@ build:
 # Apple's formatter, bundled with the toolchain — no install, no dependency.
 # Configuration is in .swift-format.
 format:
-	xcrun swift-format format --in-place --recursive --configuration .swift-format CoreEQ CoreEQTests CoreEQSnapshotTests
+	xcrun swift-format format --in-place --recursive --configuration .swift-format CoreEQ CoreEQTests CoreEQSnapshotTests TestSupport
 
 # The same rules, reported rather than applied. Fails on any finding, so CI can
 # gate on it.
 lint:
-	xcrun swift-format lint --strict --recursive --configuration .swift-format CoreEQ CoreEQTests CoreEQSnapshotTests
+	xcrun swift-format lint --strict --recursive --configuration .swift-format CoreEQ CoreEQTests CoreEQSnapshotTests TestSupport
 
 # Merges every string the compiler extracted into the String Catalog, the way
 # Xcode does on build — xcodebuild extracts them but leaves the catalog alone.

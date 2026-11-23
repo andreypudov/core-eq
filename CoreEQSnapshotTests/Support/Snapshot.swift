@@ -24,16 +24,58 @@ enum SnapshotAppearance: String, CaseIterable, Sendable {
 /// rendered image is written as the reference and the test fails so the new
 /// image is looked at before it is committed. On a mismatch the actual image
 /// and a diff are written to `build/SnapshotFailures/`.
+///
+/// `afterAppearing` runs once the view is on screen, for what a person would do
+/// next — choose something, say. `settle` is the time given afterwards, for a
+/// view that loads something in answer.
 @MainActor
 func expectSnapshot(
     _ view: some View,
     size: CGSize,
     named name: String,
     appearance: SnapshotAppearance,
+    settle: TimeInterval = 0,
+    afterAppearing: () async -> Void = {},
     filePath: String = #filePath,
     sourceLocation: SourceLocation = #_sourceLocation
+) async {
+    let image = await Snapshot.render(
+        view, width: size.width, height: size.height, appearance: appearance, settle: settle,
+        afterAppearing: afterAppearing)
+    checkSnapshot(
+        image, named: name, appearance: appearance, filePath: filePath,
+        sourceLocation: sourceLocation)
+}
+
+/// The same, for a view with a fixed width that takes its own height, as a
+/// sheet does.
+@MainActor
+func expectSnapshot(
+    _ view: some View,
+    width: CGFloat,
+    named name: String,
+    appearance: SnapshotAppearance,
+    settle: TimeInterval = 0,
+    afterAppearing: () async -> Void = {},
+    filePath: String = #filePath,
+    sourceLocation: SourceLocation = #_sourceLocation
+) async {
+    let image = await Snapshot.render(
+        view, width: width, height: nil, appearance: appearance, settle: settle,
+        afterAppearing: afterAppearing)
+    checkSnapshot(
+        image, named: name, appearance: appearance, filePath: filePath,
+        sourceLocation: sourceLocation)
+}
+
+@MainActor
+private func checkSnapshot(
+    _ image: CGImage,
+    named name: String,
+    appearance: SnapshotAppearance,
+    filePath: String,
+    sourceLocation: SourceLocation
 ) {
-    let image = Snapshot.render(view, size: size, appearance: appearance)
     let testFile = URL(fileURLWithPath: filePath)
     let fileName = "\(name).\(appearance.rawValue).\(Snapshot.language).png"
     let reference = testFile.deletingLastPathComponent()
@@ -42,7 +84,12 @@ func expectSnapshot(
         .appendingPathComponent(fileName)
 
     let recording = ProcessInfo.processInfo.environment["SNAPSHOT_RECORD"] == "1"
-    guard !recording, let expected = Snapshot.load(reference) else {
+    let existing = Snapshot.load(reference)
+    // Recording leaves an image that still matches alone: a PNG encoded again
+    // differs byte for byte, and ten unchanged files in the diff hide the six
+    // that did change.
+    if recording, let existing, Snapshot.compare(image, existing).matches { return }
+    guard !recording, let expected = existing else {
         Snapshot.write(image, to: reference)
         Issue.record(
             "Recorded \(reference.path). Look at it, then run again to compare.",
@@ -93,15 +140,24 @@ enum Snapshot {
 
     /// Hosts the view in a borderless window that is never shown, lets SwiftUI
     /// settle, and draws it into a bitmap.
-    static func render(_ view: some View, size: CGSize, appearance: SnapshotAppearance) -> CGImage {
-        let frame = CGRect(origin: .zero, size: size)
+    /// A nil `height` lets the view take its own.
+    static func render(
+        _ view: some View, width: CGFloat, height: CGFloat?, appearance: SnapshotAppearance,
+        settle: TimeInterval, afterAppearing: () async -> Void
+    ) async -> CGImage {
         // On the window background, as in the app. A component alone would
         // otherwise be drawn on nothing, and a transparent PNG shows dark-mode
         // text as white on white in any image viewer.
         let host = NSHostingView(
-            rootView: view.frame(width: size.width, height: size.height)
+            rootView: view.frame(width: width, height: height)
                 .background(Color(nsColor: .windowBackgroundColor)))
-        host.frame = frame
+        if height == nil {
+            host.frame = CGRect(x: 0, y: 0, width: width, height: 100)
+            host.frame.size.height = ceil(host.fittingSize.height)
+        } else {
+            host.frame = CGRect(x: 0, y: 0, width: width, height: height!)
+        }
+        var frame = host.frame
 
         let window = KeyWindow(
             contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -110,12 +166,31 @@ enum Snapshot {
         window.contentView = host
         defer { window.close() }
 
-        // Two passes: the first layout can schedule state changes (geometry
-        // readers, onAppear) that only land on the next turn of the run loop.
+        // Waits by suspending, not by spinning the run loop: a spin inside
+        // this main-actor function blocks every other main-actor task, so a
+        // view that loads something as it appears would never get to. Two
+        // short waits first, because the first layout can schedule state
+        // changes (geometry readers, onAppear) that land on the next turn.
         for _ in 0..<2 {
             host.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            try? await Task.sleep(for: .milliseconds(50))
         }
+        await afterAppearing()
+        if settle > 0 {
+            try? await Task.sleep(for: .seconds(settle))
+        }
+        // A view that takes its own height is measured again once it has
+        // appeared: what it loads can change it.
+        if height == nil {
+            frame.size.height = ceil(host.fittingSize.height)
+            window.setContentSize(frame.size)
+            host.frame = frame
+        }
+        // No keyboard focus: a focused field draws a text cursor that blinks,
+        // and would be in the picture or not depending on the moment.
+        window.makeFirstResponder(nil)
+        host.layoutSubtreeIfNeeded()
+        let size = frame.size
 
         let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,

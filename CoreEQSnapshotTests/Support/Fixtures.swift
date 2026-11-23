@@ -68,28 +68,3 @@ struct Fixtures {
         return analyzer
     }
 }
-
-/// A `UserDefaults` that lives only in memory. A copy of the one in
-/// `CoreEQTests/Support`, which this target does not compile.
-final class InMemoryDefaults: UserDefaults {
-    private var storage: [String: Any] = [:]
-
-    override func object(forKey defaultName: String) -> Any? { storage[defaultName] }
-    override func string(forKey defaultName: String) -> String? { storage[defaultName] as? String }
-    override func array(forKey defaultName: String) -> [Any]? { storage[defaultName] as? [Any] }
-    override func data(forKey defaultName: String) -> Data? { storage[defaultName] as? Data }
-    override func bool(forKey defaultName: String) -> Bool {
-        storage[defaultName] as? Bool ?? false
-    }
-    override func double(forKey defaultName: String) -> Double {
-        storage[defaultName] as? Double ?? 0
-    }
-
-    override func set(_ value: Any?, forKey defaultName: String) {
-        storage[defaultName] = value
-    }
-
-    override func removeObject(forKey defaultName: String) {
-        storage.removeValue(forKey: defaultName)
-    }
-}

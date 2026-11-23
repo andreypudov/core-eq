@@ -25,6 +25,8 @@ struct ExclusionsSettingsView: View {
     @State private var list = ExclusionList(listed: [], excluded: [])
     @State private var selection: String?
 
+    @Environment(\.settingsFacts) private var facts
+
     var body: some View {
         if AppExclusion.isAvailable {
             pane
@@ -120,7 +122,7 @@ struct ExclusionsSettingsView: View {
     /// engine at once. Compared against what is stored rather than what the
     /// pane last read, so the engine is never left on a list it has not seen.
     private func save(_ newList: ExclusionList) {
-        let settings = SettingsStore()
+        let settings = facts.settings
         let stored = Self.storedList(in: settings)
         settings.exclusionListBundleIDs = newList.listed
         settings.excludedBundleIDs = newList.excluded
@@ -131,7 +133,7 @@ struct ExclusionsSettingsView: View {
     }
 
     private func reload() {
-        list = Self.storedList(in: SettingsStore())
+        list = Self.storedList(in: facts.settings)
     }
 
     private static func storedList(in settings: SettingsStore) -> ExclusionList {

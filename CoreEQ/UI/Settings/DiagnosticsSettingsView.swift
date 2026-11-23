@@ -16,6 +16,8 @@ struct DiagnosticsSettingsView: View {
     @State private var report = ""
     @State private var didCopy = false
 
+    @Environment(\.settingsFacts) private var facts
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Audio Diagnostics")
@@ -72,6 +74,10 @@ struct DiagnosticsSettingsView: View {
 
     private func refresh() {
         didCopy = false
+        if let fixed = facts.diagnosticsReport {
+            report = fixed
+            return
+        }
         report = DiagnosticsReport.text(
             appVersion: Self.appVersion,
             systemVersion: ProcessInfo.processInfo.operatingSystemVersionString,

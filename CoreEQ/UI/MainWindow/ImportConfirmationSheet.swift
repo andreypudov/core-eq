@@ -100,9 +100,12 @@ struct ImportConfirmationSheet: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
+            // Grey, like the rest of the sheet: adjusting a value to one CoreEQ
+            // can play is information, not a warning, and colour here would
+            // say otherwise.
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 22))
-                .foregroundStyle(.orange)
+                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -193,11 +196,15 @@ struct ImportConfirmationSheet: View {
         }
     }
 
-    private func color(for adjustment: ImportAdjustment) -> Color {
+    /// Red for the one change that loses something — a filter CoreEQ can't
+    /// keep — and grey for the rest, which are information: colour is kept
+    /// for what deserves attention, as in Apple's own sheets. Orange for
+    /// “Adjusted” and green for “Kept” read as a warning and an all-clear
+    /// where neither applied.
+    private func color(for adjustment: ImportAdjustment) -> AnyShapeStyle {
         switch adjustment.kind {
-        case .droppedFilter: return .red
-        case .keptBeyondBandRange: return .green
-        default: return .orange
+        case .droppedFilter: return AnyShapeStyle(.red)
+        default: return AnyShapeStyle(.secondary)
         }
     }
 

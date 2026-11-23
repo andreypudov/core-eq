@@ -6,6 +6,7 @@ import Testing
 /// Arithmetic nobody developing on a large display ever exercises: on any screen
 /// with room the answer is the preferred size, and every interesting case is a
 /// screen the author does not have.
+@MainActor
 struct MainWindowGeometryTests {
 
     /// A display with room gets the size the layout was designed for.

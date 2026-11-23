@@ -588,9 +588,11 @@ struct AutoEQBrowserView: View {
             // what is happening.
             if store.previewWouldAdjust, let disclosure = store.previewCandidates?.disclosure {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
+                    // Grey, as the import sheet shows the same adjustments: a
+                    // value CoreEQ will change is information, not a warning.
+                    Image(systemName: "exclamationmark.circle")
                         .font(Theme.Font.secondary)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
 
                     Text(ImportSummary.notice(for: disclosure))

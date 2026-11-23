@@ -131,16 +131,6 @@ enum Theme {
     /// of shifting every time the device changes.
     static let outputControlWidth: CGFloat = 220
 
-    /// Width kept for the Revert button beside the output control, and mirrored
-    /// on its other side.
-    ///
-    /// Reserved whether or not the button is showing. Revert exists only while
-    /// there is something to revert, and letting it come and go would slide the
-    /// device control sideways the moment a slider is touched — moving the thing
-    /// the user is reading while they read it. Measured: a small bezelled button
-    /// titled "Revert" is 54 points.
-    static let revertSlotWidth: CGFloat = 58
-
     /// Height of the header row, set by the output control — which carries two
     /// lines now: the device, and the preset playing on it.
     static let headerHeight: CGFloat = 42
@@ -205,9 +195,11 @@ enum Theme {
         /// the two line up without a `Grid` spanning the scroll view between
         /// them.
         ///
-        /// Each is sized to its widest content, not to its title: "20000 Hz",
-        /// "19999.9 Hz", "+12.0 dB", "16.00", and "High Shelf" are what these have
-        /// to hold.
+        /// Each is as wide as the wider of two things: what it has to hold —
+        /// "20000 Hz", "19999.9 Hz", "+12.0 dB", "16.00", every filter kind —
+        /// and its title, both in the language being shown. The `…Content`
+        /// numbers are the first of those, in English, and every language gets
+        /// at least that much. See “Room for every language” in STRINGS.org.
         enum Column {
             /// Colour swatch and band number, up to two digits.
             ///
@@ -215,21 +207,83 @@ enum Theme {
             /// two monospaced digits at this size measure 14.6 pt and what was
             /// left over was 14. `ThemeTests` now measures it rather than
             /// trusting the arithmetic in this comment.
-            static let index: CGFloat = 38
+            static let indexContent: CGFloat = 38
             /// The swatch button: an 8 pt circle inside a 3 pt hit-target
             /// padding, and the gap between it and the number.
             static let indexSwatch: CGFloat = 14
             static let indexGap: CGFloat = 6
-            static let enable: CGFloat = 30
-            static let type: CGFloat = 100
+            static let enableContent: CGFloat = 30
+            /// What English needs for its widest filter kind. The kinds are
+            /// measured too — see `type` — since they are translated as well.
+            static let typeContent: CGFloat = 100
             /// Wide enough for a frequency with its decimal, "19999.9 Hz".
             /// At 94 it held "20000 Hz" and clipped an imported "3302.8".
-            static let frequency: CGFloat = 108
-            static let gain: CGFloat = 92
-            static let q: CGFloat = 76
+            static let frequencyContent: CGFloat = 108
+            static let gainContent: CGFloat = 92
+            static let qContent: CGFloat = 76
             /// Just the delete button: there is no power icon, because the
             /// Enable switch two columns back is already that control.
-            static let actions: CGFloat = 24
+            static let actionsContent: CGFloat = 24
+
+            @MainActor static let index = fitting(indexContent, Title.index)
+            @MainActor static let enable = fitting(enableContent, Title.enable)
+            /// The kinds are measured from a pop-up button holding all of them,
+            /// which is how AppKit sizes a pop-up and what the menu picker in
+            /// each row is. A width typed in for "High Shelf" cut every longer
+            /// translation off.
+            @MainActor static let type = fitting(max(typeContent, measuredKinds), Title.type)
+            @MainActor static let frequency = fitting(frequencyContent, Title.frequency)
+            @MainActor static let gain = fitting(gainContent, Title.gain)
+            @MainActor static let q = fitting(qContent, Title.q)
+            @MainActor static let actions = fitting(actionsContent, Title.actions)
+
+            /// How much wider the whole table is than its English content
+            /// needs. The window's minimum width grows by this much, so the
+            /// table fits the narrowest window in every language.
+            @MainActor static var growth: CGFloat {
+                index + enable + type + frequency + gain + q + actions
+                    - (indexContent + enableContent + typeContent + frequencyContent
+                        + gainContent + qContent + actionsContent)
+            }
+
+            /// The column titles, in one place, so the list draws exactly the
+            /// strings the widths are measured from.
+            enum Title {
+                static let index = "#"
+                static var enable: String {
+                    String(localized: "On", comment: "Band list column: band turned on")
+                }
+                static var type: String {
+                    String(localized: "Type", comment: "Band list column: filter type")
+                }
+                static var frequency: String {
+                    String(localized: "Frequency", comment: "Band list column")
+                }
+                static var gain: String { String(localized: "Gain", comment: "Band list column") }
+                static var q: String {
+                    String(localized: "Q", comment: "Band list column: the band’s width")
+                }
+                static var actions: String {
+                    String(localized: "Actions", comment: "Band list column: the row’s buttons")
+                }
+            }
+
+            /// The font the title row draws in: `Font.value`.
+            static var titleFont: NSFont { .monospacedDigitSystemFont(ofSize: 11, weight: .medium) }
+
+            /// The wider of what a column holds and its title.
+            static func fitting(_ content: CGFloat, _ title: String) -> CGFloat {
+                let width = (title as NSString).size(withAttributes: [.font: titleFont]).width
+                return max(content, ceil(width))
+            }
+
+            @MainActor private static var measuredKinds: CGFloat {
+                let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
+                popUp.controlSize = .small
+                popUp.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
+                popUp.addItems(withTitles: EQFilter.Kind.allCases.map(\.title))
+                return ceil(popUp.intrinsicContentSize.width)
+            }
         }
     }
 

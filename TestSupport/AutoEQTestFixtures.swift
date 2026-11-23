@@ -1,5 +1,12 @@
 import Foundation
 
+// Shared by both test targets. CoreEQTests compiles the app's sources into
+// itself and must never import the app module; the snapshot tests are hosted in
+// the app and must. `SNAPSHOT_TESTS` is set on the snapshot target only.
+#if SNAPSHOT_TESTS
+@testable import CoreEQ
+#endif
+
 enum AutoEQTestFixtures {
     static let revision = String(repeating: "a", count: 40)
     static let nextRevision = String(repeating: "b", count: 40)
@@ -40,8 +47,10 @@ enum AutoEQTestFixtures {
             to: directory.appendingPathComponent("catalog-v1.json"), options: .atomic)
     }
 
-    static func catalogHandler(revision: String = revision, index: Data = indexData) -> StubHandler
-    {
+    /// `profile` is the correction served for every model.
+    static func catalogHandler(
+        revision: String = revision, index: Data = indexData, profile: String = profileText
+    ) -> StubHandler {
         { request in
             let url = request.url!
             if url == AutoEQNetworkService.revisionURL {
@@ -53,7 +62,7 @@ enum AutoEQTestFixtures {
                 )
             }
             if url.path.hasSuffix(" ParametricEQ.txt") {
-                return (httpResponse(url: url), Data(profileText.utf8))
+                return (httpResponse(url: url), Data(profile.utf8))
             }
             throw URLError(.badURL)
         }
