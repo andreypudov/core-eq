@@ -227,6 +227,8 @@ struct FrequencyResponseView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityLabel("Frequency response")
         .accessibilityHidden(minimal)
+        // Low to high, left to right, in every language: a frequency axis.
+        .keepsLeftToRight()
     }
 
     // MARK: - Interaction
@@ -603,7 +605,8 @@ struct FrequencyResponseView: View {
                 lineWidth: isHighlighted || isSelected ? 3 : 2
             )
 
-            let number = Text(verbatim: "\(index + 1)")
+            // The region's digits, as every other number in the window.
+            let number = Text((index + 1).formatted())
                 .font(Theme.Font.valueEmphasized)
                 .foregroundStyle(Color.black.opacity(isActive ? 0.75 : 0.3))
             context.draw(number, at: center, anchor: .center)
@@ -618,8 +621,8 @@ struct FrequencyResponseView: View {
             let center = filterNodeCenter(filter, axis, size)
             let text =
                 filter.kind.usesGain
-                ? "\(BandFormat.frequency(filter.frequency)) Hz  \(BandFormat.gain(filter.gain))"
-                : "\(BandFormat.frequency(filter.frequency)) Hz"
+                ? "\(BandFormat.frequency(filter.frequency)) \(BandFormat.hertz)  \(BandFormat.gain(filter.gain))"
+                : "\(BandFormat.frequency(filter.frequency)) \(BandFormat.hertz)"
             drawLabel(context, size, center: center, text: text)
         }
     }

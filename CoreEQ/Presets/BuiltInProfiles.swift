@@ -162,6 +162,39 @@ enum BuiltInProfiles {
 
     static let defaultProfileName = "Flat"
 
+    /// Each built-in's name in the interface's language, keyed by the name it
+    /// is stored under.
+    ///
+    /// Shown only. The stored name is a preset's identity — every device's
+    /// saved state, the menu, exported files and the diagnostics report refer
+    /// to it — so it stays English, and a translation can change without any
+    /// of that noticing. Where the Music app has the same equalizer preset,
+    /// the translation is the Music app's own.
+    static let displayNames: [String: String] = [
+        "Flat": String(localized: "Flat", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Acoustic": String(localized: "Acoustic", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Bass Booster": String(localized: "Bass Booster", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Bass Reducer": String(localized: "Bass Reducer", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Classical": String(localized: "Classical", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Dance": String(localized: "Dance", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Deep": String(localized: "Deep", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Electronic": String(localized: "Electronic", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Hip-Hop": String(localized: "Hip-Hop", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Jazz": String(localized: "Jazz", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Latin": String(localized: "Latin", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Loudness": String(localized: "Loudness", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Lounge": String(localized: "Lounge", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Piano": String(localized: "Piano", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Pop": String(localized: "Pop", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "R&B": String(localized: "R&B", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Rock": String(localized: "Rock", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Small Speakers": String(localized: "Small Speakers", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Spoken Word": String(localized: "Spoken Word", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Treble Booster": String(localized: "Treble Booster", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Treble Reducer": String(localized: "Treble Reducer", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+        "Vocal Booster": String(localized: "Vocal Booster", comment: "Built-in preset name. Use the Music app’s name for its equalizer preset where it has one."),
+    ]
+
     /// What each built-in is for, in one line: the preset's tooltip in the
     /// sidebar and the menu, so the list does not assume the reader already
     /// knows what Acoustic or Spoken Word is for.

@@ -312,8 +312,12 @@ configuration, and each configuration records its own images, named
   real doubled text, so what the configuration is for — room — is still
   checked; only those strings' wording isn't.
 
-Adding a language is one more configuration with its =language= set, then
-=make snapshot-record SNAPSHOT_CONFIG=<name>=.
+Every shipped language has a configuration of its own — Arabic, Chinese
+(Simplified and Traditional), Chuvash, French, Japanese, Russian, Spanish,
+Taiwanese Hokkien — drawn in light only (=SNAPSHOT_APPEARANCES=light=): dark mode changes
+no text's length or direction, and every language in both would double the
+images for nothing. Adding a language is one more configuration with its
+=language= and =region= set, then =make snapshot-record SNAPSHOT_CONFIG=<name>=.
 
 *Reviewing a failure.* A mismatch writes =<name>.actual.png= and
 =<name>.diff.png= (changed pixels in red over the faded reference) to

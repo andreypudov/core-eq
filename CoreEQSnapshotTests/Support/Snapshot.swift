@@ -39,6 +39,7 @@ func expectSnapshot(
     filePath: String = #filePath,
     sourceLocation: SourceLocation = #_sourceLocation
 ) async {
+    guard Snapshot.takes(appearance) else { return }
     let image = await Snapshot.render(
         view, width: size.width, height: size.height, appearance: appearance, settle: settle,
         afterAppearing: afterAppearing)
@@ -60,6 +61,7 @@ func expectSnapshot(
     filePath: String = #filePath,
     sourceLocation: SourceLocation = #_sourceLocation
 ) async {
+    guard Snapshot.takes(appearance) else { return }
     let image = await Snapshot.render(
         view, width: width, height: nil, appearance: appearance, settle: settle,
         afterAppearing: afterAppearing)
@@ -131,6 +133,17 @@ enum Snapshot {
     /// a share does not scale with what matters: 0.1% of a window is about
     /// 2,700 pixels, which let a one-letter change to a button label through.
     static let maxChangedPixels = 20
+
+    /// Whether this configuration snapshots `appearance`. A translation's
+    /// configuration sets `SNAPSHOT_APPEARANCES=light`: dark mode changes no
+    /// text's length or direction, and every language in both would double
+    /// the images for nothing. English and Double-Length take both.
+    static func takes(_ appearance: SnapshotAppearance) -> Bool {
+        guard let listed = ProcessInfo.processInfo.environment["SNAPSHOT_APPEARANCES"] else {
+            return true
+        }
+        return listed.split(separator: ",").contains { $0 == appearance.rawValue }
+    }
 
     static var language: String {
         let base = Bundle.main.preferredLocalizations.first ?? "en"

@@ -5,9 +5,63 @@
       "comment" : "Bundle name",
       "extractionState" : "extracted_with_value",
       "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoreEQ"
+          }
+        },
+        "cv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoreEQ"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "CoreEQ"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoreEQ"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoreEQ"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoreEQ"
+          }
+        },
+        "nan-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoreEQ"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoreEQ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoreEQ"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "CoreEQ"
           }
         }
@@ -17,10 +71,64 @@
       "comment" : "The reason macOS shows when it asks for the audio permission. Same text as CoreEQ’s own explanation.",
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يحتاج معادل الصوت إلى الوصول إلى الصوت كي يغيّره. يقرأ CoreEQ الصوت في طريقه إلى السماعات، ويضبطه، ثم يعيد تشغيله فورًا. لا يُسجَّل أي شيء أو يُخزَّن أو يُرسَل، والخروج من CoreEQ يعيد الصوت فورًا."
+          }
+        },
+        "cv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сасса улӑштарас тесен эквалайзерӑн ӑна ҫитмелле. CoreEQ динамиксем патне каякан сасса вулать, тӳрлетет те ҫийӗнчех каялла ярать. Нимӗн те ҫырӑнмасть, упранмасть, никама та ярӑнмасть, CoreEQ-ран тухсанах сасӑ ҫийӗнчех каялла таврӑнать."
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "An equalizer has to reach the sound to change it. CoreEQ reads audio on its way to your speakers, adjusts it, and plays it straight back. Nothing is recorded, stored, or sent anywhere, and quitting CoreEQ hands the audio back immediately."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un ecualizador tiene que llegar al sonido para cambiarlo. CoreEQ lee el audio de camino a tus altavoces, lo ajusta y lo reproduce al instante. No se graba, guarda ni envía nada, y al salir de CoreEQ el audio vuelve de inmediato."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un égaliseur doit accéder au son pour le modifier. CoreEQ lit l’audio en route vers vos haut-parleurs, l’ajuste et le restitue aussitôt. Rien n’est enregistré, conservé ni envoyé, et quitter CoreEQ rend immédiatement le son."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "イコライザはサウンドに届かなければ変更できません。CoreEQはスピーカーへ向かうオーディオを読み取り、調整して、そのまま再生します。何も録音、保存、送信されることはなく、CoreEQを終了するとオーディオはすぐに元に戻ります。"
+          }
+        },
+        "nan-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等化器愛接觸著聲音才有法度改。CoreEQ 讀送去喇叭的音訊，調整了隨播出去。啥物攏無錄、無存、嘛無送去別位，結束 CoreEQ 聲音就隨還轉來。"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чтобы менять звук, эквалайзеру нужен доступ к нему. CoreEQ читает звук на пути к динамикам, корректирует его и сразу отдаёт обратно. Ничего не записывается, не хранится и никуда не отправляется, а при выходе из CoreEQ звук сразу возвращается как был."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "均衡器需要接触到声音才能改变它。CoreEQ 读取送往扬声器的音频，进行调整后立即播放出来。任何内容都不会被录制、存储或发送，退出 CoreEQ 会立即交还音频。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等化器必須接觸到聲音才能改變它。CoreEQ 讀取送往揚聲器的音訊，調整後立即播放出來。任何內容都不會被錄製、儲存或傳送，結束 CoreEQ 會立即交還音訊。"
           }
         }
       }
@@ -29,9 +137,63 @@
       "comment" : "Copyright line in the About tab. Names and the license title stay as they are.",
       "extractionState" : "extracted_with_value",
       "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© 2026 Andrey Pudov · Apache License 2.0"
+          }
+        },
+        "cv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© 2026 Andrey Pudov · Apache License 2.0"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "© 2026 Andrey Pudov · Apache License 2.0"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© 2026 Andrey Pudov · Apache License 2.0"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© 2026 Andrey Pudov · Apache License 2.0"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© 2026 Andrey Pudov · Apache License 2.0"
+          }
+        },
+        "nan-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© 2026 Andrey Pudov · Apache License 2.0"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© 2026 Andrey Pudov · Apache License 2.0"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© 2026 Andrey Pudov · Apache License 2.0"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "© 2026 Andrey Pudov · Apache License 2.0"
           }
         }

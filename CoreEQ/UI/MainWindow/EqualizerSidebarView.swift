@@ -370,7 +370,7 @@ struct EqualizerSidebarView: View {
                         if !isFocused { commitRename() }
                     }
             } else {
-                Text(profile.name)
+                Text(profile.displayName)
                     .font(Theme.Font.body)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -418,7 +418,7 @@ struct EqualizerSidebarView: View {
         .animation(.easeOut(duration: 0.12), value: hoveredPreset)
         .id(profile.name)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(profile.name)
+        .accessibilityLabel(profile.displayName)
         .accessibilityValue(
             isSelected && profileManager.isModified
                 ? String(

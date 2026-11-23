@@ -268,7 +268,7 @@ struct EqualizerDetailView: View {
                     .truncationMode(.middle)
 
                 HStack(spacing: 4) {
-                    Text(profileManager.activeProfileName)
+                    Text(profileManager.activeProfile.displayName)
                         .font(Theme.Font.secondary)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -308,11 +308,11 @@ struct EqualizerDetailView: View {
         profileManager.isModified
             ? String(
                 localized:
-                    "\(outputs.defaultDeviceName), playing \(profileManager.activeProfileName), edited",
+                    "\(outputs.defaultDeviceName), playing \(profileManager.activeProfile.displayName), edited",
                 comment: "Output device, for VoiceOver: device name and its edited preset")
             : String(
                 localized:
-                    "\(outputs.defaultDeviceName), playing \(profileManager.activeProfileName)",
+                    "\(outputs.defaultDeviceName), playing \(profileManager.activeProfile.displayName)",
                 comment: "Output device, for VoiceOver: device name and its preset")
     }
 
@@ -432,6 +432,8 @@ struct EqualizerDetailView: View {
             }
             .opacity(audioEngine.isProcessing ? 1.0 : 0.5)
         }
+        // Under the graph it mirrors, low to high, in every language.
+        .keepsLeftToRight()
     }
 
     // MARK: - Editor
@@ -604,7 +606,8 @@ struct EqualizerDetailView: View {
             .accessibilityLabel("\(BandFormat.frequency(band.frequency)) hertz")
             .accessibilityValue(
                 String(
-                    localized: "\(String(format: "%+.1f", band.gain)) decibels",
+                    localized:
+                        "\(band.gain.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always()))) decibels",
                     comment: "Gain, for VoiceOver, such as “+2.5 decibels”"))
 
             Text(BandFormat.frequency(band.frequency))

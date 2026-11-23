@@ -107,7 +107,7 @@ struct GlobalGainView: View {
                     .accessibilityValue(
                         String(
                             localized:
-                                "\(String(format: "%+.1f", profileManager.currentPreamp)) decibels",
+                                "\(profileManager.currentPreamp.formatted(.number.precision(.fractionLength(1)).sign(strategy: .always()))) decibels",
                             comment: "Gain, for VoiceOver, such as “+2.5 decibels”"))
 
                     // The row a band column spends on its frequency. This
@@ -142,6 +142,8 @@ struct GlobalGainView: View {
         .help(
             "Output trim applied after the whole chain; use it to give back the headroom a boosted preset takes"
         )
+        // Its readout, track, and scale match the slider strip beside it.
+        .keepsLeftToRight()
     }
 
     /// The mode switch for the trim, in the row a band column spends naming its

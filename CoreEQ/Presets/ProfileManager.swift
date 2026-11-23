@@ -315,7 +315,7 @@ final class ProfileManager: ObservableObject {
         guard let source = profile(named: name) else { return nil }
         return addProfile(
             named: String(
-                localized: "\(source.name) copy",
+                localized: "\(source.displayName) copy",
                 comment: "Name of a duplicated preset, such as “Jazz copy”"),
             filters: source.filters, preamp: source.preamp)
     }

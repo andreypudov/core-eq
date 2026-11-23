@@ -1,0 +1,141 @@
+#+TITLE: CoreEQ
+#+SUBTITLE: Ecualizador de todo el sistema para macOS
+
+[[file:README.ar.org][العربية]] · [[file:README.cv.org][Чӑвашла]] · [[file:README.org][English]] · [[file:README.es.org][Español]] · [[file:README.fr.org][Français]] · [[file:README.ja.org][日本語]] · [[file:README.ru.org][Русский]] · [[file:README.nan-Hant.org][台語]] · [[file:README.zh-Hans.org][简体中文]] · [[file:README.zh-Hant.org][繁體中文]]
+
+CoreEQ ecualiza *todo lo que oyes* —música, vídeo, llamadas, juegos—, suene en
+la app que suene, sin controlador de audio virtual ni extensión del kernel.
+Funciona con la API nativa de captura de procesos de Core Audio, así que no se
+instala nada en el sistema y no queda nada cuando CoreEQ no está en marcha.
+
+[[./design/screenshots/core-eq-1.10.png]]
+
+* Lo más destacado
+
+- *Todas las apps, sin controlador.* No se instala nada en el sistema, lo puedes
+  comprobar tú mismo, y al salir de CoreEQ el audio vuelve al instante.
+- *Gráfico y paramétrico en una sola cadena.* La escala ISO de octavas de once
+  bandas, más hasta dieciséis filtros de campana, shelf y paso alto o bajo
+  propios.
+- *Un gráfico de respuesta vivo y editable*, calculado con los mismos
+  coeficientes por los que pasa el audio, sobre un analizador de espectro en
+  tiempo real.
+- *Veintidós preajustes integrados y los tuyos*, cada integrado con una
+  descripción de una línea de para qué sirve.
+- *El catálogo de AutoEq, integrado*: busca entre miles de correcciones de
+  auriculares por modelo, escucha una antes de quedártela y guárdala como
+  preajuste. Solo se conecta cuando lo abres.
+- *Importación y exportación de AutoEq y EqualizerAPO*: una corrección de
+  cualquier otro sitio se carga en unos clics.
+- *La ganancia automática* mantiene un preajuste al volumen de partida, para
+  comparar timbres y no volúmenes.
+- *Comparación A/B* de dos versiones del mismo preajuste.
+- *Ajustes por dispositivo de salida*: la curva de tus auriculares vuelve cuando
+  vuelven tus auriculares.
+- *Control desde la barra de menús*, con el EQ rápido (graves, medios, agudos)
+  sobre cualquier preajuste.
+- *Atento a las grabaciones*: CoreEQ se aparta mientras una grabación de
+  pantalla captura el audio del sistema, para que no salga duplicado.
+- *Apps sin tocar*: excluye una estación de audio digital o cualquier otra app,
+  y su sonido va directo a la salida, intacto (macOS 26 o posterior).
+
+Cada función se describe en la [[file:docs/USER_GUIDE.org][guía del usuario]] (en inglés).
+
+* Requisitos
+
+- macOS *14.2* o posterior
+- Permiso para procesar el audio del sistema. CoreEQ explica para qué es y
+  después lo pide
+
+* Instalación
+
+** Homebrew (recomendado)
+
+#+begin_src sh
+brew tap andreypudov/core-eq
+brew trust andreypudov/core-eq
+brew install --cask core-eq
+#+end_src
+
+Actualiza más adelante con =brew update && brew upgrade --cask core-eq=.
+
+CoreEQ está firmado con su propio certificado, lo que conserva el permiso de
+audio entre actualizaciones, pero Apple no lo ha notarizado, así que macOS
+puede bloquear la primera apertura. Permítela en Ajustes del Sistema →
+Privacidad y seguridad, o elimina el atributo de cuarentena:
+
+#+begin_src sh
+xattr -dr com.apple.quarantine /Applications/CoreEQ.app
+#+end_src
+
+** Compilar desde el código fuente
+
+Requiere Xcode 26 o posterior. Las apps compiladas en local no quedan en
+cuarentena, así que CoreEQ se abre sin avisos de Gatekeeper:
+
+#+begin_src sh
+git clone https://github.com/AndreyPudov/core-eq.git
+cd core-eq
+make install
+#+end_src
+
+Esto compila una copia Release y la instala en =/Applications=.
+
+** Binario precompilado
+
+Descarga el último =CoreEQ-x.y.zip= de la página *Releases*, descomprímelo,
+mueve =CoreEQ.app= a =/Applications= y elimina el atributo de cuarentena como
+se indica arriba.
+
+* Primeros pasos
+
+1. Abre CoreEQ. Aparece un icono de reguladores en la barra de menús; no hay
+   icono en el Dock.
+2. Permite la *Grabación de audio del sistema*. CoreEQ abre su ventana, explica
+   para qué es el permiso y lo pide cuando haces clic en *Permitir…*: lo
+   necesita para procesar el sonido que oyes. No se graba, guarda ni transmite
+   nada.
+3. Elige un preajuste. El sonido cambia al instante.
+
+¿Algo no funciona? La [[file:docs/USER_GUIDE.org][guía del usuario]] tiene una sección de solución de
+problemas, y Ajustes → Diagnóstico genera un informe para adjuntar a un informe
+de errores.
+
+* Documentación
+
+La documentación detallada está en inglés.
+
+| Documento                                 | Qué contiene                                              |
+|-------------------------------------------+-----------------------------------------------------------|
+| [[file:docs/USER_GUIDE.org][Guía del usuario]]     | Cada función, las limitaciones y la solución de problemas |
+| [[file:docs/RELEASE_NOTES.org][Notas de la versión]] | Qué cambió en cada versión y cómo se descubrió           |
+| [[file:docs/ROADMAP.org][Hoja de ruta]]           | Qué viene después y en qué orden                          |
+| [[file:docs/DEVELOPMENT.org][Desarrollo]]         | Compilar, ejecutar y probar CoreEQ                        |
+| [[file:docs/ARCHITECTURE.org][Arquitectura]]      | Por qué el ecualizador tiene la forma que tiene           |
+| [[file:docs/INTERNALS.org][Funcionamiento interno]] | Cómo está hecha la app: la ruta de audio y lo demás    |
+| [[file:docs/RELEASING.org][Publicación]]        | Integración continua y publicación de una versión         |
+
+El [[file:docs/README.org][índice de la documentación]] dice qué leer primero.
+
+* Contribuir
+
+Los informes de errores y las pull requests son bienvenidos.
+[[file:CONTRIBUTING.md][CONTRIBUTING.md]] explica qué incluir en un informe, el formato de los mensajes de
+commit y qué necesita una pull request; [[file:SECURITY.md][SECURITY.md]] explica cómo informar de
+una vulnerabilidad.
+
+* Agradecimientos
+
+Gracias a [[https://github.com/souljedi][Sebastian Ullrich (@souljedi)]] por la importación de preajustes de
+AutoEq y EqualizerAPO ([[https://github.com/andreypudov/core-eq/pull/25][#25]]) —la primera contribución externa a CoreEQ y la
+función más pedida— y por el explorador del catálogo de AutoEq que vino después
+([[https://github.com/andreypudov/core-eq/pull/40][#40]]).
+
+El explorador del catálogo de AutoEq de CoreEQ usa los datos de corrección de
+auriculares de [[https://github.com/jaakkopasanen/AutoEq][AutoEq]], de Jaakko Pasanen, con licencia MIT. Las mediciones
+proceden de fuentes de terceros como Oratory1990, Rtings e Innerfidelity; las
+de Crinacle están excluidas. Cada resultado cita su fuente.
+
+* Licencia
+
+Apache License 2.0. Consulta [[file:LICENSE][LICENSE]].

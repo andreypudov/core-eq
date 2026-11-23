@@ -1,6 +1,8 @@
 #+TITLE: CoreEQ
 #+SUBTITLE: System-wide equalizer for macOS
 
+[[file:README.ar.org][العربية]] · [[file:README.cv.org][Чӑвашла]] · [[file:README.org][English]] · [[file:README.es.org][Español]] · [[file:README.fr.org][Français]] · [[file:README.ja.org][日本語]] · [[file:README.ru.org][Русский]] · [[file:README.nan-Hant.org][台語]] · [[file:README.zh-Hans.org][简体中文]] · [[file:README.zh-Hant.org][繁體中文]]
+
 CoreEQ equalizes *everything you hear* — music, video, calls, games — whatever
 application is playing, with no virtual audio driver and no kernel extension.
 It runs on Apple's native Core Audio process-tap API, so there is nothing

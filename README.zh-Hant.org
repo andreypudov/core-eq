@@ -1,0 +1,102 @@
+#+TITLE: CoreEQ
+#+SUBTITLE: 適用於 macOS 的全系統等化器
+
+[[file:README.ar.org][العربية]] · [[file:README.cv.org][Чӑвашла]] · [[file:README.org][English]] · [[file:README.es.org][Español]] · [[file:README.fr.org][Français]] · [[file:README.ja.org][日本語]] · [[file:README.ru.org][Русский]] · [[file:README.nan-Hant.org][台語]] · [[file:README.zh-Hans.org][简体中文]] · [[file:README.zh-Hant.org][繁體中文]]
+
+CoreEQ 會等化 *你聽到的一切*——音樂、影片、通話、遊戲——無論聲音來自哪個 App，都不需要虛擬音訊驅動程式或核心延伸功能。它使用 Core Audio 原生的程序音訊擷取 API，因此不會在系統中安裝任何東西，CoreEQ 沒有執行時也不會留下任何痕跡。
+
+[[./design/screenshots/core-eq-1.10.png]]
+
+* 特色
+
+- *所有 App，不需驅動程式。* 不會在系統中安裝任何東西（你可以自行確認），結束 CoreEQ 會立即交還音訊。
+- *圖形與參數在同一處理鏈中。* ISO 十一頻段倍頻程階梯，另加最多十六個你自己的鐘形、架形與通濾波器。
+- *即時、可編輯的響應曲線*，以音訊實際經過的同一組係數繪製，疊加在即時頻譜分析儀之上。
+- *二十二個內建預設組，加上你自己的預設組*，每個內建預設組都附有一行用途說明。
+- *內建 AutoEq 目錄*：依型號搜尋數千筆耳機校正，儲存前先試聽，並儲存為你自己的預設組。只有在你打開它時才會連線。
+- *AutoEq 與 EqualizerAPO 匯入及輸出*，來自其他地方的校正按幾下就能載入。
+- *自動增益* 讓預設組維持原本的響度，比較預設組時比的是音色，而不是音量。
+- *A/B 比較* 同一預設組的兩個版本。
+- *依輸出裝置分別設定*：耳機回來時，耳機的曲線也跟著回來。
+- *選單列控制*，可在任何預設組之上使用快速等化（低音、中音、高音）。
+- *感知錄影*：螢幕錄影擷取系統音訊時，CoreEQ 會暫時讓開，錄下的聲音就不會重複。
+- *不干擾指定 App*：排除 DAW 或任何其他 App，它的聲音會原樣直接輸出（需要 macOS 26 或以上版本）。
+
+每項功能都在 [[file:docs/USER_GUIDE.org][使用手冊]]（英文）中有說明。
+
+* 系統需求
+
+- macOS *14.2* 或以上版本
+- 處理系統音訊的權限。CoreEQ 會先說明用途，然後才請求
+
+* 安裝
+
+** Homebrew（建議）
+
+#+begin_src sh
+brew tap andreypudov/core-eq
+brew trust andreypudov/core-eq
+brew install --cask core-eq
+#+end_src
+
+之後以 =brew update && brew upgrade --cask core-eq= 更新。
+
+CoreEQ 以自己的憑證簽署，因此音訊權限在更新後依然保留；但它未經 Apple 公證，macOS 可能會阻擋第一次打開。請在「系統設定」→「隱私權與安全性」中允許，或清除隔離標記：
+
+#+begin_src sh
+xattr -dr com.apple.quarantine /Applications/CoreEQ.app
+#+end_src
+
+** 從原始碼建置
+
+需要 Xcode 26 或以上版本。在本機建置的 App 不會被隔離，因此 CoreEQ 打開時不會出現 Gatekeeper 警告：
+
+#+begin_src sh
+git clone https://github.com/AndreyPudov/core-eq.git
+cd core-eq
+make install
+#+end_src
+
+這會建置 Release 版本並安裝到 =/Applications=。
+
+** 預先建置的版本
+
+從 *Releases* 頁面下載最新的 =CoreEQ-x.y.zip=，解壓縮後將 =CoreEQ.app= 移到 =/Applications=，再依上文清除隔離標記。
+
+* 開始使用
+
+1. 打開 CoreEQ。選單列中會出現推桿圖像；Dock 中沒有圖像。
+2. 允許 *系統錄音*。CoreEQ 會打開視窗，說明此權限的用途，並在你按一下 *允許⋯* 時請求——它需要此權限來處理你聽到的聲音。任何內容都不會被錄製、儲存或傳送。
+3. 選擇一個預設組。聲音會立即改變。
+
+遇到問題？[[file:docs/USER_GUIDE.org][使用手冊]] 中有疑難排解章節，「設定」→「診斷」可產生報告，附在錯誤回報中。
+
+* 文件
+
+詳細文件為英文。
+
+| 文件                                       | 內容                                       |
+|-------------------------------------------+--------------------------------------------|
+| [[file:docs/USER_GUIDE.org][使用手冊]]               | 所有功能、限制與疑難排解                   |
+| [[file:docs/RELEASE_NOTES.org][版本說明]]         | 每個版本的變化，以及問題是如何發現的       |
+| [[file:docs/ROADMAP.org][發展藍圖]]               | 接下來要做什麼，以及先後順序               |
+| [[file:docs/DEVELOPMENT.org][開發]]               | 建置、執行與測試 CoreEQ                    |
+| [[file:docs/ARCHITECTURE.org][架構]]              | 等化器為何是現在這個樣子                   |
+| [[file:docs/INTERNALS.org][內部運作]]           | App 是如何組成的：音訊路徑與其他部分       |
+| [[file:docs/RELEASING.org][發布流程]]           | 持續整合與發布新版本                       |
+
+[[file:docs/README.org][文件索引]] 會告訴你先讀哪一份。
+
+* 參與貢獻
+
+歡迎提交錯誤回報與拉取請求。[[file:CONTRIBUTING.md][CONTRIBUTING.md]] 說明回報中應包含的內容、提交訊息的格式，以及拉取請求的需求；[[file:SECURITY.md][SECURITY.md]] 說明如何回報安全性漏洞。
+
+* 致謝
+
+感謝 [[https://github.com/souljedi][Sebastian Ullrich（@souljedi）]] 帶來 AutoEq 與 EqualizerAPO 預設組匯入（[[https://github.com/andreypudov/core-eq/pull/25][#25]]）——這是 CoreEQ 收到的第一個外部貢獻，也是呼聲最高的功能——以及隨後的 AutoEq 目錄瀏覽器（[[https://github.com/andreypudov/core-eq/pull/40][#40]]）。
+
+CoreEQ 的 AutoEq 目錄瀏覽器使用 Jaakko Pasanen 的 [[https://github.com/jaakkopasanen/AutoEq][AutoEq]] 耳機校正資料，依 MIT 授權條款。量測資料來自 Oratory1990、Rtings、Innerfidelity 等第三方來源，不包含 Crinacle 的資料。每筆結果都註明來源。
+
+* 授權
+
+Apache License 2.0。請參閱 [[file:LICENSE][LICENSE]]。

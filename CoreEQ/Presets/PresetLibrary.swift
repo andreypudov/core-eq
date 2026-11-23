@@ -69,7 +69,9 @@ struct PresetLibrary: Equatable {
         guard !search.isEmpty else { return (user, builtIn) }
 
         func keep(_ profiles: [EQProfile]) -> [EQProfile] {
-            search.ranked(profiles) { SearchableName($0.name) }
+            // By what the list shows, so a translated built-in answers to its
+            // translated name.
+            search.ranked(profiles) { SearchableName($0.displayName) }
         }
         return (keep(user), keep(builtIn))
     }
