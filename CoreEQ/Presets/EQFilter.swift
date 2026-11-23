@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// One filter in the equalizer chain.
@@ -60,12 +61,21 @@ struct EQFilter: Codable, Equatable, Identifiable {
     /// variable-length chain.
     var band: Int?
 
-    /// Identity for SwiftUI lists.
+    /// Identity: for SwiftUI lists, and for finding this filter again in the
+    /// preset it came from, which is what lets a double-click on its node put
+    /// it back where the preset has it.
     ///
-    /// Deliberately outside `CodingKeys` *and* `==`: a chain decoded from disk
-    /// has to compare equal to the one it was saved from, or `isModified` would
-    /// report a freshly launched app as edited.
-    let id = UUID()
+    /// Stored with the filter, so the working chain and its preset still agree
+    /// on it after a relaunch, but deliberately outside `==`: a chain is equal
+    /// to another when it *sounds* the same, or `isModified` would report a
+    /// freshly launched app as edited. Left out of exported files — see
+    /// `CodingUserInfoKey.omitsFilterIdentity`.
+    let id: UUID
+
+    /// Whether `id` was made up on decoding, because the stored filter had
+    /// none: written before filters carried an id. Such an id is new on every
+    /// launch until the filter is written again. Neither stored nor compared.
+    let hasGeneratedID: Bool
 
     var isBand: Bool { band != nil }
 
@@ -76,8 +86,11 @@ struct EQFilter: Codable, Equatable, Identifiable {
         q: Double = BuiltInProfiles.defaultQ,
         isEnabled: Bool = true,
         band: Int? = nil,
-        colorIndex: Int = 0
+        colorIndex: Int = 0,
+        id: UUID = UUID()
     ) {
+        self.id = id
+        self.hasGeneratedID = false
         self.kind = kind
         self.frequency = frequency
         self.gain = gain
@@ -115,11 +128,34 @@ struct EQFilter: Codable, Equatable, Identifiable {
         )
     }
 
+    /// This filter with `id` as its identity, and nothing else changed.
+    func identified(as id: UUID) -> EQFilter {
+        EQFilter(
+            kind: kind, frequency: frequency, gain: gain, q: q, isEnabled: isEnabled,
+            band: band, colorIndex: colorIndex, id: id)
+    }
+
+    /// The same id every time for the same `key`: for filters built in code,
+    /// such as the built-in presets', which are rebuilt on every launch and
+    /// still have to match a working chain saved by the last one.
+    static func stableID(_ key: String) -> UUID {
+        var bytes = Array(Insecure.SHA1.hash(data: Data("CoreEQ.filter/\(key)".utf8)).prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x50  // version 5: name-based, SHA-1
+        bytes[8] = (bytes[8] & 0x3F) | 0x80  // RFC 4122 variant
+        return UUID(
+            uuid: (
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
+                bytes[15]
+            ))
+    }
+
     /// This filter as a free one: same kind, frequency, gain, and Q, no slot.
     ///
     /// The coefficients are unchanged, so lifting a band out of the slider strip
     /// leaves the sound identical. That is what makes it a move rather than a
-    /// conversion.
+    /// conversion. The result is a new filter, with an identity of its own: the
+    /// band it was lifted from stays in the chain.
     func unbound() -> EQFilter {
         EQFilter(
             kind: kind,
@@ -133,7 +169,7 @@ struct EQFilter: Codable, Equatable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, frequency, gain, q, isEnabled, band, colorIndex
+        case kind, frequency, gain, q, isEnabled, band, colorIndex, id
     }
 
     /// Every stored key is optional with a sensible default, so a preset written
@@ -147,6 +183,27 @@ struct EQFilter: Codable, Equatable, Identifiable {
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         band = try container.decodeIfPresent(Int.self, forKey: .band)
         colorIndex = try container.decodeIfPresent(Int.self, forKey: .colorIndex) ?? 0
+        if let stored = try container.decodeIfPresent(UUID.self, forKey: .id) {
+            id = stored
+            hasGeneratedID = false
+        } else {
+            id = UUID()
+            hasGeneratedID = true
+        }
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(frequency, forKey: .frequency)
+        try container.encode(gain, forKey: .gain)
+        try container.encode(q, forKey: .q)
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encodeIfPresent(band, forKey: .band)
+        try container.encode(colorIndex, forKey: .colorIndex)
+        if encoder.userInfo[.omitsFilterIdentity] as? Bool != true {
+            try container.encode(id, forKey: .id)
+        }
     }
 
     static func == (lhs: EQFilter, rhs: EQFilter) -> Bool {
@@ -161,4 +218,11 @@ struct EQFilter: Codable, Equatable, Identifiable {
             // compared equal would lose its colour on the next launch.
             && lhs.colorIndex == rhs.colorIndex
     }
+}
+
+extension CodingUserInfoKey {
+    /// Set to `true` to write filters without their `id`: for files that leave
+    /// this Mac. An id only means something next to the presets it was made
+    /// with, and a shared preset is a new one wherever it is imported.
+    static let omitsFilterIdentity = CodingUserInfoKey(rawValue: "omitsFilterIdentity")!
 }

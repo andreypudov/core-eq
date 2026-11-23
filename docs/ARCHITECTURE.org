@@ -210,11 +210,26 @@ adds it to the list.
 
 ** Double-click
 
-Double-click keeps its existing meaning — reset this point's gain to 0 dB — for
-both kinds of point. Most parametric editors delete a node on double-click;
-consistency inside CoreEQ is worth more than matching that convention, and an
-accidental reset is recoverable in a way an accidental delete is not. Delete
-lives in the node's context menu and in the list row.
+Double-click means the same for both kinds of point: put it back where the
+active preset has it. A band gets its preset gain back; a parametric node gets
+its preset frequency and gain, the two things dragging it changes, while kind
+and Q, edited in the list, stay as they are. A node the preset does not have —
+added, or lifted out of the slider strip, since the preset was selected — has
+nowhere to go back to and goes to 0 dB where it stands. Most parametric editors
+delete a node on double-click; consistency inside CoreEQ is worth more than
+matching that convention, and an accidental reset is recoverable in a way an
+accidental delete is not. Delete lives in the node's context menu and in the
+list row.
+
+A band finds itself in the preset by its slot. A parametric filter has only its
+=id=, so the id is stored with the filter, in presets and in each device's
+working state, and kept through normalisation; built-in presets, rebuilt on
+every launch, derive theirs from their name. It stays outside =EQFilter.==, so a
+chain still compares equal to one that sounds the same, and out of exported
+files, where it would mean nothing. Presets and working chains saved before ids
+were are given them on the first launch: presets are rewritten once, and a
+working chain takes its preset's ids by position when its filters still line up
+one for one.
 
 * Rules that keep it predictable
 

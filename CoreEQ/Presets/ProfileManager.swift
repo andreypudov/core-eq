@@ -97,7 +97,20 @@ final class ProfileManager: ObservableObject {
         self.outputDeviceUID = device
         if device != nil { settings.lastOutputDeviceUID = device }
 
-        let library = PresetLibrary(stored: settings.userProfiles)
+        // Presets saved before filters carried an id get a new one on every
+        // launch until they are written again, so no working chain could ever
+        // match them. Written back once, here, they keep the ids from now on.
+        //
+        // Written back exactly as they were read, ids added and nothing else:
+        // the library drops a preset whose name a built-in has since taken, and
+        // writing *its* list would delete that preset on upgrade, unasked. The
+        // library is built from the same values, so the ids it holds are the
+        // ones on disk.
+        let stored = settings.userProfiles
+        if stored.contains(where: { $0.filters.contains { !$0.isBand && $0.hasGeneratedID } }) {
+            settings.userProfiles = stored
+        }
+        let library = PresetLibrary(stored: stored)
         self.library = library
 
         let state =
@@ -716,11 +729,27 @@ final class ProfileManager: ObservableObject {
             ?? (freeFilters.count % EQFilter.colorCount)
     }
 
-    /// Double-click on a filter's node: back to 0 dB, matching what a
-    /// double-click does to a band. Delete lives in the context menu, because an
-    /// accidental reset is recoverable in a way an accidental delete is not.
+    /// Double-click on a filter's node: back to where the active preset has
+    /// it, as a double-click on a band restores the band's gain. Frequency and
+    /// gain both, because those are what dragging the node changes; kind and Q
+    /// are edited in the list and stay as they are.
+    ///
+    /// A filter the preset does not have — added, or lifted out of the slider
+    /// strip, since it was selected — has nowhere to go back to, and goes to
+    /// 0 dB where it stands.
+    ///
+    /// Delete lives in the context menu, because an accidental reset is
+    /// recoverable in a way an accidental delete is not.
     func resetFilter(id: UUID) {
-        updateFreeFilter(id: id) { $0.gain = 0 }
+        let saved = activeProfile.filters.first { !$0.isBand && $0.id == id }
+        updateFreeFilter(id: id) {
+            if let saved {
+                $0.frequency = saved.frequency
+                $0.gain = saved.gain
+            } else {
+                $0.gain = 0
+            }
+        }
     }
 
     /// Lifts a band out of the slider strip and into the filter list, where its
