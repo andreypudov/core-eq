@@ -388,7 +388,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func presetItem() -> NSMenuItem {
         disclosureItem(
             for: .preset,
-            title: profileManager.activeProfileName,
+            title: profileManager.activeProfile.displayName,
             image: presetBadge(for: profileManager.currentFilters, selected: true),
             gutter: MenuListMetrics.badgeGutter,
             height: MenuListMetrics.rowHeight,
@@ -578,7 +578,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             .filter { $0.name != active }
             .map { profile in
                 let row = MenuRowView(
-                    title: profile.name,
+                    title: profile.displayName,
                     image: presetBadge(for: profile.filters, selected: false),
                     gutter: MenuListMetrics.badgeGutter,
                     height: MenuListMetrics.rowHeight

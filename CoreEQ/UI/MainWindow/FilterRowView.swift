@@ -90,7 +90,7 @@ struct FilterRowView: View {
                 }
             }
 
-            Text(verbatim: "\(index)")
+            Text(index.formatted())
                 .font(Theme.Font.valueEmphasized)
                 .foregroundStyle(.secondary)
                 // A band number is two glyphs at most and must stay on one line.
@@ -129,7 +129,7 @@ struct FilterRowView: View {
             width: Theme.FilterRow.Column.frequency,
             scale: .filterFrequency,
             parameter: .frequency,
-            unit: "Hz",
+            unit: BandFormat.hertz,
             // No thousands separator: this is a frequency, and "8,000 Hz" is
             // not how anyone writes one. One decimal when there is one, so an
             // imported 70.8 Hz is shown as itself rather than as 71.
@@ -149,7 +149,7 @@ struct FilterRowView: View {
                 width: Theme.FilterRow.Column.gain,
                 scale: .filterGain,
                 parameter: .gain,
-                unit: "dB",
+                unit: BandFormat.decibels,
                 format: .number.precision(.fractionLength(1))
                     .sign(strategy: .always(includingZero: false)),
                 // Gain is the one parameter with a meaningful centre, so its arc

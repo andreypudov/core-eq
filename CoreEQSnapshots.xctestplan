@@ -1,14 +1,6 @@
 {
   "configurations" : [
     {
-      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E01",
-      "name" : "English",
-      "options" : {
-        "language" : "en",
-        "region" : "US"
-      }
-    },
-    {
       "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E02",
       "name" : "Double-Length",
       "options" : {
@@ -22,6 +14,185 @@
         ],
         "language" : "en",
         "region" : "US"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E01",
+      "name" : "English",
+      "options" : {
+        "language" : "en",
+        "region" : "US"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E10",
+      "name" : "Arabic",
+      "options" : {
+        "commandLineArgumentEntries" : [
+          {
+            "argument" : "-AppleShowScrollBars WhenScrolling"
+          }
+        ],
+        "environmentVariableEntries" : [
+          {
+            "key" : "SNAPSHOT_APPEARANCES",
+            "value" : "light"
+          }
+        ],
+        "language" : "ar",
+        "region" : "SA"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E11",
+      "name" : "Chinese, Simplified",
+      "options" : {
+        "commandLineArgumentEntries" : [
+          {
+            "argument" : "-AppleShowScrollBars WhenScrolling"
+          }
+        ],
+        "environmentVariableEntries" : [
+          {
+            "key" : "SNAPSHOT_APPEARANCES",
+            "value" : "light"
+          }
+        ],
+        "language" : "zh-Hans",
+        "region" : "CN"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E12",
+      "name" : "Chinese, Traditional",
+      "options" : {
+        "commandLineArgumentEntries" : [
+          {
+            "argument" : "-AppleShowScrollBars WhenScrolling"
+          }
+        ],
+        "environmentVariableEntries" : [
+          {
+            "key" : "SNAPSHOT_APPEARANCES",
+            "value" : "light"
+          }
+        ],
+        "language" : "zh-Hant",
+        "region" : "TW"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E13",
+      "name" : "Chuvash",
+      "options" : {
+        "commandLineArgumentEntries" : [
+          {
+            "argument" : "-AppleShowScrollBars WhenScrolling"
+          }
+        ],
+        "environmentVariableEntries" : [
+          {
+            "key" : "SNAPSHOT_APPEARANCES",
+            "value" : "light"
+          }
+        ],
+        "language" : "cv",
+        "region" : "RU"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E14",
+      "name" : "French",
+      "options" : {
+        "commandLineArgumentEntries" : [
+          {
+            "argument" : "-AppleShowScrollBars WhenScrolling"
+          }
+        ],
+        "environmentVariableEntries" : [
+          {
+            "key" : "SNAPSHOT_APPEARANCES",
+            "value" : "light"
+          }
+        ],
+        "language" : "fr",
+        "region" : "FR"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E20",
+      "name" : "Japanese",
+      "options" : {
+        "commandLineArgumentEntries" : [
+          {
+            "argument" : "-AppleShowScrollBars WhenScrolling"
+          }
+        ],
+        "environmentVariableEntries" : [
+          {
+            "key" : "SNAPSHOT_APPEARANCES",
+            "value" : "light"
+          }
+        ],
+        "language" : "ja",
+        "region" : "JP"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E15",
+      "name" : "Russian",
+      "options" : {
+        "commandLineArgumentEntries" : [
+          {
+            "argument" : "-AppleShowScrollBars WhenScrolling"
+          }
+        ],
+        "environmentVariableEntries" : [
+          {
+            "key" : "SNAPSHOT_APPEARANCES",
+            "value" : "light"
+          }
+        ],
+        "language" : "ru",
+        "region" : "RU"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E16",
+      "name" : "Spanish",
+      "options" : {
+        "commandLineArgumentEntries" : [
+          {
+            "argument" : "-AppleShowScrollBars WhenScrolling"
+          }
+        ],
+        "environmentVariableEntries" : [
+          {
+            "key" : "SNAPSHOT_APPEARANCES",
+            "value" : "light"
+          }
+        ],
+        "language" : "es",
+        "region" : "ES"
+      }
+    },
+    {
+      "id" : "6F1D0C52-6E0B-4E43-9C1A-3B1B2C4D5E17",
+      "name" : "Taiwanese Hokkien",
+      "options" : {
+        "commandLineArgumentEntries" : [
+          {
+            "argument" : "-AppleShowScrollBars WhenScrolling"
+          }
+        ],
+        "environmentVariableEntries" : [
+          {
+            "key" : "SNAPSHOT_APPEARANCES",
+            "value" : "light"
+          }
+        ],
+        "language" : "nan-Hant",
+        "region" : "TW"
       }
     }
   ],

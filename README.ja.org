@@ -1,0 +1,102 @@
+#+TITLE: CoreEQ
+#+SUBTITLE: macOS用のシステム全体のイコライザ
+
+[[file:README.ar.org][العربية]] · [[file:README.cv.org][Чӑвашла]] · [[file:README.org][English]] · [[file:README.es.org][Español]] · [[file:README.fr.org][Français]] · [[file:README.ja.org][日本語]] · [[file:README.ru.org][Русский]] · [[file:README.nan-Hant.org][台語]] · [[file:README.zh-Hans.org][简体中文]] · [[file:README.zh-Hant.org][繁體中文]]
+
+CoreEQは、 *聞こえるすべて* ——音楽、ビデオ、通話、ゲーム——を、どのアプリが再生していてもイコライズします。仮想オーディオドライバもカーネル機能拡張も使いません。Core Audioネイティブのプロセスタップ APIで動作するため、システムには何もインストールされず、CoreEQが動作していないときには何も残りません。
+
+[[./design/screenshots/core-eq-1.10.png]]
+
+* 主な特長
+
+- *すべてのアプリに、ドライバなしで。* システムには何もインストールされず（ご自身で確認できます）、CoreEQを終了するとオーディオはすぐに元に戻ります。
+- *グラフィックとパラメトリックを1つのチェーンで。* 11バンドのISOオクターブ帯に加え、ベル、シェルフ、パスフィルタを最大16個まで自由に追加できます。
+- *ライブで編集できるレスポンスグラフ。* オーディオが実際に通るのと同じ係数から描かれ、リアルタイムのスペクトラムアナライザに重ねて表示されます。
+- *22種類の内蔵プリセットと自分のプリセット。* 内蔵プリセットにはそれぞれ用途を説明する1行が付いています。
+- *AutoEqカタログを内蔵。* 数千件のヘッドフォン補正をモデル名で検索し、保存する前に試聴して、自分のプリセットとして保存できます。ネットワークに接続するのは開いたときだけです。
+- *AutoEqとEqualizerAPOの読み込みと書き出し。* ほかで作った補正も数回のクリックで読み込めます。
+- *自動ゲイン* がプリセットを元の音量に保つので、プリセットの比較は音量ではなく音色の比較になります。
+- 同じプリセットの2つのバージョンを *A/B比較* 。
+- *出力デバイスごとの設定。* ヘッドフォンをつなぐと、ヘッドフォンのカーブも戻ってきます。
+- *メニューバーから操作* でき、どのプリセットにもクイックEQ（低音、中音、高音）を重ねられます。
+- *録画に配慮。* 画面収録がシステムオーディオを取り込んでいる間はCoreEQが処理を控えるので、録画の音が二重になりません。
+- *アプリを素通しに。* DAWなどのアプリを除外すると、そのサウンドは手を加えずに直接出力されます（macOS 26以降）。
+
+すべての機能は [[file:docs/USER_GUIDE.org][ユーザガイド]] （英語）で説明しています。
+
+* システム要件
+
+- macOS *14.2* 以降
+- システムオーディオを処理する許可。CoreEQは用途を説明してから許可を求めます
+
+* インストール
+
+** Homebrew（推奨）
+
+#+begin_src sh
+brew tap andreypudov/core-eq
+brew trust andreypudov/core-eq
+brew install --cask core-eq
+#+end_src
+
+アップデートは =brew update && brew upgrade --cask core-eq= で行います。
+
+CoreEQは独自の証明書で署名されているため、アップデート後もオーディオの許可が保持されます。ただしAppleによる公証は受けていないため、macOSが初回の起動をブロックすることがあります。“システム設定”→“プライバシーとセキュリティ”で許可するか、検疫属性を削除してください：
+
+#+begin_src sh
+xattr -dr com.apple.quarantine /Applications/CoreEQ.app
+#+end_src
+
+** ソースからビルド
+
+Xcode 26以降が必要です。ローカルでビルドしたアプリには検疫属性が付かないため、CoreEQはGatekeeperの警告なしに起動します：
+
+#+begin_src sh
+git clone https://github.com/AndreyPudov/core-eq.git
+cd core-eq
+make install
+#+end_src
+
+Release版をビルドして =/Applications= にインストールします。
+
+** ビルド済みバイナリ
+
+*Releases* ページから最新の =CoreEQ-x.y.zip= をダウンロードして展開し、 =CoreEQ.app= を =/Applications= に移動してから、上記と同じように検疫属性を削除してください。
+
+* はじめに
+
+1. CoreEQを起動します。メニューバーにスライダのアイコンが表示されます。Dockにはアイコンはありません。
+2. *システムオーディオ録音* を許可します。CoreEQがウインドウを開いて許可の用途を説明し、 *許可…* をクリックすると許可を求めます。聞こえているサウンドを処理するために必要です。何も録音、保存、送信されることはありません。
+3. プリセットを選択します。サウンドはすぐに変わります。
+
+うまく動かない場合は、 [[file:docs/USER_GUIDE.org][ユーザガイド]] にトラブルシューティングの章があります。“設定”→“診断”で、不具合の報告に添付するレポートを作成できます。
+
+* ドキュメント
+
+詳しいドキュメントは英語です。
+
+| ドキュメント                              | 内容                                               |
+|-------------------------------------------+----------------------------------------------------|
+| [[file:docs/USER_GUIDE.org][ユーザガイド]]         | すべての機能、制限事項、トラブルシューティング     |
+| [[file:docs/RELEASE_NOTES.org][リリースノート]]   | 各リリースの変更点と、問題がどう見つかったか       |
+| [[file:docs/ROADMAP.org][ロードマップ]]           | 次に何を、どの順番で行うか                         |
+| [[file:docs/DEVELOPMENT.org][開発]]               | CoreEQのビルド、実行、テスト                       |
+| [[file:docs/ARCHITECTURE.org][アーキテクチャ]]    | イコライザがなぜこの形をしているのか               |
+| [[file:docs/INTERNALS.org][内部構造]]           | アプリの構成：オーディオ経路とその他の部分         |
+| [[file:docs/RELEASING.org][リリース手順]]       | 継続的インテグレーションとリリースの作成           |
+
+[[file:docs/README.org][ドキュメントの索引]] に、最初に読むべきものが書かれています。
+
+* コントリビューション
+
+不具合の報告やプルリクエストを歓迎します。 [[file:CONTRIBUTING.md][CONTRIBUTING.md]] には、報告に含める内容、コミットメッセージの形式、プルリクエストに必要なことが書かれています。脆弱性の報告については [[file:SECURITY.md][SECURITY.md]] を参照してください。
+
+* 謝辞
+
+AutoEqとEqualizerAPOのプリセット読み込み（ [[https://github.com/andreypudov/core-eq/pull/25][#25]] ）——CoreEQへの最初の外部からのコントリビューションであり、最も要望の多かった機能——と、それに続くAutoEqカタログブラウザ（ [[https://github.com/andreypudov/core-eq/pull/40][#40]] ）を作ってくれた [[https://github.com/souljedi][Sebastian Ullrich（@souljedi）]] に感謝します。
+
+CoreEQのAutoEqカタログブラウザは、Jaakko Pasanenによる [[https://github.com/jaakkopasanen/AutoEq][AutoEq]] のヘッドフォン補正データをMITライセンスのもとで使用しています。測定データはOratory1990、Rtings、Innerfidelityなどの第三者によるもので、Crinacleのデータは除外しています。各結果には出典を記載しています。
+
+* ライセンス
+
+Apache License 2.0。 [[file:LICENSE][LICENSE]] を参照してください。

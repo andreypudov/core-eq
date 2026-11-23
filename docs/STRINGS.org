@@ -110,6 +110,51 @@ fixed. Plural strings and strings with numbers come out there as raw
 placeholders (“#@value@”) — a limit of the pseudolanguage, not a fault; see
 “Snapshot tests” in [[file:DEVELOPMENT.org][DEVELOPMENT.org]].
 
+* Languages
+
+CoreEQ ships in English, Arabic, Simplified Chinese, Traditional Chinese
+(Taiwan), French, Japanese, Russian, Spanish, Chuvash, and Taiwanese Hokkien
+(Han characters). The README is translated into each of them as well
+(=README.<language>.org=, linked from the top of every copy); the user guide
+is English. The last two have no macOS localization: someone chooses them for
+CoreEQ alone, in System Settings > General > Language & Region > Applications,
+and what macOS draws itself stays in their system language.
+
+- *Terms follow Apple's audio apps.* Where the Music app has the word — every
+  built-in preset name — the translation is the Music app's own, read from its
+  localized resources. Elsewhere the terms are the ones Apple's audio software
+  uses in that language: préréglage, preajuste, пресет, 预置, 預設組, プリセット.
+- *A preset's name is shown translated and stored in English.* The stored name
+  is its identity — every device's saved state, exported files, the
+  diagnostics report — so it never changes with the language.
+  =EQProfile.displayName= is what the sidebar, the header, and the menu show.
+- *Numbers follow the locale; signs and units are CoreEQ's.* Digits and the
+  decimal separator come from the user's region (=BandFormat=), so a French
+  readout uses a comma and an Arabic one the region's digits. The sign is a
+  true minus sign in front of the number in every language. The units are
+  translated in one place, =BandFormat.decibels= and =.hertz= — “дБ” and “Гц”
+  in Russian and Chuvash, as Apple's Russian writes them, “dB” and “Hz”
+  elsewhere — so a readout and the sentence about it agree.
+
+** Right to left
+
+In Arabic the window mirrors: the header, the tabs, the order of the table's
+columns, the side the Preamp column sits on. What measures does not:
+
+- The graph, the slider strip, the knobs, the value fields, and the Preamp
+  readout and scale stay left to right (=keepsLeftToRight()=). The frequency
+  axis runs low to high left to right in every audio tool, the strip has to
+  stay under the graph, a knob turns clockwise to raise its value, and a
+  readout keeps its sign in front: “+٤٫٠ dB”, not “dB ٤٫٠+”.
+- A signed number with no letter in it (“+١٢”) gets its direction from the
+  language, not from the view, so a left-to-right mark leads it. Arabic's own
+  number format puts an Arabic Letter Mark before the sign, which moves it
+  behind the number; the fields remove it (=LeftToRightNumberFormat=), so one
+  window writes a sign one way.
+- In an Arabic sentence, a number with a Latin unit (“٨٫٠٠ dB”, “20 Hz–20 kHz”)
+  is wrapped in left-to-right isolates (U+2066 … U+2069), and so is a
+  placeholder that carries one. Without them the unit lands on the wrong side.
+
 * Voice
 
 - *Plain and direct.* Say what is happening and what to do, in the fewest

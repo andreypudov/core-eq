@@ -37,12 +37,17 @@ struct GainScale: View {
         ZStack(alignment: side == .leading ? .topTrailing : .topLeading) {
             Color.clear
             ForEach(values, id: \.self) { gain in
-                Text(showsUnit ? BandFormat.axisGain(gain) : BandFormat.axisValue(gain))
-                    .font(Theme.Font.tick)
-                    .foregroundStyle(.tertiary)
-                    .fixedSize()
-                    .frame(height: Self.rowHeight)
-                    .offset(y: y(for: gain))
+                // Led by a left-to-right mark: “+12” has no letter to set its direction,
+                // and in Arabic it would otherwise read “12+”.
+                Text(
+                    "\u{200E}"
+                        + (showsUnit ? BandFormat.axisGain(gain) : BandFormat.axisValue(gain))
+                )
+                .font(Theme.Font.tick)
+                .foregroundStyle(.tertiary)
+                .fixedSize()
+                .frame(height: Self.rowHeight)
+                .offset(y: y(for: gain))
             }
         }
         .frame(width: Self.width(showsUnit: showsUnit), height: trackHeight)

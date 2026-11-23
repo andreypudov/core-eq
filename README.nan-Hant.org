@@ -1,0 +1,102 @@
+#+TITLE: CoreEQ
+#+SUBTITLE: macOS 規个系統的等化器
+
+[[file:README.ar.org][العربية]] · [[file:README.cv.org][Чӑвашла]] · [[file:README.org][English]] · [[file:README.es.org][Español]] · [[file:README.fr.org][Français]] · [[file:README.ja.org][日本語]] · [[file:README.ru.org][Русский]] · [[file:README.nan-Hant.org][台語]] · [[file:README.zh-Hans.org][简体中文]] · [[file:README.zh-Hant.org][繁體中文]]
+
+CoreEQ 會共 *你聽著的一切*——音樂、影片、通話、遊戲——攏等化，無論聲音是對佗一个 App 來，攏免虛擬音訊驅動程式，嘛免核心延伸功能。伊用 Core Audio 原生的程序音訊擷取 API 咧行，所以袂佇系統內底裝任何物件，CoreEQ 無咧行的時嘛袂留任何痕跡。
+
+[[./design/screenshots/core-eq-1.10.png]]
+
+* 特色
+
+- *所有的 App，免驅動程式。* 袂佇系統內底裝任何物件（你會當家己確認），結束 CoreEQ 聲音就隨還轉來。
+- *圖形佮參數佇仝一條處理鏈。* ISO 十一个頻段的倍頻程階梯，閣會當加上上濟十六个家己的鐘形、架形佮通濾波器。
+- *即時、會當編輯的響應曲線*，用音訊實際經過的仝一組係數畫的，疊佇即時頻譜分析儀頂懸。
+- *二十二个內建預設，閣有你家己的預設*，逐个內建預設攏有一逝說明伊的用途。
+- *內建 AutoEq 目錄*：照型號揣幾若千筆耳機校正，存進前先試聽，閣會當存做你家己的預設。干焦你拍開的時才會連線。
+- *AutoEq 佮 EqualizerAPO 匯入佮輸出*，別位來的校正揤幾下就會當載入。
+- *自動增益* 予預設維持原本的大細聲，比較預設的時比的是音色，毋是大細聲。
+- 仝一个預設兩个版本的 *A/B 比較*。
+- *逐台輸出裝置有家己的設定*：耳機轉來的時，耳機的曲線嘛綴咧轉來。
+- *佇選單列控制*，佇任何預設頂懸攏會當用快速等化（低音、中音、高音）。
+- *知影咧錄影*：螢幕錄影咧擷取系統音訊的時，CoreEQ 會先閃開，錄起來的聲音就袂重兩擺。
+- *App 會當無去動著*：共 DAW 抑是其他 App 排除，伊的聲音就原樣直接輸出（愛 macOS 26 抑是較新的版本）。
+
+逐項功能佇 [[file:docs/USER_GUIDE.org][使用手冊]]（英文）攏有說明。
+
+* 系統需求
+
+- macOS *14.2* 抑是較新的版本
+- 處理系統音訊的權限。CoreEQ 會先說明用途，才閣請求
+
+* 安裝
+
+** Homebrew（建議）
+
+#+begin_src sh
+brew tap andreypudov/core-eq
+brew trust andreypudov/core-eq
+brew install --cask core-eq
+#+end_src
+
+後擺用 =brew update && brew upgrade --cask core-eq= 更新。
+
+CoreEQ 用家己的憑證簽名，所以更新了後音訊權限猶原會保留；毋過伊無經過 Apple 公證，macOS 有可能會擋頭一擺拍開。請佇「系統設定」→「隱私權佮安全性」允准，抑是清掉隔離標記：
+
+#+begin_src sh
+xattr -dr com.apple.quarantine /Applications/CoreEQ.app
+#+end_src
+
+** 對原始碼建置
+
+愛 Xcode 26 抑是較新的版本。佇本機建置的 App 袂予人隔離，所以 CoreEQ 拍開的時袂出現 Gatekeeper 警告：
+
+#+begin_src sh
+git clone https://github.com/AndreyPudov/core-eq.git
+cd core-eq
+make install
+#+end_src
+
+這會建置 Release 版本，閣安裝到 =/Applications=。
+
+** 先建置好的版本
+
+對 *Releases* 頁面下載上新的 =CoreEQ-x.y.zip=，解開了後共 =CoreEQ.app= 徙去 =/Applications=，閣照頂懸的方式清掉隔離標記。
+
+* 開始使用
+
+1. 拍開 CoreEQ。選單列會出現一个推桿圖示；Dock 內底無圖示。
+2. 允准 *系統錄音*。CoreEQ 會拍開窗仔，說明這个權限的用途，你揤 *允准⋯* 的時才請求——伊需要這个權限來處理你聽著的聲音。啥物攏無錄、無存、嘛無傳出去。
+3. 揀一个預設。聲音隨就變。
+
+有啥物無法度用？[[file:docs/USER_GUIDE.org][使用手冊]] 內底有排除問題的章節，「設定」→「診斷」會當產生報告，報錯誤的時附上。
+
+* 文件
+
+詳細的文件是英文的。
+
+| 文件                                       | 內容                                       |
+|-------------------------------------------+--------------------------------------------|
+| [[file:docs/USER_GUIDE.org][使用手冊]]               | 所有功能、限制佮排除問題                   |
+| [[file:docs/RELEASE_NOTES.org][版本說明]]         | 逐个版本改了啥，問題是按怎揣著的           |
+| [[file:docs/ROADMAP.org][發展藍圖]]               | 後一步欲做啥，照啥物順序                   |
+| [[file:docs/DEVELOPMENT.org][開發]]               | 建置、執行佮測試 CoreEQ                    |
+| [[file:docs/ARCHITECTURE.org][架構]]              | 等化器是按怎生做這款形                     |
+| [[file:docs/INTERNALS.org][內部運作]]           | App 是按怎組成的：音訊路線佮其他部份       |
+| [[file:docs/RELEASING.org][發布流程]]           | 持續整合佮發布新版本                       |
+
+[[file:docs/README.org][文件索引]] 會共你講先讀佗一份。
+
+* 參與貢獻
+
+歡迎報錯誤佮提出拉取請求。[[file:CONTRIBUTING.md][CONTRIBUTING.md]] 說明報告內底愛有啥、提交訊息的格式，佮拉取請求需要啥；[[file:SECURITY.md][SECURITY.md]] 說明按怎報安全性漏洞。
+
+* 感謝
+
+多謝 [[https://github.com/souljedi][Sebastian Ullrich（@souljedi）]] 做 AutoEq 佮 EqualizerAPO 預設匯入（[[https://github.com/andreypudov/core-eq/pull/25][#25]]）——這是 CoreEQ 頭一个外口來的貢獻，嘛是上濟人要求的功能——閣有後來的 AutoEq 目錄瀏覽器（[[https://github.com/andreypudov/core-eq/pull/40][#40]]）。
+
+CoreEQ 的 AutoEq 目錄瀏覽器，照 MIT 授權用 Jaakko Pasanen 的 [[https://github.com/jaakkopasanen/AutoEq][AutoEq]] 耳機校正資料。量測資料是對 Oratory1990、Rtings、Innerfidelity 等等第三方來的，無包括 Crinacle 的資料。逐筆結果攏有寫出處。
+
+* 授權
+
+Apache License 2.0。請看 [[file:LICENSE][LICENSE]]。

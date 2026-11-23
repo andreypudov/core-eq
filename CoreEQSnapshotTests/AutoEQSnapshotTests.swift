@@ -59,8 +59,17 @@ extension SnapshotTests {
                 afterAppearing: {
                     // As a person would: wait for the list, then choose. The
                     // window's own handlers load the correction from there.
-                    while store.catalogState != .loaded {
+                    // Bounded: a catalog that never loads fails this test in
+                    // seconds rather than holding the whole run for minutes.
+                    let deadline = ContinuousClock.now + .seconds(10)
+                    while store.catalogState != .loaded, ContinuousClock.now < deadline {
                         try? await Task.sleep(for: .milliseconds(20))
+                    }
+                    guard store.catalogState == .loaded else {
+                        Issue.record(
+                            "The fixture catalog didn't load within 10 seconds: \(store.catalogState)",
+                            sourceLocation: sourceLocation)
+                        return
                     }
                     store.selectModel(named: "Alpha Headphones")
                 },

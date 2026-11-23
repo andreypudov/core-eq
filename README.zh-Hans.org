@@ -1,0 +1,102 @@
+#+TITLE: CoreEQ
+#+SUBTITLE: 适用于 macOS 的系统级均衡器
+
+[[file:README.ar.org][العربية]] · [[file:README.cv.org][Чӑвашла]] · [[file:README.org][English]] · [[file:README.es.org][Español]] · [[file:README.fr.org][Français]] · [[file:README.ja.org][日本語]] · [[file:README.ru.org][Русский]] · [[file:README.nan-Hant.org][台語]] · [[file:README.zh-Hans.org][简体中文]] · [[file:README.zh-Hant.org][繁體中文]]
+
+CoreEQ 会均衡 *你听到的一切*——音乐、视频、通话、游戏——无论声音来自哪个 App，都无需虚拟音频驱动或内核扩展。它基于 Core Audio 原生的进程音频捕获 API 运行，因此不会在系统中安装任何东西，CoreEQ 不运行时也不会留下任何痕迹。
+
+[[./design/screenshots/core-eq-1.10.png]]
+
+* 亮点
+
+- *所有 App，无需驱动。* 不会在系统中安装任何东西（你可以自行验证），退出 CoreEQ 会立即交还音频。
+- *图形与参数在同一处理链中。* ISO 十一频段倍频程阶梯，另加最多十六个你自己的钟形、架形和通滤波器。
+- *实时、可编辑的响应曲线*，由音频实际经过的同一组系数绘制，叠加在实时频谱分析仪之上。
+- *二十二个内建预置，外加你自己的预置*，每个内建预置都附有一行用途说明。
+- *内建 AutoEq 目录*：按型号搜索数千条耳机校正，保存前先试听，并存储为你自己的预置。只有在你打开它时才会联网。
+- *AutoEq 与 EqualizerAPO 导入和导出*，其他地方的校正点按几下即可载入。
+- *自动增益* 让预置保持原来的响度，比较预置时比的是音色，而不是音量。
+- *A/B 比较* 同一预置的两个版本。
+- *按输出设备分别设置*：耳机回来时，耳机的曲线也会回来。
+- *菜单栏控制*，可在任意预置之上使用快速均衡（低音、中音、高音）。
+- *感知录制*：录屏捕获系统音频时 CoreEQ 会暂时让开，避免录下来的声音重复。
+- *不干扰指定 App*：排除 DAW 或任何其他 App，其声音会原样直接输出（需要 macOS 26 或更高版本）。
+
+每项功能都在 [[file:docs/USER_GUIDE.org][用户指南]]（英文）中有说明。
+
+* 系统要求
+
+- macOS *14.2* 或更高版本
+- 处理系统音频的权限。CoreEQ 会先说明用途，然后再请求
+
+* 安装
+
+** Homebrew（推荐）
+
+#+begin_src sh
+brew tap andreypudov/core-eq
+brew trust andreypudov/core-eq
+brew install --cask core-eq
+#+end_src
+
+以后用 =brew update && brew upgrade --cask core-eq= 升级。
+
+CoreEQ 使用自己的证书签名，因此音频权限在更新后依然保留；但它未经 Apple 公证，macOS 可能会阻止首次打开。请在“系统设置”→“隐私与安全性”中允许，或清除隔离标记：
+
+#+begin_src sh
+xattr -dr com.apple.quarantine /Applications/CoreEQ.app
+#+end_src
+
+** 从源代码构建
+
+需要 Xcode 26 或更高版本。本地构建的 App 不会被隔离，因此 CoreEQ 打开时不会出现 Gatekeeper 警告：
+
+#+begin_src sh
+git clone https://github.com/AndreyPudov/core-eq.git
+cd core-eq
+make install
+#+end_src
+
+这会构建 Release 版本并安装到 =/Applications=。
+
+** 预构建版本
+
+从 *Releases* 页面下载最新的 =CoreEQ-x.y.zip=，解压后将 =CoreEQ.app= 移到 =/Applications=，再按上文清除隔离标记。
+
+* 入门
+
+1. 打开 CoreEQ。菜单栏中会出现一个推子图标；程序坞中没有图标。
+2. 允许 *系统录音*。CoreEQ 会打开窗口，说明该权限的用途，并在你点按 *允许…* 时请求——它需要该权限来处理你听到的声音。任何内容都不会被录制、存储或传输。
+3. 选择一个预置。声音会立即改变。
+
+遇到问题？[[file:docs/USER_GUIDE.org][用户指南]] 中有故障排除章节，“设置”→“诊断”可生成报告，附在错误报告中。
+
+* 文档
+
+详细文档为英文。
+
+| 文档                                       | 内容                                       |
+|-------------------------------------------+--------------------------------------------|
+| [[file:docs/USER_GUIDE.org][用户指南]]               | 所有功能、限制与故障排除                   |
+| [[file:docs/RELEASE_NOTES.org][发布说明]]         | 每个版本的变化，以及问题是如何发现的       |
+| [[file:docs/ROADMAP.org][路线图]]                 | 接下来做什么，以及先后顺序                 |
+| [[file:docs/DEVELOPMENT.org][开发]]               | 构建、运行和测试 CoreEQ                    |
+| [[file:docs/ARCHITECTURE.org][架构]]              | 均衡器为何是现在这个样子                   |
+| [[file:docs/INTERNALS.org][内部原理]]           | App 是如何组成的：音频通路及其他部分       |
+| [[file:docs/RELEASING.org][发布流程]]           | 持续集成与发布新版本                       |
+
+[[file:docs/README.org][文档索引]] 会告诉你先读哪一篇。
+
+* 参与贡献
+
+欢迎提交错误报告和拉取请求。[[file:CONTRIBUTING.md][CONTRIBUTING.md]] 说明了报告中应包含的内容、提交信息的格式以及拉取请求的要求；[[file:SECURITY.md][SECURITY.md]] 说明了如何报告安全漏洞。
+
+* 致谢
+
+感谢 [[https://github.com/souljedi][Sebastian Ullrich（@souljedi）]] 带来 AutoEq 与 EqualizerAPO 预置导入（[[https://github.com/andreypudov/core-eq/pull/25][#25]]）——这是 CoreEQ 收到的第一个外部贡献，也是呼声最高的功能——以及随后的 AutoEq 目录浏览器（[[https://github.com/andreypudov/core-eq/pull/40][#40]]）。
+
+CoreEQ 的 AutoEq 目录浏览器使用 Jaakko Pasanen 的 [[https://github.com/jaakkopasanen/AutoEq][AutoEq]] 耳机校正数据，依据 MIT 许可证。测量数据来自 Oratory1990、Rtings、Innerfidelity 等第三方来源，不包括 Crinacle 的数据。每条结果都注明了来源。
+
+* 许可证
+
+Apache License 2.0。参见 [[file:LICENSE][LICENSE]]。

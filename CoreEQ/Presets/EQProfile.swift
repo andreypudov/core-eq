@@ -36,6 +36,12 @@ struct EQProfile: Codable, Equatable, Identifiable {
     /// so a decoded profile is always a user profile.
     var isBuiltIn = false
 
+    /// The name to show: a built-in's in the interface's language, a user's
+    /// own as they typed it. `name` stays the identity everywhere else.
+    var displayName: String {
+        isBuiltIn ? BuiltInProfiles.displayNames[name] ?? name : name
+    }
+
     var id: String { name }
 
     /// The eleven ladder filters, in slot order.

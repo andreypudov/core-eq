@@ -36,7 +36,7 @@ struct ValueField: View {
             // shows every time focus left it.
             // Labelled for VoiceOver. The field always holds a value, so the
             // label never shows as a placeholder.
-            TextField(accessibilityLabel, value: committed, format: format)
+            TextField(accessibilityLabel, value: committed, format: LeftToRightNumberFormat(format))
                 .textFieldStyle(.plain)
                 .multilineTextAlignment(.trailing)
                 .font(Theme.Font.value)
@@ -71,6 +71,8 @@ struct ValueField: View {
         .scrollAdjustable(isEnabled: isEnabled) { steps in
             value = scale.stepped(value, by: steps)
         }
+        // The number, then its unit, with the sign in front: “+4.0 dB”.
+        .keepsLeftToRight()
     }
 
     private var committed: Binding<Double> {

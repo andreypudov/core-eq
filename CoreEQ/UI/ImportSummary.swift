@@ -126,13 +126,13 @@ enum ImportSummary {
             return String(
                 localized: "dropped", comment: "Import sheet: a filter that won’t be imported")
         case .gain, .preamp:
-            return valueChange(adjustment, format: BandFormat.gain)
+            return valueChange(adjustment, format: { BandFormat.gain($0) })
         case .q:
             return valueChange(adjustment) { "Q \(qValue($0))" }
         case .frequency:
-            return valueChange(adjustment) { "\(frequencyValue($0)) Hz" }
+            return valueChange(adjustment) { "\(frequencyValue($0)) \(BandFormat.hertz)" }
         case .keptBeyondBandRange:
-            return valueChange(adjustment, format: BandFormat.gain)
+            return valueChange(adjustment, format: { BandFormat.gain($0) })
         }
     }
 
@@ -240,18 +240,20 @@ enum ImportSummary {
 
     /// A frequency without a thousands separator, with a decimal only when it
     /// has one: "125", "1000", "70.8". The same shape the filter rows use.
+    /// In the user's locale, as every number the window shows is.
     static func frequencyValue(_ hertz: Double) -> String {
-        hertz == hertz.rounded() ? String(format: "%.0f", hertz) : String(format: "%.1f", hertz)
+        hertz.formatted(
+            .number.precision(.fractionLength(hertz == hertz.rounded() ? 0 : 1)).grouping(.never))
     }
 
     /// A difference in decibels to two decimals: "0.25".
     private static func decibels(_ value: Double) -> String {
-        String(format: "%.2f", value)
+        value.formatted(.number.precision(.fractionLength(2)).grouping(.never))
     }
 
     /// A filter Q to two decimals: "1.41".
     static func qValue(_ q: Double) -> String {
-        String(format: "%.2f", q)
+        q.formatted(.number.precision(.fractionLength(2)).grouping(.never))
     }
 
     /// "original → new" for a value kind, formatted by `format`.

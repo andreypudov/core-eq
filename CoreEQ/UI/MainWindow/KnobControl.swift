@@ -107,6 +107,8 @@ struct KnobControl: View {
         .accessibilityRepresentation {
             Slider(value: $value, in: scale.range)
         }
+        // Clockwise raises the value in every language.
+        .keepsLeftToRight()
     }
 
     private var strokeStyle: StrokeStyle {
